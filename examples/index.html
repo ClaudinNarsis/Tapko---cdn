@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tapko Widget - Demo</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .header {
+      text-align: center;
+      color: white;
+      margin-bottom: 60px;
+    }
+
+    .header h1 {
+      font-size: 48px;
+      margin-bottom: 16px;
+      font-weight: 700;
+    }
+
+    .header p {
+      font-size: 20px;
+      opacity: 0.9;
+    }
+
+    .badge {
+      display: inline-block;
+      background: rgba(255, 255, 255, 0.2);
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 14px;
+      margin-top: 16px;
+    }
+
+    .content {
+      background: white;
+      border-radius: 24px;
+      padding: 40px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+
+    .demo-section {
+      margin-bottom: 48px;
+    }
+
+    .demo-section:last-child {
+      margin-bottom: 0;
+    }
+
+    .demo-section h2 {
+      font-size: 28px;
+      margin-bottom: 24px;
+      color: #1f2937;
+    }
+
+    .demo-section p {
+      font-size: 16px;
+      line-height: 1.6;
+      color: #4b5563;
+      margin-bottom: 16px;
+    }
+
+    .demo-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 24px;
+      margin-top: 24px;
+    }
+
+    .demo-card {
+      background: #f9fafb;
+      border: 2px solid #e5e7eb;
+      border-radius: 16px;
+      padding: 24px;
+      transition: all 0.3s ease;
+      cursor: pointer;
+    }
+
+    .demo-card:hover {
+      border-color: #c6b8ff;
+      transform: translateY(-4px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+    }
+
+    .demo-card h3 {
+      font-size: 20px;
+      margin-bottom: 12px;
+      color: #1f2937;
+    }
+
+    .demo-card p {
+      color: #6b7280;
+      font-size: 14px;
+      margin: 0;
+    }
+
+    .demo-image {
+      width: 100%;
+      height: 200px;
+      object-fit: cover;
+      border-radius: 12px;
+      margin-bottom: 16px;
+    }
+
+    .instructions {
+      background: #eff6ff;
+      border-left: 4px solid #3b82f6;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 32px;
+    }
+
+    .instructions h3 {
+      color: #1e40af;
+      margin-bottom: 12px;
+      font-size: 18px;
+    }
+
+    .instructions ul {
+      margin-left: 24px;
+      color: #1e3a8a;
+    }
+
+    .instructions li {
+      margin-bottom: 8px;
+    }
+
+    .code-block {
+      background: #1f2937;
+      color: #f3f4f6;
+      padding: 20px;
+      border-radius: 12px;
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+      overflow-x: auto;
+      margin-top: 16px;
+    }
+
+    .controls {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 24px;
+    }
+
+    .btn {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn-primary {
+      background: #4f46e5;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #4338ca;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+    }
+
+    .btn-secondary {
+      background: #e5e7eb;
+      color: #1f2937;
+    }
+
+    .btn-secondary:hover {
+      background: #d1d5db;
+    }
+
+    .status {
+      margin-top: 16px;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+
+    .status.success {
+      background: #d1fae5;
+      color: #065f46;
+    }
+
+    .status.error {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    @media (max-width: 768px) {
+      .header h1 {
+        font-size: 32px;
+      }
+
+      .content {
+        padding: 24px;
+      }
+
+      .demo-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Tapko Widget Demo</h1>
+      <p>Interactive commenting widget for any website</p>
+      <span class="badge">v1.0.0</span>
+    </div>
+
+    <div class="content">
+      <div class="instructions">
+        <h3>How to Use</h3>
+        <ul>
+          <li><strong>Desktop:</strong> Double-click on any element to leave a comment</li>
+          <li><strong>Mobile:</strong> Double-tap on any element</li>
+          <li>Add text, emojis, or voice recordings</li>
+          <li>Press ESC to close, Cmd/Ctrl+Enter to submit</li>
+        </ul>
+      </div>
+
+      <div class="demo-section">
+        <h2>Try it out!</h2>
+        <p>
+          Double-click or double-tap any of the cards below to leave a comment.
+          The widget works on any element - text, images, buttons, anything!
+        </p>
+
+        <div class="demo-grid">
+          <div class="demo-card">
+            <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=400&h=200&fit=crop" alt="Analytics" class="demo-image">
+            <h3>Analytics Dashboard</h3>
+            <p>Double-click this card to add your feedback about our analytics features.</p>
+          </div>
+
+          <div class="demo-card">
+            <img src="https://images.unsplash.com/photo-1557821552-17105176677c?w=400&h=200&fit=crop" alt="Collaboration" class="demo-image">
+            <h3>Team Collaboration</h3>
+            <p>Share your thoughts on collaboration tools and features.</p>
+          </div>
+
+          <div class="demo-card">
+            <img src="https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=400&h=200&fit=crop" alt="Reports" class="demo-image">
+            <h3>Reports & Insights</h3>
+            <p>Comment on what kind of reports you'd like to see.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="demo-section">
+        <h2>Installation</h2>
+        <p>Add Tapko to your website with just two lines of code:</p>
+        <div class="code-block">
+&lt;script src="dist/tapko-widget.js"&gt;&lt;/script&gt;
+&lt;script&gt;
+  Tapko.init({
+    projectId: 'your-project-id',
+    apiKey: 'your-api-key',
+    userId: 'user-123' // Optional: identify the current user
+  });
+&lt;/script&gt;
+        </div>
+        <p style="margin-top: 16px;">Or use data attributes for auto-initialization:</p>
+        <div class="code-block">
+&lt;script
+  src="dist/tapko-widget.js"
+  data-tapko-project-id="your-project-id"
+  data-tapko-api-key="your-api-key"
+  data-tapko-user-id="user-123"
+&gt;&lt;/script&gt;
+        </div>
+      </div>
+
+      <div class="demo-section">
+        <h2>Widget Controls</h2>
+        <div class="controls">
+          <button class="btn btn-primary" onclick="testProgrammaticComment()">
+            Create Comment Programmatically
+          </button>
+          <button class="btn btn-secondary" onclick="closeAllComments()">
+            Close All Comments
+          </button>
+          <button class="btn btn-secondary" onclick="checkStatus()">
+            Check Status
+          </button>
+          <button class="btn btn-secondary" onclick="destroyWidget()">
+            Destroy Widget
+          </button>
+          <button class="btn btn-primary" onclick="reinitWidget()">
+            Re-initialize
+          </button>
+        </div>
+        <div id="status"></div>
+      </div>
+
+      <div class="demo-section">
+        <h2>Features</h2>
+        <div class="demo-grid">
+          <div class="demo-card">
+            <h3>📝 Text Comments</h3>
+            <p>Add detailed feedback with a simple textarea interface</p>
+          </div>
+          <div class="demo-card">
+            <h3>🎤 Voice Recording</h3>
+            <p>Record audio comments for richer feedback</p>
+          </div>
+          <div class="demo-card">
+            <h3>😊 Emoji Reactions</h3>
+            <p>Quick feedback with emoji reactions</p>
+          </div>
+          <div class="demo-card">
+            <h3>📱 Mobile Optimized</h3>
+            <p>Works seamlessly on desktop and mobile devices</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Load Tapko Widget -->
+  <script src="../dist/tapko-widget.js"></script>
+  <script>
+    // Initialize widget
+    (async () => {
+      try {
+        await Tapko.init({
+          projectId: 'demo-project-123',
+          apiKey: 'demo-api-key', // Optional
+          userId: 'demo-user-456', // Optional: identify the current user
+          doubleClickEnabled: true,
+          doubleTapEnabled: true
+        });
+
+        showStatus('Widget initialized successfully!', 'success');
+      } catch (error) {
+        showStatus('Failed to initialize widget: ' + error.message, 'error');
+      }
+    })();
+
+    // Listen for widget events
+    window.addEventListener('tapko:comment:submitted', (e) => {
+      console.log('Comment submitted:', e.detail);
+      showStatus('Comment submitted successfully!', 'success');
+    });
+
+    window.addEventListener('tapko:error', (e) => {
+      console.error('Widget error:', e.detail);
+      showStatus('Error: ' + e.detail.message, 'error');
+    });
+
+    // Demo functions
+    function testProgrammaticComment() {
+      const firstCard = document.querySelector('.demo-card');
+      if (firstCard) {
+        Tapko.createComment(firstCard);
+        showStatus('Comment card opened programmatically', 'success');
+      }
+    }
+
+    function closeAllComments() {
+      Tapko.closeAll();
+      showStatus('All comments closed', 'success');
+    }
+
+    function checkStatus() {
+      const isReady = Tapko.isReady();
+      const version = Tapko.getVersion();
+      showStatus(`Widget ${isReady ? 'is ready' : 'not initialized'} (v${version})`, 'success');
+    }
+
+    function destroyWidget() {
+      Tapko.destroy();
+      showStatus('Widget destroyed. Refresh page or click Re-initialize', 'success');
+    }
+
+    async function reinitWidget() {
+      try {
+        await Tapko.init({
+          projectId: 'demo-project-123',
+          apiKey: 'demo-api-key',
+          userId: 'demo-user-456'
+        });
+        showStatus('Widget re-initialized!', 'success');
+      } catch (error) {
+        showStatus('Error: ' + error.message, 'error');
+      }
+    }
+
+    function showStatus(message, type) {
+      const statusEl = document.getElementById('status');
+      statusEl.className = 'status ' + type;
+      statusEl.textContent = message;
+
+      setTimeout(() => {
+        statusEl.textContent = '';
+        statusEl.className = '';
+      }, 5000);
+    }
+  </script>
+</body>
+</html>
