@@ -199,22 +199,6 @@ class APIClient {
     return await response.json();
   }
 
-  /**
-   * Track widget event (analytics)
-   */
-  async trackEvent(eventType, eventData = {}) {
-    return this.post('/events', {
-      projectId: this.projectId,
-      userId: this.userId,
-      eventType,
-      eventData,
-      timestamp: new Date().toISOString(),
-      url: window.location.href
-    }).catch(error => {
-      // Don't throw on analytics errors, just log
-      console.warn('[Tapko] Failed to track event:', error);
-    });
-  }
 }
 
 export { APIClient };

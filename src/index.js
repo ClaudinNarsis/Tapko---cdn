@@ -22,6 +22,7 @@
 import { CONFIG } from './config.js';
 import { APIClient } from './api/client.js';
 import { CommentCard } from './components/CommentCard.js';
+import { StatusWidget } from './components/StatusWidget.js';
 import { dispatchCustomEvent } from './utils/dom.js';
 
 (function(window, document) {
@@ -44,6 +45,7 @@ import { dispatchCustomEvent } from './utils/dom.js';
       this.isDisabled = false;
       this.projectData = null;
       this.activeCards = new Set();
+      this.statusWidget = new StatusWidget();
 
       // Event handlers (stored for cleanup)
       this.handleDoubleClick = null;
@@ -80,12 +82,17 @@ import { dispatchCustomEvent } from './utils/dom.js';
         baseUrl: this.config.apiUrl
       });
 
+      // Show status widget with loading state
+      this.statusWidget.create();
+      this.statusWidget.setStatus('loading');
+
       // Validate project before initializing
       try {
         const validation = await this.apiClient.validateProject();
 
         if (!validation.success || !validation.status.exists) {
           const error = new Error('[Tapko] Project not found. Please check your projectId.');
+          this.statusWidget.setStatus('error');
           dispatchCustomEvent(CONFIG.EVENTS.ERROR, {
             message: error.message,
             type: 'PROJECT_NOT_FOUND',
@@ -97,11 +104,15 @@ import { dispatchCustomEvent } from './utils/dom.js';
         if (!validation.status.isCollectingFeedback) {
           console.warn('[Tapko] Project is not currently collecting feedback. Widget is disabled.');
           this.isDisabled = true;
+          this.statusWidget.setStatus('disabled');
           dispatchCustomEvent(CONFIG.EVENTS.ERROR, {
             message: 'Project is not collecting feedback',
             type: 'PROJECT_DISABLED',
             validation
           });
+        } else {
+          // Validation successful and collecting feedback
+          this.statusWidget.setStatus('success');
         }
 
         this.projectData = validation.data;
@@ -112,6 +123,7 @@ import { dispatchCustomEvent } from './utils/dom.js';
         }
         // For network errors, warn but continue (fail gracefully)
         console.warn('[Tapko] Failed to validate project:', error.message);
+        this.statusWidget.setStatus('error');
       }
 
       // Inject styles
@@ -293,6 +305,11 @@ import { dispatchCustomEvent } from './utils/dom.js';
 
       // Close all cards
       this.closeAll();
+
+      // Remove status widget
+      if (this.statusWidget) {
+        this.statusWidget.destroy();
+      }
 
       // Remove styles
       const styleEl = document.getElementById('__tapko_widget_styles');

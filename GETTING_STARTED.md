@@ -75,6 +75,73 @@ Then open: **http://localhost:8080/examples/**
 
 Try double-clicking on the cards to see your widget in action!
 
+### Step 4: Quick Browser Console Test
+
+Want to test the widget instantly on any webpage? Copy and paste this snippet into your browser console:
+
+```javascript
+// Load and test Tapko Widget in browser console
+(function() {
+  const script = document.createElement('script');
+  script.src = 'http://localhost:8080/dist/tapko-widget.js';
+  script.onload = async function() {
+    console.log('✅ Tapko Widget loaded!');
+
+    // Initialize the widget
+    try {
+      await Tapko.init({
+        projectId: 'test-project-123',
+        userId: 'test-user-456' // Required for validation API call
+      });
+      console.log('✅ Widget initialized! Try double-clicking any element on the page.');
+      console.log('📘 API available at: window.Tapko');
+      console.log('📘 Test: Tapko.createComment(document.body)');
+    } catch (error) {
+      console.error('❌ Initialization failed:', error.message);
+      console.log('💡 Make sure your backend API is running and the project exists');
+    }
+  };
+  script.onerror = function() {
+    console.error('❌ Failed to load widget. Make sure the dev server is running on http://localhost:8080');
+    console.log('💡 Run: npm run serve');
+  };
+  document.head.appendChild(script);
+})();
+```
+
+**To use this snippet:**
+1. Make sure your dev server is running (`npm run serve`)
+2. Open **any website** in your browser
+3. Open the browser console (F12 or Cmd+Option+I)
+4. Paste the snippet above and press Enter
+5. Double-click any element to open the comment card!
+
+**Testing on a production build:**
+
+If you want to test the production build from a CDN or file, modify the script URL:
+
+```javascript
+// Test production build (replace with your CDN URL)
+(function() {
+  const script = document.createElement('script');
+  script.src = 'https://your-cdn.com/v1/tapko-widget.js'; // Change this
+  script.onload = async function() {
+    try {
+      await Tapko.init({
+        projectId: 'your-project-id',
+        userId: 'user-id' // Required for validation
+      });
+      console.log('✅ Widget ready! Double-click any element.');
+    } catch (error) {
+      console.error('❌ Initialization failed:', error.message);
+    }
+  };
+  document.head.appendChild(script);
+})();
+```
+
+**Note:** The API base URL is already configured in [src/config.js](src/config.js:12-14) (defaults to `http://localhost:6000/api`). Only pass `apiUrl` in the init options if you need to override it.
+
 ## 🎯 What You Have Now
 
 ### Core Features Implemented
@@ -103,7 +170,6 @@ Try double-clicking on the cards to see your widget in action!
 - Authentication headers
 - Comment submission
 - Voice upload (multipart)
-- Analytics tracking
 
 ✅ **Event System**
 - Custom events for all actions
@@ -156,7 +222,6 @@ Your backend needs these endpoints:
 
 **Optional:**
 - `GET /v1/widget/config` - Widget configuration
-- `POST /v1/events` - Analytics tracking
 
 See [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md) for API specs.
 

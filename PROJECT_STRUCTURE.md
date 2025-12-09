@@ -72,7 +72,6 @@ Tapko.isReady()              // Check initialization status
   - `getWidgetConfig()` - Fetch widget settings
   - `submitComment()` - Submit text/emoji comments
   - `uploadVoiceRecording()` - Upload audio files
-  - `trackEvent()` - Analytics tracking
 
 ### src/components/CommentCard.js
 **Purpose:** Comment card UI and interaction logic

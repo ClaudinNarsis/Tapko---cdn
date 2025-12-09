@@ -42,11 +42,6 @@ class CommentCard {
     this._positionCard();
     this._attachEventListeners();
     this._show();
-
-    // Track event
-    this.apiClient.trackEvent('comment_card_opened', {
-      targetTag: this.target.tagName
-    });
   }
 
   /**
@@ -330,13 +325,6 @@ class CommentCard {
         await this.apiClient.uploadVoiceRecording(audioData.blob, response.commentId);
       }
 
-      // Track success
-      this.apiClient.trackEvent('comment_submitted', {
-        hasText: !!text,
-        hasAudio: !!audioData,
-        hasEmoji: !!this.selectedEmoji
-      });
-
       // Show success state
       this._showSuccess(text || '(Voice comment)');
 
@@ -356,7 +344,6 @@ class CommentCard {
    * Show loading state
    */
   _showLoading() {
-    const footer = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}comment-footer`);
     const submitBtn = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}comment-submit`);
     submitBtn.disabled = true;
     submitBtn.textContent = 'Submitting...';
@@ -416,9 +403,6 @@ class CommentCard {
 
     // Remove with animation
     removeElement(this.card, true);
-
-    // Track event
-    this.apiClient.trackEvent('comment_card_closed');
 
     // Dispatch event
     dispatchCustomEvent(CONFIG.EVENTS.COMMENT_CLOSED);

@@ -280,3 +280,66 @@
     transform: rotate(360deg);
   }
 }
+
+/* Status Widget */
+.dtc-status-widget {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+  z-index: 2147483646;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dtc-status-widget:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+}
+
+.dtc-status-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+}
+
+/* Loading state */
+.dtc-status-loading .dtc-status-dot {
+  background: #f59e0b;
+  animation: dtc-pulse 1.5s infinite;
+}
+
+/* Success state */
+.dtc-status-success .dtc-status-dot {
+  background: #10b981;
+}
+
+/* Error state */
+.dtc-status-error .dtc-status-dot {
+  background: #ef4444;
+  animation: dtc-pulse-error 1s infinite;
+}
+
+/* Disabled state */
+.dtc-status-disabled .dtc-status-dot {
+  background: #9ca3af;
+}
+
+@keyframes dtc-pulse-error {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.7;
+  }
+}

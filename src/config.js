@@ -11,7 +11,7 @@ export const CONFIG = {
   API: {
     baseUrl: typeof process !== 'undefined' && process.env && process.env.API_URL
       ? process.env.API_URL
-      : 'http://localhost:6000/api',
+      : 'http://localhost:3000/api',
     version: '',
     timeout: 5000,
     retries: 3
