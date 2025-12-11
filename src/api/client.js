@@ -199,6 +199,32 @@ class APIClient {
     return await response.json();
   }
 
+  /**
+   * Submit feedback with enhanced metadata
+   */
+  async submitFeedback(feedbackData) {
+    const endpoint = '/feedback/submit';
+
+    const payload = {
+      projectId: this.projectId,
+      userId: this.userId,
+      feedbackTitle: feedbackData.feedbackTitle || 'User Feedback',
+      feedbackDescription: feedbackData.feedbackDescription || '',
+      feedbackPosition: feedbackData.feedbackPosition || {},
+      // Additional metadata
+      browserInfo: feedbackData.browserInfo || {},
+      breakpoint: feedbackData.breakpoint || {},
+      timestamp: new Date().toISOString(),
+      url: window.location.href,
+      // Optional fields
+      ...(feedbackData.screenshot && { screenshot: feedbackData.screenshot }),
+      ...(feedbackData.emoji && { emoji: feedbackData.emoji }),
+      ...(feedbackData.hasAudio && { hasAudio: feedbackData.hasAudio })
+    };
+
+    return this.post(endpoint, payload);
+  }
+
 }
 
 export { APIClient };

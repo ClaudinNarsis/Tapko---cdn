@@ -11,7 +11,10 @@ import {
   calculateCardPosition,
   removeElement,
   sanitizeHTML,
-  dispatchCustomEvent
+  dispatchCustomEvent,
+  getFeedbackPosition,
+  getBrowserInfo,
+  getCurrentBreakpoint
 } from '../utils/dom.js';
 
 class CommentCard {
@@ -305,24 +308,28 @@ class CommentCard {
     this._showLoading();
 
     try {
-      // Prepare comment data
-      const commentData = {
-        text: sanitizeHTML(text),
+      // Collect feedback position and metadata
+      const feedbackPosition = getFeedbackPosition(this.target);
+      const browserInfo = getBrowserInfo();
+      const breakpoint = getCurrentBreakpoint();
+
+      // Prepare feedback data with enhanced metadata
+      const feedbackData = {
+        feedbackTitle: this._generateFeedbackTitle(text),
+        feedbackDescription: sanitizeHTML(text),
+        feedbackPosition: feedbackPosition,
+        browserInfo: browserInfo,
+        breakpoint: breakpoint,
         emoji: this.selectedEmoji,
-        targetElement: {
-          tag: this.target.tagName,
-          id: this.target.id,
-          className: this.target.className
-        },
         hasAudio: !!audioData
       };
 
-      // Submit comment
-      const response = await this.apiClient.submitComment(commentData);
+      // Submit feedback to the new endpoint
+      const response = await this.apiClient.submitFeedback(feedbackData);
 
       // Upload audio if available
-      if (audioData && response.commentId) {
-        await this.apiClient.uploadVoiceRecording(audioData.blob, response.commentId);
+      if (audioData && response.feedbackId) {
+        await this.apiClient.uploadVoiceRecording(audioData.blob, response.feedbackId);
       }
 
       // Show success state
@@ -330,14 +337,25 @@ class CommentCard {
 
       // Dispatch event
       dispatchCustomEvent(CONFIG.EVENTS.COMMENT_SUBMITTED, {
-        commentId: response.commentId,
-        data: commentData
+        feedbackId: response.feedbackId,
+        data: feedbackData
       });
     } catch (error) {
       console.error('[Tapko] Submit error:', error);
       this._showError('Failed to submit comment. Please try again.');
       this.isSubmitting = false;
     }
+  }
+
+  /**
+   * Generate a feedback title from the text content
+   */
+  _generateFeedbackTitle(text) {
+    if (!text) return 'Voice feedback';
+
+    // Use first 50 characters as title
+    const title = text.substring(0, 50);
+    return title.length < text.length ? `${title}...` : title;
   }
 
   /**

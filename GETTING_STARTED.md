@@ -140,7 +140,7 @@ If you want to test the production build from a CDN or file, modify the script U
 })();
 ```
 
-**Note:** The API base URL is already configured in [src/config.js](src/config.js:12-14) (defaults to `http://localhost:6000/api`). Only pass `apiUrl` in the init options if you need to override it.
+**Note:** The API base URL is already configured in [src/config.js](src/config.js:12-14) (defaults to `http://localhost:3000/api`). Only pass `apiUrl` in the init options if you need to override it.
 
 ## 🎯 What You Have Now
 
