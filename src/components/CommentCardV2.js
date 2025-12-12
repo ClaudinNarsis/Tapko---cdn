@@ -44,6 +44,14 @@ class CommentCardV2 {
     // Callbacks
     this.onDrawRequested = null;
 
+    // Scroll handler
+    this.scrollHandler = null;
+
+    // Store initial offset from element (click position relative to element)
+    const targetRect = target.getBoundingClientRect();
+    this.clickOffsetX = coordinates.x - targetRect.left;
+    this.clickOffsetY = coordinates.y - targetRect.top;
+
     this._init();
   }
 
@@ -55,6 +63,7 @@ class CommentCardV2 {
     this.card = this._createCard();
     this._positionCard();
     this._attachEventListeners();
+    this._setupScrollListener();
     this._show();
   }
 
@@ -63,11 +72,50 @@ class CommentCardV2 {
    */
   _createPinMarker() {
     this.pinMarker = createElement('div', `${CONFIG.CLASS_PREFIX}comment-pin`);
-    this.pinMarker.style.position = 'fixed';
-    this.pinMarker.style.left = `${this.coordinates.x}px`;
-    this.pinMarker.style.top = `${this.coordinates.y}px`;
+    this.pinMarker.style.position = 'absolute';
+
+    // Use the exact click coordinates, not the element's top-left
+    const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
+    const scrollY = window.pageYOffset || document.documentElement.scrollTop;
+
+    // Position at exact click location
+    this.pinMarker.style.left = `${this.coordinates.x + scrollX}px`;
+    this.pinMarker.style.top = `${this.coordinates.y + scrollY}px`;
+    this.pinMarker.style.zIndex = CONFIG.UI.zIndex;
 
     document.body.appendChild(this.pinMarker);
+  }
+
+  /**
+   * Setup scroll listener to update positions
+   */
+  _setupScrollListener() {
+    this.scrollHandler = () => {
+      this._updatePositions();
+    };
+
+    window.addEventListener('scroll', this.scrollHandler, { passive: true });
+    window.addEventListener('resize', this.scrollHandler, { passive: true });
+  }
+
+  /**
+   * Update pin and card positions on scroll
+   */
+  _updatePositions() {
+    if (!this.target || !this.pinMarker) return;
+
+    const targetRect = this.target.getBoundingClientRect();
+    const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
+    const scrollY = window.pageYOffset || document.documentElement.scrollTop;
+
+    // Update pin marker position using the original click offset
+    this.pinMarker.style.left = `${targetRect.left + scrollX + this.clickOffsetX}px`;
+    this.pinMarker.style.top = `${targetRect.top + scrollY + this.clickOffsetY}px`;
+
+    // Update card position if not minimized
+    if (!this.isMinimized && this.card) {
+      this._positionCard();
+    }
   }
 
   /**
@@ -112,23 +160,38 @@ class CommentCardV2 {
       const cardWidth = this.card.offsetWidth || CONFIG.UI.cardMinWidth;
       const cardHeight = this.card.offsetHeight || 150;
 
-      let left = this.coordinates.x + 10;
-      let top = this.coordinates.y;
+      // Get element's position relative to document
+      const targetRect = this.target.getBoundingClientRect();
+      const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
+      const scrollY = window.pageYOffset || document.documentElement.scrollTop;
 
-      // Adjust if overflowing viewport
-      if (left + cardWidth > window.innerWidth) {
-        left = this.coordinates.x - cardWidth - 10;
+      // Calculate position based on actual click location (using stored offset)
+      const clickAbsoluteX = targetRect.left + scrollX + this.clickOffsetX;
+      const clickAbsoluteY = targetRect.top + scrollY + this.clickOffsetY;
+
+      // Position card next to click location
+      let left = clickAbsoluteX + 10;
+      let top = clickAbsoluteY;
+
+      // Adjust if overflowing viewport (considering scroll)
+      const viewportRight = window.innerWidth + scrollX;
+      const viewportBottom = window.innerHeight + scrollY;
+
+      if (left + cardWidth > viewportRight) {
+        left = clickAbsoluteX - cardWidth - 10;
       }
 
-      if (top + cardHeight > window.innerHeight) {
-        top = window.innerHeight - cardHeight - 10;
+      if (top + cardHeight > viewportBottom) {
+        top = viewportBottom - cardHeight - 10;
       }
 
-      if (left < 10) left = 10;
-      if (top < 10) top = 10;
+      if (left < scrollX + 10) left = scrollX + 10;
+      if (top < scrollY + 10) top = scrollY + 10;
 
+      this.card.style.position = 'absolute';
       this.card.style.left = `${left}px`;
       this.card.style.top = `${top}px`;
+      this.card.style.zIndex = CONFIG.UI.zIndex;
     });
   }
 
@@ -429,6 +492,12 @@ class CommentCardV2 {
     }
     if (this.recordingManager) {
       this.recordingManager.destroy();
+    }
+    // Remove scroll listener
+    if (this.scrollHandler) {
+      window.removeEventListener('scroll', this.scrollHandler);
+      window.removeEventListener('resize', this.scrollHandler);
+      this.scrollHandler = null;
     }
   }
 
