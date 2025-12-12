@@ -1,0 +1,442 @@
+/* Tapko Widget V2 Styles */
+
+/* ===========================================
+   FLOATING ENTRY BUTTON
+   =========================================== */
+.dtc-floating-entry-button {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #4f46e5;
+  border: none;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2147483646;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0;
+  transform: scale(0.8);
+  color: #ffffff;
+}
+
+.dtc-floating-entry-button.dtc-visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.dtc-floating-entry-button:hover {
+  transform: scale(1.1);
+  box-shadow: 0 6px 16px rgba(79, 70, 229, 0.4);
+  background: #4338ca;
+}
+
+.dtc-floating-entry-button:active {
+  transform: scale(1.05);
+}
+
+.dtc-floating-entry-button.dtc-feedback-mode-active {
+  background: #ef4444;
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+
+.dtc-floating-entry-button.dtc-feedback-mode-active:hover {
+  background: #dc2626;
+  box-shadow: 0 6px 16px rgba(239, 68, 68, 0.4);
+}
+
+.dtc-button-icon {
+  width: 24px;
+  height: 24px;
+  pointer-events: none;
+}
+
+/* ===========================================
+   FEEDBACK MODE OVERLAY
+   =========================================== */
+.dtc-feedback-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.04);
+  z-index: 2147483645;
+  cursor: crosshair;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.dtc-feedback-overlay.dtc-visible {
+  opacity: 1;
+}
+
+.dtc-feedback-overlay.dtc-drawing-mode {
+  cursor: crosshair;
+  background: rgba(0, 0, 0, 0.02);
+}
+
+/* Feedback mode label */
+.dtc-feedback-label {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  background: rgba(79, 70, 229, 0.95);
+  color: #ffffff;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* ===========================================
+   COMMENT CARD V2 (Bubble UI)
+   =========================================== */
+.dtc-comment-pin {
+  position: fixed;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #4f46e5;
+  margin-left: -6px;
+  margin-top: -6px;
+  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.2);
+  z-index: 2147483647;
+  opacity: 0;
+  transform: scale(0);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dtc-comment-pin.dtc-visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.dtc-comment-card-v2 {
+  position: fixed;
+  z-index: 2147483647;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  opacity: 0;
+  transform: translateY(-8px) scale(0.95);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dtc-comment-card-v2.dtc-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.dtc-comment-card-v2.dtc-minimized {
+  width: auto;
+  min-width: 180px;
+}
+
+.dtc-comment-bubble {
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  padding: 16px;
+  min-width: 300px;
+  max-width: 400px;
+}
+
+.dtc-comment-textarea {
+  width: 100%;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #111827;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 60px;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.dtc-comment-textarea:focus {
+  border-color: #4f46e5;
+}
+
+.dtc-comment-textarea::placeholder {
+  color: #9ca3af;
+}
+
+.dtc-comment-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.dtc-btn-cancel,
+.dtc-btn-draw,
+.dtc-btn-submit {
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: inherit;
+}
+
+.dtc-btn-cancel {
+  background: transparent;
+  color: #6b7280;
+}
+
+.dtc-btn-cancel:hover {
+  background: #f3f4f6;
+  color: #4b5563;
+}
+
+.dtc-btn-draw {
+  background: #f3f4f6;
+  color: #4b5563;
+  margin-left: auto;
+}
+
+.dtc-btn-draw:hover {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.dtc-btn-draw svg {
+  width: 16px;
+  height: 16px;
+}
+
+.dtc-btn-submit {
+  background: #4f46e5;
+  color: #ffffff;
+  box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);
+}
+
+.dtc-btn-submit:hover:not(:disabled) {
+  background: #4338ca;
+  box-shadow: 0 4px 8px rgba(79, 70, 229, 0.3);
+}
+
+.dtc-btn-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Minimized state */
+.dtc-minimized-label {
+  padding: 4px 0;
+  font-size: 13px;
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+/* Success state */
+.dtc-comment-success {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+}
+
+.dtc-comment-success svg {
+  flex-shrink: 0;
+}
+
+.dtc-comment-success p {
+  margin: 0;
+  font-size: 14px;
+  color: #059669;
+}
+
+/* Error state */
+.dtc-comment-error {
+  color: #ef4444;
+  font-size: 12px;
+  padding: 8px;
+  background: #fee2e2;
+  border-radius: 6px;
+  margin-top: 8px;
+}
+
+/* ===========================================
+   DRAWING CANVAS
+   =========================================== */
+.dtc-drawing-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2147483648;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.dtc-drawing-container.dtc-visible {
+  opacity: 1;
+}
+
+.dtc-drawing-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+/* Drawing toolbar */
+.dtc-drawing-toolbar {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  padding: 12px 16px;
+  z-index: 2147483649;
+}
+
+.dtc-drawing-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dtc-drawing-btn {
+  border: none;
+  background: #f3f4f6;
+  color: #4b5563;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.dtc-drawing-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.dtc-drawing-btn:hover {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.dtc-btn-done {
+  background: #4f46e5;
+  color: #ffffff;
+}
+
+.dtc-btn-done:hover {
+  background: #4338ca;
+}
+
+.dtc-btn-clear {
+  background: #fee2e2;
+  color: #ef4444;
+}
+
+.dtc-btn-clear:hover {
+  background: #fecaca;
+  color: #dc2626;
+}
+
+/* ===========================================
+   ANIMATIONS
+   =========================================== */
+@keyframes dtc-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.7;
+  }
+}
+
+@keyframes dtc-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ===========================================
+   RESPONSIVE
+   =========================================== */
+@media (max-width: 640px) {
+  .dtc-floating-entry-button {
+    width: 56px;
+    height: 56px;
+    bottom: 20px;
+    right: 20px;
+  }
+
+  .dtc-button-icon {
+    width: 28px;
+    height: 28px;
+  }
+
+  .dtc-feedback-label {
+    top: 12px;
+    right: 12px;
+    font-size: 12px;
+    padding: 6px 12px;
+  }
+
+  .dtc-comment-bubble {
+    min-width: 260px;
+    max-width: calc(100vw - 32px);
+  }
+
+  .dtc-drawing-toolbar {
+    bottom: 70px;
+    left: 16px;
+    right: 16px;
+    transform: none;
+  }
+
+  .dtc-drawing-controls {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .dtc-drawing-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* ===========================================
+   UTILITY CLASSES
+   =========================================== */
+.dtc-visible {
+  opacity: 1 !important;
+}
+
+.dtc-anchored-container {
+  position: relative !important;
+}

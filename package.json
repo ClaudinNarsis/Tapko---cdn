@@ -5,8 +5,13 @@
   "main": "dist/tapko-widget.js",
   "scripts": {
     "dev": "node build.js --watch",
+    "dev:v2": "node build.js --watch --v2",
     "build": "node build.js",
+    "build:v2": "node build.js --v2",
     "build:prod": "NODE_ENV=production node build.js",
+    "build:prod:v2": "NODE_ENV=production node build.js --v2",
+    "build:all": "npm run build && npm run build:v2",
+    "build:all:prod": "npm run build:prod && npm run build:prod:v2",
     "serve": "npx serve -l 8080 .",
     "lint": "eslint src/**/*.js"
   },

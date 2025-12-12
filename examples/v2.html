@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tapko Widget V2 - Demo</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .header {
+      text-align: center;
+      color: white;
+      margin-bottom: 60px;
+    }
+
+    .header h1 {
+      font-size: 48px;
+      margin-bottom: 16px;
+      font-weight: 700;
+    }
+
+    .header p {
+      font-size: 20px;
+      opacity: 0.9;
+    }
+
+    .badge {
+      display: inline-block;
+      background: rgba(255, 255, 255, 0.2);
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 14px;
+      margin-top: 16px;
+      font-weight: 600;
+    }
+
+    .content {
+      background: white;
+      border-radius: 24px;
+      padding: 40px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+
+    .demo-section {
+      margin-bottom: 48px;
+    }
+
+    .demo-section:last-child {
+      margin-bottom: 0;
+    }
+
+    .demo-section h2 {
+      font-size: 28px;
+      margin-bottom: 24px;
+      color: #1f2937;
+    }
+
+    .demo-section p {
+      font-size: 16px;
+      line-height: 1.6;
+      color: #4b5563;
+      margin-bottom: 16px;
+    }
+
+    .demo-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 24px;
+      margin-top: 24px;
+    }
+
+    .demo-card {
+      background: #f9fafb;
+      border: 2px solid #e5e7eb;
+      border-radius: 16px;
+      padding: 24px;
+      transition: all 0.3s ease;
+    }
+
+    .demo-card:hover {
+      border-color: #c6b8ff;
+      transform: translateY(-4px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+    }
+
+    .demo-card h3 {
+      font-size: 20px;
+      margin-bottom: 12px;
+      color: #1f2937;
+    }
+
+    .demo-card p {
+      color: #6b7280;
+      font-size: 14px;
+      margin: 0;
+    }
+
+    .demo-image {
+      width: 100%;
+      height: 200px;
+      object-fit: cover;
+      border-radius: 12px;
+      margin-bottom: 16px;
+    }
+
+    .instructions {
+      background: #eff6ff;
+      border-left: 4px solid #3b82f6;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 32px;
+    }
+
+    .instructions h3 {
+      color: #1e40af;
+      margin-bottom: 12px;
+      font-size: 18px;
+    }
+
+    .instructions ul {
+      margin-left: 24px;
+      color: #1e3a8a;
+    }
+
+    .instructions li {
+      margin-bottom: 8px;
+    }
+
+    .instructions strong {
+      color: #1e40af;
+    }
+
+    .v2-callout {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 24px;
+      border-radius: 12px;
+      margin-bottom: 32px;
+    }
+
+    .v2-callout h3 {
+      font-size: 22px;
+      margin-bottom: 16px;
+    }
+
+    .v2-callout ul {
+      margin-left: 20px;
+      line-height: 1.8;
+    }
+
+    .controls {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 24px;
+    }
+
+    .btn {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn-primary {
+      background: #4f46e5;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #4338ca;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+    }
+
+    .btn-secondary {
+      background: #e5e7eb;
+      color: #1f2937;
+    }
+
+    .btn-secondary:hover {
+      background: #d1d5db;
+    }
+
+    .status {
+      margin-top: 16px;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+
+    .status.success {
+      background: #d1fae5;
+      color: #065f46;
+    }
+
+    .status.info {
+      background: #dbeafe;
+      color: #1e40af;
+    }
+
+    @media (max-width: 768px) {
+      .header h1 {
+        font-size: 32px;
+      }
+
+      .content {
+        padding: 24px;
+      }
+
+      .demo-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Tapko Widget V2</h1>
+      <p>Gesture-free, fully discoverable feedback system</p>
+      <span class="badge">v2.0.0 — Technical Specification Demo</span>
+    </div>
+
+    <div class="content">
+      <div class="v2-callout">
+        <h3>🎉 What's New in V2</h3>
+        <ul>
+          <li><strong>Floating Entry Button:</strong> Always visible, click to enter feedback mode</li>
+          <li><strong>No Hidden Gestures:</strong> Everything is explicit and discoverable</li>
+          <li><strong>Single-Tap Comments:</strong> Just tap anywhere when in feedback mode</li>
+          <li><strong>Explicit Drawing Mode:</strong> Optional drawing via "Draw on page" button</li>
+          <li><strong>Visual Feedback Mode:</strong> 4% overlay tint shows you're in feedback mode</li>
+        </ul>
+      </div>
+
+      <div class="instructions">
+        <h3>How to Use V2</h3>
+        <ul>
+          <li><strong>Step 1:</strong> Click the floating button (bottom-right) to enter feedback mode</li>
+          <li><strong>Step 2:</strong> Tap anywhere on the page to create a comment</li>
+          <li><strong>Step 3 (Optional):</strong> Click "Draw on page" to add visual annotations</li>
+          <li><strong>Step 4:</strong> Submit your feedback</li>
+          <li><strong>Exit:</strong> Press ESC twice or click the floating button again to exit feedback mode</li>
+        </ul>
+      </div>
+
+      <div class="demo-section">
+        <h2>Try it out!</h2>
+        <p>
+          Click the floating button in the bottom-right corner to enter feedback mode.
+          Then tap on any of these cards (or anywhere else on the page) to leave feedback.
+        </p>
+
+        <div class="demo-grid">
+          <div class="demo-card">
+            <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=400&h=200&fit=crop" alt="Analytics" class="demo-image">
+            <h3>Analytics Dashboard</h3>
+            <p>Tap this card in feedback mode to add your thoughts about analytics features.</p>
+          </div>
+
+          <div class="demo-card">
+            <img src="https://images.unsplash.com/photo-1557821552-17105176677c?w=400&h=200&fit=crop" alt="Collaboration" class="demo-image">
+            <h3>Team Collaboration</h3>
+            <p>Share your feedback on collaboration tools and team features.</p>
+          </div>
+
+          <div class="demo-card">
+            <img src="https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=400&h=200&fit=crop" alt="Reports" class="demo-image">
+            <h3>Reports & Insights</h3>
+            <p>Comment on the types of reports you'd like to see.</p>
+          </div>
+
+          <div class="demo-card">
+            <h3>Text-Only Card</h3>
+            <p>This card has no image. Try tapping on it in feedback mode to see how the comment bubble positions itself intelligently.</p>
+          </div>
+
+          <div class="demo-card">
+            <h3>Button Example</h3>
+            <p><button class="btn btn-primary">Click Me (In Feedback Mode)</button></p>
+            <p>Even buttons can receive feedback in V2. Your clicks are intercepted in feedback mode.</p>
+          </div>
+
+          <div class="demo-card">
+            <h3>Drawing Feature</h3>
+            <p>When you create a comment, click "Draw on page" to enter drawing mode. You can draw arrows, circles, or highlight areas that need attention.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="demo-section">
+        <h2>Widget Controls</h2>
+        <div class="controls">
+          <button class="btn btn-primary" onclick="enterFeedbackMode()">
+            Enter Feedback Mode
+          </button>
+          <button class="btn btn-secondary" onclick="exitFeedbackMode()">
+            Exit Feedback Mode
+          </button>
+          <button class="btn btn-secondary" onclick="closeAll()">
+            Close All
+          </button>
+          <button class="btn btn-secondary" onclick="checkStatus()">
+            Check Status
+          </button>
+        </div>
+        <div id="status"></div>
+      </div>
+
+      <div class="demo-section">
+        <h2>Key Features</h2>
+        <div class="demo-grid">
+          <div class="demo-card">
+            <h3>🎯 Zero Ambiguity</h3>
+            <p>Feedback mode is always visually obvious with a subtle overlay and clear label</p>
+          </div>
+          <div class="demo-card">
+            <h3>✨ No Surprises</h3>
+            <p>Everything requires explicit user action. No hidden gestures or double-clicks</p>
+          </div>
+          <div class="demo-card">
+            <h3>🎨 Optional Drawing</h3>
+            <p>Drawing mode is explicitly invoked via button, never automatically triggered</p>
+          </div>
+          <div class="demo-card">
+            <h3>📱 Touch-Friendly</h3>
+            <p>Works perfectly on mobile with single-tap comments and two-finger scrolling</p>
+          </div>
+          <div class="demo-card">
+            <h3>⌨️ Keyboard Shortcuts</h3>
+            <p>ESC to close bubbles/exit, Enter to submit, all standard keyboard patterns</p>
+          </div>
+          <div class="demo-card">
+            <h3>🔍 Context Capture</h3>
+            <p>Automatically captures URL, browser, OS, viewport, and element hierarchy</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Load Tapko Widget V2 -->
+  <script src="../dist/tapko-widget-v2.js"></script>
+  <script>
+    // Initialize widget
+    (async () => {
+      try {
+        await Tapko.init({
+          projectId: '59e0ad62-b8f3-44e3-937d-ccaf0d14655f',
+          apiKey: 'demo-api-key',
+          userId: 'user_36PrQyirxWUXgwmtnnhuXI8G4xu'
+        });
+
+        showStatus('Widget V2 initialized successfully! Click the floating button to start.', 'success');
+      } catch (error) {
+        showStatus('Failed to initialize widget: ' + error.message, 'info');
+      }
+    })();
+
+    // Listen for widget events
+    window.addEventListener('tapko:initialized', (e) => {
+      console.log('Widget initialized:', e.detail);
+    });
+
+    window.addEventListener('tapko:feedback:mode:entered', (e) => {
+      console.log('Entered feedback mode');
+      showStatus('Feedback mode active - Tap anywhere to comment', 'info');
+    });
+
+    window.addEventListener('tapko:feedback:mode:exited', (e) => {
+      console.log('Exited feedback mode');
+      showStatus('Feedback mode exited', 'success');
+    });
+
+    window.addEventListener('tapko:comment:submitted', (e) => {
+      console.log('Comment submitted:', e.detail);
+      showStatus('Comment submitted successfully!', 'success');
+    });
+
+    window.addEventListener('tapko:drawing:started', (e) => {
+      console.log('Drawing started');
+      showStatus('Drawing mode active - Draw and click Done when finished', 'info');
+    });
+
+    window.addEventListener('tapko:error', (e) => {
+      console.error('Widget error:', e.detail);
+      showStatus('Error: ' + e.detail.message, 'info');
+    });
+
+    // Demo functions
+    function enterFeedbackMode() {
+      Tapko.enterFeedbackMode();
+    }
+
+    function exitFeedbackMode() {
+      Tapko.exitFeedbackMode();
+    }
+
+    function closeAll() {
+      Tapko.closeAll();
+      showStatus('All feedback closed', 'success');
+    }
+
+    function checkStatus() {
+      const status = Tapko.getProjectStatus();
+      const version = Tapko.getVersion();
+      const mode = status.isInFeedbackMode ? 'ACTIVE' : 'INACTIVE';
+      showStatus(
+        `Widget v${version} | Feedback Mode: ${mode} | Ready: ${status.isInitialized}`,
+        'info'
+      );
+    }
+
+    function showStatus(message, type) {
+      const statusEl = document.getElementById('status');
+      statusEl.className = 'status ' + type;
+      statusEl.textContent = message;
+
+      setTimeout(() => {
+        statusEl.textContent = '';
+        statusEl.className = '';
+      }, 5000);
+    }
+  </script>
+</body>
+</html>

@@ -23,9 +23,9 @@ export const CONFIG = {
     position: 'bottom-right',
     enableVoiceComments: true,
     enableEmojis: true,
-    doubleClickEnabled: true,
-    doubleTapEnabled: true,
-    doubleTapDelay: 300
+    enableDrawing: true,
+    // V2: Single-tap mode (no double-click/tap required in feedback mode)
+    feedbackModeEnabled: true
   },
 
   // UI Configuration
@@ -33,15 +33,33 @@ export const CONFIG = {
     cardMinWidth: 260,
     cardMaxWidth: 340,
     animationDuration: 300,
-    zIndex: 2147483647
+    zIndex: 2147483647,
+    // V2: Floating entry button specs
+    entryButtonSize: 44, // 38-44px per spec
+    overlayOpacity: 0.04, // 4% tint
+    overlayColor: 'rgba(0, 0, 0, 0.04)'
+  },
+
+  // Drawing Configuration
+  DRAWING: {
+    strokeWidth: 2,
+    defaultColor: '#ff0000', // Red (can be changed to yellow #ffaa00)
+    smoothing: true
   },
 
   // Event names
   EVENTS: {
     INITIALIZED: 'tapko:initialized',
+    FEEDBACK_MODE_ENTERED: 'tapko:feedback:mode:entered',
+    FEEDBACK_MODE_EXITED: 'tapko:feedback:mode:exited',
+    FEEDBACK_TARGET_SELECTED: 'tapko:feedback:target:selected',
     COMMENT_CREATED: 'tapko:comment:created',
     COMMENT_SUBMITTED: 'tapko:comment:submitted',
     COMMENT_CLOSED: 'tapko:comment:closed',
+    DRAWING_STARTED: 'tapko:drawing:started',
+    DRAWING_COMPLETED: 'tapko:drawing:completed',
+    DRAWING_UNDO: 'tapko:drawing:undo',
+    DRAWING_CLEARED: 'tapko:drawing:cleared',
     RECORDING_STARTED: 'tapko:recording:started',
     RECORDING_STOPPED: 'tapko:recording:stopped',
     ERROR: 'tapko:error'
@@ -59,4 +77,5 @@ Object.freeze(CONFIG);
 Object.freeze(CONFIG.API);
 Object.freeze(CONFIG.DEFAULTS);
 Object.freeze(CONFIG.UI);
+Object.freeze(CONFIG.DRAWING);
 Object.freeze(CONFIG.EVENTS);
