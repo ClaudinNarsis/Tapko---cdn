@@ -13,7 +13,7 @@
 
     body {
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, #dae2e0 0%, #fefdff 100%);
       min-height: 100vh;
       padding: 40px 20px;
     }
@@ -47,6 +47,7 @@
       border-radius: 20px;
       font-size: 14px;
       margin-top: 16px;
+      font-weight: 600;
     }
 
     .content {
@@ -90,7 +91,6 @@
       border-radius: 16px;
       padding: 24px;
       transition: all 0.3s ease;
-      cursor: pointer;
     }
 
     .demo-card:hover {
@@ -142,15 +142,26 @@
       margin-bottom: 8px;
     }
 
-    .code-block {
-      background: #1f2937;
-      color: #f3f4f6;
-      padding: 20px;
+    .instructions strong {
+      color: #1e40af;
+    }
+
+    .feature-callout {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 24px;
       border-radius: 12px;
-      font-family: 'Courier New', monospace;
-      font-size: 14px;
-      overflow-x: auto;
-      margin-top: 16px;
+      margin-bottom: 32px;
+    }
+
+    .feature-callout h3 {
+      font-size: 22px;
+      margin-bottom: 16px;
+    }
+
+    .feature-callout ul {
+      margin-left: 20px;
+      line-height: 1.8;
     }
 
     .controls {
@@ -202,9 +213,9 @@
       color: #065f46;
     }
 
-    .status.error {
-      background: #fee2e2;
-      color: #991b1b;
+    .status.info {
+      background: #dbeafe;
+      color: #1e40af;
     }
 
     @media (max-width: 768px) {
@@ -225,114 +236,123 @@
 <body>
   <div class="container">
     <div class="header">
-      <h1>Tapko Widget Demo</h1>
-      <p>Interactive commenting widget for any website</p>
-      <span class="badge">v1.0.0</span>
+      <h1>Tapko Widget</h1>
+      <p>Gesture-free, fully discoverable feedback system</p>
+      <span class="badge">v2.0.0 — Technical Specification Demo</span>
     </div>
 
     <div class="content">
+      <div class="feature-callout">
+        <h3>🎉 Key Features</h3>
+        <ul>
+          <li><strong>Floating Entry Button:</strong> Always visible, click to enter feedback mode</li>
+          <li><strong>No Hidden Gestures:</strong> Everything is explicit and discoverable</li>
+          <li><strong>Single-Tap Comments:</strong> Just tap anywhere when in feedback mode</li>
+          <li><strong>Explicit Drawing Mode:</strong> Optional drawing via "Draw on page" button</li>
+          <li><strong>Visual Feedback Mode:</strong> 4% overlay tint shows you're in feedback mode</li>
+        </ul>
+      </div>
+
       <div class="instructions">
         <h3>How to Use</h3>
         <ul>
-          <li><strong>Desktop:</strong> Double-click on any element to leave a comment</li>
-          <li><strong>Mobile:</strong> Double-tap on any element</li>
-          <li>Add text, emojis, or voice recordings</li>
-          <li>Press ESC to close, Cmd/Ctrl+Enter to submit</li>
+          <li><strong>Step 1:</strong> Click the floating button (bottom-right) to enter feedback mode</li>
+          <li><strong>Step 2:</strong> Tap anywhere on the page to create a comment</li>
+          <li><strong>Step 3 (Optional):</strong> Click "Draw on page" to add visual annotations</li>
+          <li><strong>Step 4:</strong> Submit your feedback</li>
+          <li><strong>Exit:</strong> Press ESC twice or click the floating button again to exit feedback mode</li>
         </ul>
       </div>
 
       <div class="demo-section">
         <h2>Try it out!</h2>
         <p>
-          Double-click or double-tap any of the cards below to leave a comment.
-          The widget works on any element - text, images, buttons, anything!
+          Click the floating button in the bottom-right corner to enter feedback mode.
+          Then tap on any of these cards (or anywhere else on the page) to leave feedback.
         </p>
 
         <div class="demo-grid">
           <div class="demo-card">
             <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=400&h=200&fit=crop" alt="Analytics" class="demo-image">
             <h3>Analytics Dashboard</h3>
-            <p>Double-click this card to add your feedback about our analytics features.</p>
+            <p>Tap this card in feedback mode to add your thoughts about analytics features.</p>
           </div>
 
           <div class="demo-card">
             <img src="https://images.unsplash.com/photo-1557821552-17105176677c?w=400&h=200&fit=crop" alt="Collaboration" class="demo-image">
             <h3>Team Collaboration</h3>
-            <p>Share your thoughts on collaboration tools and features.</p>
+            <p>Share your feedback on collaboration tools and team features.</p>
           </div>
 
           <div class="demo-card">
             <img src="https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=400&h=200&fit=crop" alt="Reports" class="demo-image">
             <h3>Reports & Insights</h3>
-            <p>Comment on what kind of reports you'd like to see.</p>
+            <p>Comment on the types of reports you'd like to see.</p>
           </div>
-        </div>
-      </div>
 
-      <div class="demo-section">
-        <h2>Installation</h2>
-        <p>Add Tapko to your website with just two lines of code:</p>
-        <div class="code-block">
-&lt;script src="dist/tapko-widget.js"&gt;&lt;/script&gt;
-&lt;script&gt;
-  Tapko.init({
-    projectId: 'your-project-id',
-    apiKey: 'your-api-key',
-    userId: 'user-123' // Optional: identify the current user
-  });
-&lt;/script&gt;
-        </div>
-        <p style="margin-top: 16px;">Or use data attributes for auto-initialization:</p>
-        <div class="code-block">
-&lt;script
-  src="dist/tapko-widget.js"
-  data-tapko-project-id="your-project-id"
-  data-tapko-api-key="your-api-key"
-  data-tapko-user-id="user-123"
-&gt;&lt;/script&gt;
+          <div class="demo-card">
+            <h3>Text-Only Card</h3>
+            <p>This card has no image. Try tapping on it in feedback mode to see how the comment bubble positions itself intelligently.</p>
+          </div>
+
+          <div class="demo-card">
+            <h3>Button Example</h3>
+            <p><button class="btn btn-primary">Click Me (In Feedback Mode)</button></p>
+            <p>Even buttons can receive feedback. Your clicks are intercepted in feedback mode.</p>
+          </div>
+
+          <div class="demo-card">
+            <h3>Drawing Feature</h3>
+            <p>When you create a comment, click "Draw on page" to enter drawing mode. You can draw arrows, circles, or highlight areas that need attention.</p>
+          </div>
         </div>
       </div>
 
       <div class="demo-section">
         <h2>Widget Controls</h2>
         <div class="controls">
-          <button class="btn btn-primary" onclick="testProgrammaticComment()">
-            Create Comment Programmatically
+          <button class="btn btn-primary" onclick="enterFeedbackMode()">
+            Enter Feedback Mode
           </button>
-          <button class="btn btn-secondary" onclick="closeAllComments()">
-            Close All Comments
+          <button class="btn btn-secondary" onclick="exitFeedbackMode()">
+            Exit Feedback Mode
+          </button>
+          <button class="btn btn-secondary" onclick="closeAll()">
+            Close All
           </button>
           <button class="btn btn-secondary" onclick="checkStatus()">
             Check Status
-          </button>
-          <button class="btn btn-secondary" onclick="destroyWidget()">
-            Destroy Widget
-          </button>
-          <button class="btn btn-primary" onclick="reinitWidget()">
-            Re-initialize
           </button>
         </div>
         <div id="status"></div>
       </div>
 
       <div class="demo-section">
-        <h2>Features</h2>
+        <h2>Key Features</h2>
         <div class="demo-grid">
           <div class="demo-card">
-            <h3>📝 Text Comments</h3>
-            <p>Add detailed feedback with a simple textarea interface</p>
+            <h3>🎯 Zero Ambiguity</h3>
+            <p>Feedback mode is always visually obvious with a subtle overlay and clear label</p>
           </div>
           <div class="demo-card">
-            <h3>🎤 Voice Recording</h3>
-            <p>Record audio comments for richer feedback</p>
+            <h3>✨ No Surprises</h3>
+            <p>Everything requires explicit user action. No hidden gestures or double-clicks</p>
           </div>
           <div class="demo-card">
-            <h3>😊 Emoji Reactions</h3>
-            <p>Quick feedback with emoji reactions</p>
+            <h3>🎨 Optional Drawing</h3>
+            <p>Drawing mode is explicitly invoked via button, never automatically triggered</p>
           </div>
           <div class="demo-card">
-            <h3>📱 Mobile Optimized</h3>
-            <p>Works seamlessly on desktop and mobile devices</p>
+            <h3>📱 Touch-Friendly</h3>
+            <p>Works perfectly on mobile with single-tap comments and two-finger scrolling</p>
+          </div>
+          <div class="demo-card">
+            <h3>⌨️ Keyboard Shortcuts</h3>
+            <p>ESC to close bubbles/exit, Enter to submit, all standard keyboard patterns</p>
+          </div>
+          <div class="demo-card">
+            <h3>🔍 Context Capture</h3>
+            <p>Automatically captures URL, browser, OS, viewport, and element hierarchy</p>
           </div>
         </div>
       </div>
@@ -340,7 +360,7 @@
   </div>
 
   <!-- Load Tapko Widget -->
-  <script src="../dist/tapko-widget.js"></script>
+  <script src="../dist/tapko-widget-v2.js"></script>
   <script>
     // Initialize widget
     (async () => {
@@ -348,64 +368,67 @@
         await Tapko.init({
           projectId: '59e0ad62-b8f3-44e3-937d-ccaf0d14655f',
           apiKey: 'demo-api-key',
-          userId: 'user_36PrQyirxWUXgwmtnnhuXI8G4xu', 
-          doubleClickEnabled: true,
-          doubleTapEnabled: true
+          userId: 'user_36PrQyirxWUXgwmtnnhuXI8G4xu'
         });
 
-        showStatus('Widget initialized successfully!', 'success');
+        showStatus('Widget initialized successfully! Click the floating button to start.', 'success');
       } catch (error) {
-        showStatus('Failed to initialize widget: ' + error.message, 'error');
+        showStatus('Failed to initialize widget: ' + error.message, 'info');
       }
     })();
 
     // Listen for widget events
+    window.addEventListener('tapko:initialized', (e) => {
+      console.log('Widget initialized:', e.detail);
+    });
+
+    window.addEventListener('tapko:feedback:mode:entered', (e) => {
+      console.log('Entered feedback mode');
+      showStatus('Feedback mode active - Tap anywhere to comment', 'info');
+    });
+
+    window.addEventListener('tapko:feedback:mode:exited', (e) => {
+      console.log('Exited feedback mode');
+      showStatus('Feedback mode exited', 'success');
+    });
+
     window.addEventListener('tapko:comment:submitted', (e) => {
       console.log('Comment submitted:', e.detail);
       showStatus('Comment submitted successfully!', 'success');
     });
 
+    window.addEventListener('tapko:drawing:started', (e) => {
+      console.log('Drawing started');
+      showStatus('Drawing mode active - Draw and click Done when finished', 'info');
+    });
+
     window.addEventListener('tapko:error', (e) => {
       console.error('Widget error:', e.detail);
-      showStatus('Error: ' + e.detail.message, 'error');
+      showStatus('Error: ' + e.detail.message, 'info');
     });
 
     // Demo functions
-    function testProgrammaticComment() {
-      const firstCard = document.querySelector('.demo-card');
-      if (firstCard) {
-        Tapko.createComment(firstCard);
-        showStatus('Comment card opened programmatically', 'success');
-      }
+    function enterFeedbackMode() {
+      Tapko.enterFeedbackMode();
     }
 
-    function closeAllComments() {
+    function exitFeedbackMode() {
+      Tapko.exitFeedbackMode();
+    }
+
+    function closeAll() {
       Tapko.closeAll();
-      showStatus('All comments closed', 'success');
+      showStatus('All feedback closed', 'success');
     }
 
     function checkStatus() {
-      const isReady = Tapko.isReady();
+      const status = Tapko.getProjectStatus();
       const version = Tapko.getVersion();
-      showStatus(`Widget ${isReady ? 'is ready' : 'not initialized'} (v${version})`, 'success');
-    }
-
-    function destroyWidget() {
-      Tapko.destroy();
-      showStatus('Widget destroyed. Refresh page or click Re-initialize', 'success');
-    }
-
-    async function reinitWidget() {
-      try {
-        await Tapko.init({
-          projectId: 'demo-project-123',
-          apiKey: 'demo-api-key',
-          userId: 'demo-user-456'
-        });
-        showStatus('Widget re-initialized!', 'success');
-      } catch (error) {
-        showStatus('Error: ' + error.message, 'error');
-      }
+      const mode = status.isInFeedbackMode ? 'ACTIVE' : 'INACTIVE';
+      showStatus(
+        `Widget v${version} | Feedback Mode: ${mode} | Ready: ${status.isInitialized}`,
+        'info'
+      );
     }
 
     function showStatus(message, type) {

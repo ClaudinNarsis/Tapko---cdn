@@ -1,17 +1,12 @@
 {
   "name": "tapko-widget",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "CDN-served commenting widget for third-party websites",
-  "main": "dist/tapko-widget.js",
+  "main": "dist/tapko-widget-v2.js",
   "scripts": {
     "dev": "node build.js --watch",
-    "dev:v2": "node build.js --watch --v2",
     "build": "node build.js",
-    "build:v2": "node build.js --v2",
     "build:prod": "NODE_ENV=production node build.js",
-    "build:prod:v2": "NODE_ENV=production node build.js --v2",
-    "build:all": "npm run build && npm run build:v2",
-    "build:all:prod": "npm run build:prod && npm run build:prod:v2",
     "serve": "npx serve -l 8080 .",
     "lint": "eslint src/**/*.js"
   },

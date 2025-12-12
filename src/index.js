@@ -1,28 +1,31 @@
 /**
  * Tapko Widget - Main Entry Point
- * CDN-served commenting widget for third-party websites
+ * CDN-served feedback widget with gesture-free, discoverable design
+ *
+ * Architecture:
+ * - Floating Entry Button (always visible)
+ * - Feedback Mode Overlay (4% tint, intercepts clicks)
+ * - Single-tap comment creation
+ * - Explicit drawing mode via button
+ * - No hidden gestures
  *
  * Usage:
- *   <script src="https://cdn.tapko.com/v1/tapko-widget.min.js"></script>
+ *   <script src="https://cdn.tapko.com/tapko-widget.min.js"></script>
  *   <script>
- *     // init() is async and validates the project before initializing
  *     await Tapko.init({
  *       projectId: 'your-project-id',
- *       apiKey: 'your-api-key', // Optional
- *       userId: 'user-123' // Optional: identify the current user
+ *       apiKey: 'your-api-key',
+ *       userId: 'user-123'
  *     });
  *   </script>
- *
- * The widget will:
- * - Validate the projectId and userId with the backend
- * - Throw an error if the project doesn't exist
- * - Disable itself if the project is not collecting feedback
  */
 
 import { CONFIG } from './config.js';
 import { APIClient } from './api/client.js';
+import { FloatingEntryButton } from './components/FloatingEntryButton.js';
+import { FeedbackModeOverlay } from './components/FeedbackModeOverlay.js';
 import { CommentCard } from './components/CommentCard.js';
-import { StatusWidget } from './components/StatusWidget.js';
+import { DrawingCanvas } from './components/DrawingCanvas.js';
 import { dispatchCustomEvent } from './utils/dom.js';
 
 (function(window, document) {
@@ -44,17 +47,17 @@ import { dispatchCustomEvent } from './utils/dom.js';
       this.isInitialized = false;
       this.isDisabled = false;
       this.projectData = null;
-      this.activeCards = new Set();
-      this.statusWidget = new StatusWidget();
 
-      // Event handlers (stored for cleanup)
-      this.handleDoubleClick = null;
-      this.handleTouchStart = null;
-      this.handleDragStart = null;
+      // V2 Components
+      this.floatingButton = new FloatingEntryButton();
+      this.feedbackOverlay = null;
+      this.drawingCanvas = null;
 
-      // Double-tap tracking
-      this.lastTapTime = 0;
-      this.lastTapTarget = null;
+      // State
+      this.isInFeedbackMode = false;
+      this.activeCard = null;
+      this.escPressCount = 0;
+      this.escTimeout = null;
     }
 
     /**
@@ -82,17 +85,12 @@ import { dispatchCustomEvent } from './utils/dom.js';
         baseUrl: this.config.apiUrl
       });
 
-      // Show status widget with loading state
-      this.statusWidget.create();
-      this.statusWidget.setStatus('loading');
-
       // Validate project before initializing
       try {
         const validation = await this.apiClient.validateProject();
 
         if (!validation.success || !validation.status.exists) {
           const error = new Error('[Tapko] Project not found. Please check your projectId.');
-          this.statusWidget.setStatus('error');
           dispatchCustomEvent(CONFIG.EVENTS.ERROR, {
             message: error.message,
             type: 'PROJECT_NOT_FOUND',
@@ -104,35 +102,33 @@ import { dispatchCustomEvent } from './utils/dom.js';
         if (!validation.status.isCollectingFeedback) {
           console.warn('[Tapko] Project is not currently collecting feedback. Widget is disabled.');
           this.isDisabled = true;
-          this.statusWidget.setStatus('disabled');
           dispatchCustomEvent(CONFIG.EVENTS.ERROR, {
             message: 'Project is not collecting feedback',
             type: 'PROJECT_DISABLED',
             validation
           });
-        } else {
-          // Validation successful and collecting feedback
-          this.statusWidget.setStatus('success');
+          // Don't show button if disabled
+          this.isInitialized = true;
+          return;
         }
 
         this.projectData = validation.data;
       } catch (error) {
-        // If validation fails, throw error
         if (error.message.includes('Project not found')) {
           throw error;
         }
-        // For network errors, warn but continue (fail gracefully)
         console.warn('[Tapko] Failed to validate project:', error.message);
-        this.statusWidget.setStatus('error');
       }
 
       // Inject styles
       this._injectStyles();
 
-      // Setup event listeners (only if not disabled)
-      if (!this.isDisabled) {
-        this._setupEventListeners();
-      }
+      // Create floating entry button
+      this.floatingButton.create(() => this._toggleFeedbackMode());
+      this.floatingButton.show();
+
+      // Setup ESC key handler
+      this._setupEscapeHandler();
 
       this.isInitialized = true;
 
@@ -144,7 +140,7 @@ import { dispatchCustomEvent } from './utils/dom.js';
         isDisabled: this.isDisabled
       });
 
-      console.log('[Tapko] Widget initialized', CONFIG.VERSION, this.isDisabled ? '(disabled - not collecting feedback)' : '');
+      console.log('[Tapko] Widget initialized', CONFIG.VERSION);
     }
 
     /**
@@ -161,97 +157,152 @@ import { dispatchCustomEvent } from './utils/dom.js';
     }
 
     /**
-     * Setup event listeners for double-click and double-tap
+     * Setup ESC key handler
      */
-    _setupEventListeners() {
-      // Double-click (desktop)
-      if (this.config.doubleClickEnabled) {
-        this.handleDoubleClick = this._onDoubleClick.bind(this);
-        document.addEventListener('dblclick', this.handleDoubleClick, true);
-      }
-
-      // Double-tap (mobile)
-      if (this.config.doubleTapEnabled) {
-        this.handleTouchStart = this._onTouchStart.bind(this);
-        document.addEventListener('touchstart', this.handleTouchStart, true);
-      }
-
-      // Prevent image dragging from interfering
-      this.handleDragStart = (e) => {
-        if (e.target.tagName === 'IMG') {
-          e.preventDefault();
+    _setupEscapeHandler() {
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          this._handleEscape();
         }
-      };
-      document.addEventListener('dragstart', this.handleDragStart, true);
+      });
     }
 
     /**
-     * Handle double-click event
+     * Handle ESC key press
+     * First ESC closes active card, second ESC exits feedback mode
      */
-    _onDoubleClick(event) {
-      // Prevent default behaviors
-      event.preventDefault();
-      event.stopPropagation();
-
-      // Make images explicitly support comments
-      if (event.target.tagName === 'IMG') {
-        event.target.style.userSelect = 'none';
+    _handleEscape() {
+      // Clear previous timeout
+      if (this.escTimeout) {
+        clearTimeout(this.escTimeout);
       }
 
-      this._createCommentCard(event.target);
+      this.escPressCount++;
+
+      if (this.escPressCount === 1) {
+        // First ESC: close active card or drawing
+        if (this.activeCard) {
+          this.activeCard.close();
+          this.activeCard = null;
+        } else if (this.drawingCanvas) {
+          this._exitDrawingMode();
+        }
+
+        // Reset count after 1 second
+        this.escTimeout = setTimeout(() => {
+          this.escPressCount = 0;
+        }, 1000);
+      } else if (this.escPressCount === 2) {
+        // Second ESC: exit feedback mode
+        if (this.isInFeedbackMode) {
+          this._exitFeedbackMode();
+        }
+        this.escPressCount = 0;
+      }
     }
 
     /**
-     * Handle touch start for double-tap detection
+     * Toggle feedback mode
      */
-    _onTouchStart(event) {
-      const now = Date.now();
-      const tapTarget = event.target;
-      const delta = now - this.lastTapTime;
-
-      if (delta > 0 && delta < this.config.doubleTapDelay && tapTarget === this.lastTapTarget) {
-        event.preventDefault();
-        event.stopPropagation();
-        this._createCommentCard(tapTarget);
-        this.lastTapTime = 0;
-        this.lastTapTarget = null;
+    _toggleFeedbackMode() {
+      if (this.isInFeedbackMode) {
+        this._exitFeedbackMode();
       } else {
-        this.lastTapTime = now;
-        this.lastTapTarget = tapTarget;
+        this._enterFeedbackMode();
       }
     }
 
     /**
-     * Create comment card
+     * Enter feedback mode
      */
-    _createCommentCard(target) {
-      if (!this.isInitialized) {
-        console.warn('[Tapko] Widget not initialized');
+    _enterFeedbackMode() {
+      if (this.isInFeedbackMode || this.isDisabled) return;
+
+      this.isInFeedbackMode = true;
+
+      // Update floating button
+      this.floatingButton.setFeedbackMode(true);
+
+      // Create overlay
+      this.feedbackOverlay = new FeedbackModeOverlay();
+      this.feedbackOverlay.create((element, coordinates) => {
+        this._createCommentCard(element, coordinates);
+      });
+
+      // Dispatch event
+      dispatchCustomEvent(CONFIG.EVENTS.FEEDBACK_MODE_ENTERED);
+
+      console.log('[Tapko] Entered feedback mode');
+    }
+
+    /**
+     * Exit feedback mode
+     */
+    _exitFeedbackMode() {
+      if (!this.isInFeedbackMode) return;
+
+      this.isInFeedbackMode = false;
+
+      // Update floating button
+      this.floatingButton.setFeedbackMode(false);
+
+      // Close active card
+      if (this.activeCard) {
+        this.activeCard.close();
+        this.activeCard = null;
+      }
+
+      // Exit drawing mode
+      if (this.drawingCanvas) {
+        this._exitDrawingMode();
+      }
+
+      // Destroy overlay
+      if (this.feedbackOverlay) {
+        this.feedbackOverlay.destroy();
+        this.feedbackOverlay = null;
+      }
+
+      // Dispatch event
+      dispatchCustomEvent(CONFIG.EVENTS.FEEDBACK_MODE_EXITED);
+
+      console.log('[Tapko] Exited feedback mode');
+    }
+
+    /**
+     * Create comment card at tapped location
+     */
+    _createCommentCard(element, coordinates) {
+      if (!this.isInitialized || this.isDisabled) {
         return;
       }
 
-      if (this.isDisabled) {
-        console.warn('[Tapko] Widget is disabled. Project is not collecting feedback.');
-        dispatchCustomEvent(CONFIG.EVENTS.ERROR, {
-          message: 'Widget is disabled. Project is not collecting feedback.',
-          type: 'WIDGET_DISABLED'
-        });
-        return;
+      // Close existing card
+      if (this.activeCard) {
+        this.activeCard.close();
       }
 
       try {
-        const card = new CommentCard(target, this.apiClient);
-        this.activeCards.add(card);
+        const card = new CommentCard(element, coordinates, this.apiClient);
 
-        // Remove from active cards when closed
+        // Set draw callback
+        card.setDrawCallback((onComplete) => {
+          this._enterDrawingMode(onComplete);
+        });
+
+        this.activeCard = card;
+
+        // Remove from active when closed
         const originalClose = card.close.bind(card);
         card.close = () => {
           originalClose();
-          this.activeCards.delete(card);
+          if (this.activeCard === card) {
+            this.activeCard = null;
+          }
         };
 
         dispatchCustomEvent(CONFIG.EVENTS.COMMENT_CREATED, {
-          targetTag: target.tagName
+          targetTag: element.tagName
         });
       } catch (error) {
         console.error('[Tapko] Error creating comment card:', error);
@@ -263,27 +314,76 @@ import { dispatchCustomEvent } from './utils/dom.js';
     }
 
     /**
-     * Programmatically create comment on element
+     * Enter drawing mode
      */
-    createComment(selector) {
-      const element = typeof selector === 'string'
-        ? document.querySelector(selector)
-        : selector;
+    _enterDrawingMode(onComplete) {
+      if (this.drawingCanvas) return;
 
-      if (!element) {
-        console.error('[Tapko] Element not found:', selector);
-        return;
+      // Update overlay label
+      if (this.feedbackOverlay) {
+        this.feedbackOverlay.setDrawingMode(true);
       }
 
-      this._createCommentCard(element);
+      // Create drawing canvas
+      this.drawingCanvas = new DrawingCanvas();
+      this.drawingCanvas.create(
+        (drawingData) => {
+          // Done callback
+          if (onComplete) {
+            onComplete(drawingData);
+          }
+          this._exitDrawingMode();
+        },
+        () => {
+          // Cancel callback
+          this._exitDrawingMode();
+        }
+      );
+
+      dispatchCustomEvent(CONFIG.EVENTS.DRAWING_STARTED);
     }
 
     /**
-     * Close all active comment cards
+     * Exit drawing mode
+     */
+    _exitDrawingMode() {
+      if (!this.drawingCanvas) return;
+
+      // Update overlay label
+      if (this.feedbackOverlay) {
+        this.feedbackOverlay.setDrawingMode(false);
+      }
+
+      // Destroy canvas
+      this.drawingCanvas.destroy();
+      this.drawingCanvas = null;
+    }
+
+    /**
+     * Programmatically enter feedback mode
+     */
+    enterFeedbackMode() {
+      this._enterFeedbackMode();
+    }
+
+    /**
+     * Programmatically exit feedback mode
+     */
+    exitFeedbackMode() {
+      this._exitFeedbackMode();
+    }
+
+    /**
+     * Close all active components
      */
     closeAll() {
-      this.activeCards.forEach(card => card.close());
-      this.activeCards.clear();
+      if (this.activeCard) {
+        this.activeCard.close();
+        this.activeCard = null;
+      }
+      if (this.isInFeedbackMode) {
+        this._exitFeedbackMode();
+      }
     }
 
     /**
@@ -292,23 +392,12 @@ import { dispatchCustomEvent } from './utils/dom.js';
     destroy() {
       if (!this.isInitialized) return;
 
-      // Remove event listeners
-      if (this.handleDoubleClick) {
-        document.removeEventListener('dblclick', this.handleDoubleClick, true);
-      }
-      if (this.handleTouchStart) {
-        document.removeEventListener('touchstart', this.handleTouchStart, true);
-      }
-      if (this.handleDragStart) {
-        document.removeEventListener('dragstart', this.handleDragStart, true);
-      }
+      // Exit feedback mode
+      this._exitFeedbackMode();
 
-      // Close all cards
-      this.closeAll();
-
-      // Remove status widget
-      if (this.statusWidget) {
-        this.statusWidget.destroy();
+      // Destroy floating button
+      if (this.floatingButton) {
+        this.floatingButton.destroy();
       }
 
       // Remove styles
@@ -340,6 +429,7 @@ import { dispatchCustomEvent } from './utils/dom.js';
       return {
         isInitialized: this.isInitialized,
         isDisabled: this.isDisabled,
+        isInFeedbackMode: this.isInFeedbackMode,
         projectData: this.projectData
       };
     }
@@ -354,8 +444,11 @@ import { dispatchCustomEvent } from './utils/dom.js';
     init: tapko.init.bind(tapko),
     destroy: tapko.destroy.bind(tapko),
 
+    // Feedback mode control
+    enterFeedbackMode: tapko.enterFeedbackMode.bind(tapko),
+    exitFeedbackMode: tapko.exitFeedbackMode.bind(tapko),
+
     // Utility methods
-    createComment: tapko.createComment.bind(tapko),
     closeAll: tapko.closeAll.bind(tapko),
     getVersion: tapko.getVersion.bind(tapko),
     isReady: tapko.isReady.bind(tapko),

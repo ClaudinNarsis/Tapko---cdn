@@ -9,21 +9,16 @@ const path = require('path');
 
 const isProduction = process.env.NODE_ENV === 'production';
 const isWatch = process.argv.includes('--watch');
-const buildV2 = process.argv.includes('--v2') || process.env.BUILD_VERSION === 'v2';
 
-// Read CSS files
-const cssPath = buildV2
-  ? path.join(__dirname, 'src/styles/widgetV2.css')
-  : path.join(__dirname, 'src/styles/widget.css');
+// Read CSS file
+const cssPath = path.join(__dirname, 'src/styles/widget.css');
 const cssContent = fs.readFileSync(cssPath, 'utf8');
 
 // Plugin to inject CSS into JS
 const injectCSSPlugin = {
   name: 'inject-css',
   setup(build) {
-    const indexPattern = buildV2 ? /src\/indexV2\.js$/ : /src\/index\.js$/;
-
-    build.onLoad({ filter: indexPattern }, async (args) => {
+    build.onLoad({ filter: /src\/index\.js$/ }, async (args) => {
       let contents = await fs.promises.readFile(args.path, 'utf8');
 
       // Replace the INJECTED_CSS placeholder with actual CSS
@@ -38,9 +33,9 @@ const injectCSSPlugin = {
 };
 
 // Build configuration
-const entryPoint = buildV2 ? 'src/indexV2.js' : 'src/index.js';
-const outfile = buildV2 ? 'dist/tapko-widget-v2.js' : 'dist/tapko-widget.js';
-const version = buildV2 ? 'v2.0.0' : 'v1.0.0';
+const entryPoint = 'src/index.js';
+const outfile = 'dist/tapko-widget-v2.js';
+const version = 'v2.0.0';
 
 const buildOptions = {
   entryPoints: [entryPoint],
@@ -71,8 +66,7 @@ const buildOptions = {
 
 async function build() {
   try {
-    const buildType = buildV2 ? 'V2' : 'V1';
-    console.log(`Building Tapko Widget ${buildType} (${isProduction ? 'production' : 'development'})...`);
+    console.log(`Building Tapko Widget (${isProduction ? 'production' : 'development'})...`);
 
     if (isWatch) {
       const context = await esbuild.context(buildOptions);
@@ -91,9 +85,7 @@ async function build() {
 
       if (isProduction) {
         // Also create unminified version for debugging
-        const debugOutfile = buildV2
-          ? 'dist/tapko-widget-v2.debug.js'
-          : 'dist/tapko-widget.debug.js';
+        const debugOutfile = 'dist/tapko-widget-v2.debug.js';
 
         await esbuild.build({
           ...buildOptions,
