@@ -13,6 +13,7 @@
 
 import { CONFIG } from '../config.js';
 import { createElement, dispatchCustomEvent } from '../utils/dom.js';
+import { captureViewportScreenshot, generateThumbnail } from '../utils/screenshot.js';
 
 class DrawingCanvas {
   constructor() {
@@ -169,6 +170,21 @@ class DrawingCanvas {
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
 
+    // Debug: Log first drawing point
+    if (this.paths.length === 0) {
+      console.log('[Tapko Drawing] Canvas bounding rect:', {
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+        height: rect.height
+      });
+      console.log('[Tapko Drawing] Event coords:', {
+        clientX: event.clientX,
+        clientY: event.clientY,
+        calculated: { x, y }
+      });
+    }
+
     this.currentPath.push({ x, y });
 
     this.ctx.beginPath();
@@ -275,14 +291,100 @@ class DrawingCanvas {
   /**
    * Handle done button click
    */
-  _handleDone() {
-    const drawingData = this.getDrawingData();
+  async _handleDone() {
+    const doneBtn = this.toolbar.querySelector(`.${CONFIG.CLASS_PREFIX}btn-done`);
 
-    if (this.onDone) {
-      this.onDone(drawingData);
+    // IMPORTANT: Capture current scroll position before doing anything
+    // This ensures the page doesn't scroll during screenshot capture
+    const currentScrollX = window.pageXOffset || document.documentElement.scrollLeft;
+    const currentScrollY = window.pageYOffset || document.documentElement.scrollTop;
+
+    console.log('[Tapko] Starting screenshot at scroll position:', currentScrollX, currentScrollY);
+
+    try {
+      // Show loading state
+      if (doneBtn) {
+        doneBtn.disabled = true;
+        doneBtn.innerHTML = `
+          <svg viewBox="0 0 24 24" class="${CONFIG.CLASS_PREFIX}spinner">
+            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none" opacity="0.25"/>
+            <path d="M12 2 A10 10 0 0 1 22 12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>
+          </svg>
+          Capturing screenshot...
+        `;
+      }
+
+      // Ensure we're still at the same scroll position
+      window.scrollTo(currentScrollX, currentScrollY);
+
+      // Capture viewport screenshot
+      const screenshotData = await captureViewportScreenshot();
+
+      // Update loading text
+      if (doneBtn) {
+        doneBtn.innerHTML = `
+          <svg viewBox="0 0 24 24" class="${CONFIG.CLASS_PREFIX}spinner">
+            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none" opacity="0.25"/>
+            <path d="M12 2 A10 10 0 0 1 22 12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>
+          </svg>
+          Generating thumbnail...
+        `;
+      }
+
+      // Generate thumbnail
+      const thumbnail = await generateThumbnail(screenshotData.dataURL);
+
+      // Get drawing data
+      const drawingData = this.getDrawingData();
+
+      // Combine all data
+      const completeData = {
+        ...drawingData,
+        screenshot: screenshotData.dataURL,
+        thumbnail: thumbnail,
+        screenshotMetadata: screenshotData.metadata
+      };
+
+      // Call done callback with complete data
+      if (this.onDone) {
+        this.onDone(completeData);
+      }
+
+      dispatchCustomEvent(CONFIG.EVENTS.DRAWING_COMPLETED, {
+        drawingData: completeData
+      });
+    } catch (error) {
+      console.error('[Tapko] Screenshot capture failed:', error);
+
+      // Show error state
+      if (doneBtn) {
+        doneBtn.innerHTML = `
+          <svg viewBox="0 0 24 24">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" fill="currentColor"/>
+          </svg>
+          Screenshot failed
+        `;
+      }
+
+      // Still call done callback with drawing data only (fallback)
+      const drawingData = this.getDrawingData();
+      if (this.onDone) {
+        this.onDone(drawingData);
+      }
+
+      // Re-enable button after 2 seconds
+      setTimeout(() => {
+        if (doneBtn) {
+          doneBtn.disabled = false;
+          doneBtn.innerHTML = `
+            <svg viewBox="0 0 24 24">
+              <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Done
+          `;
+        }
+      }, 2000);
     }
-
-    dispatchCustomEvent(CONFIG.EVENTS.DRAWING_COMPLETED, { drawingData });
   }
 
   /**

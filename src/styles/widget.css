@@ -276,6 +276,126 @@
   margin-top: 8px;
 }
 
+/* Screenshot preview */
+.dtc-screenshot-preview {
+  position: relative;
+  margin-top: 12px;
+  padding: 12px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dtc-screenshot-preview img {
+  width: 100%;
+  max-width: 200px;
+  height: auto;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.dtc-screenshot-info {
+  font-size: 11px;
+  color: #6b7280;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+.dtc-remove-screenshot {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: none;
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.dtc-remove-screenshot:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #dc2626;
+}
+
+.dtc-remove-screenshot svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Spinner animation for loading states */
+.dtc-spinner {
+  animation: dtc-spin 1s linear infinite;
+  width: 18px;
+  height: 18px;
+}
+
+/* Fullscreen screenshot preview */
+.dtc-screenshot-fullscreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.9);
+  z-index: 2147483650;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.dtc-screenshot-fullscreen.dtc-visible {
+  opacity: 1;
+}
+
+.dtc-screenshot-fullscreen-content {
+  position: relative;
+  max-width: 90%;
+  max-height: 90%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dtc-screenshot-fullscreen img {
+  max-width: 100%;
+  max-height: 90vh;
+  border-radius: 8px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.dtc-screenshot-close {
+  position: absolute;
+  top: -40px;
+  right: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.dtc-screenshot-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.1);
+}
+
 /* ===========================================
    DRAWING CANVAS
    =========================================== */
@@ -354,8 +474,13 @@
   color: #ffffff;
 }
 
-.dtc-btn-done:hover {
+.dtc-btn-done:hover:not(:disabled) {
   background: #4338ca;
+}
+
+.dtc-btn-done:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }
 
 .dtc-btn-clear {
@@ -372,10 +497,13 @@
    ANIMATIONS
    =========================================== */
 @keyframes dtc-pulse {
-  0%, 100% {
+
+  0%,
+  100% {
     transform: scale(1);
     opacity: 1;
   }
+
   50% {
     transform: scale(1.2);
     opacity: 0.7;
@@ -383,9 +511,12 @@
 }
 
 @keyframes dtc-feedback-pulse {
-  0%, 100% {
+
+  0%,
+  100% {
     box-shadow: inset 0 0 0 4px rgba(79, 70, 229, 0.4);
   }
+
   50% {
     box-shadow: inset 0 0 0 6px rgba(79, 70, 229, 0.6);
   }

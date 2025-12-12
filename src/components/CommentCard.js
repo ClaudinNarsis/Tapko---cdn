@@ -34,6 +34,9 @@ class CommentCard {
     this.isSubmitting = false;
     this.isMinimized = false;
     this.drawingData = null;
+    this.screenshot = null;
+    this.thumbnail = null;
+    this.screenshotMetadata = null;
 
     // Recording UI elements
     this.micIcon = null;
@@ -253,8 +256,14 @@ class CommentCard {
     this.minimize();
 
     if (this.onDrawRequested) {
-      this.onDrawRequested((drawingData) => {
-        this.drawingData = drawingData;
+      this.onDrawRequested((completeData) => {
+        // Store all data from drawing completion
+        if (completeData) {
+          this.drawingData = completeData.dataURL ? completeData : null;
+          this.screenshot = completeData.screenshot || null;
+          this.thumbnail = completeData.thumbnail || null;
+          this.screenshotMetadata = completeData.screenshotMetadata || null;
+        }
         this.restore();
       });
     }
@@ -295,6 +304,25 @@ class CommentCard {
     if (bubble) {
       const currentText = this._getCurrentText();
 
+      // Build screenshot preview HTML if available
+      let screenshotPreviewHTML = '';
+      if (this.thumbnail && this.screenshotMetadata) {
+        const meta = this.screenshotMetadata;
+        screenshotPreviewHTML = `
+          <div class="${CONFIG.CLASS_PREFIX}screenshot-preview">
+            <img src="${this.thumbnail}" alt="Screenshot" />
+            <span class="${CONFIG.CLASS_PREFIX}screenshot-info">
+              Viewport: ${meta.viewportWidth}×${meta.viewportHeight} at scroll (${meta.scrollX}, ${meta.scrollY})
+            </span>
+            <button type="button" class="${CONFIG.CLASS_PREFIX}remove-screenshot" title="Remove screenshot">
+              <svg viewBox="0 0 24 24" width="14" height="14">
+                <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </button>
+          </div>
+        `;
+      }
+
       bubble.innerHTML = `
         <textarea
           class="${CONFIG.CLASS_PREFIX}comment-textarea"
@@ -302,6 +330,7 @@ class CommentCard {
           placeholder="What's on your mind?"
           maxlength="500"
         >${currentText}</textarea>
+        ${screenshotPreviewHTML}
         <div class="${CONFIG.CLASS_PREFIX}comment-actions">
           <button type="button" class="${CONFIG.CLASS_PREFIX}btn-cancel">Cancel</button>
           <button type="button" class="${CONFIG.CLASS_PREFIX}btn-draw">
@@ -319,9 +348,86 @@ class CommentCard {
 
       // Re-attach events
       this._attachEventListeners();
+
+      // Attach remove screenshot button event if present
+      if (this.thumbnail) {
+        const removeBtn = bubble.querySelector(`.${CONFIG.CLASS_PREFIX}remove-screenshot`);
+        if (removeBtn) {
+          removeBtn.addEventListener('click', () => {
+            this.screenshot = null;
+            this.thumbnail = null;
+            this.screenshotMetadata = null;
+            this.restore(); // Re-render without screenshot
+          });
+        }
+
+        // Add click handler on thumbnail to show fullscreen
+        const thumbnailImg = bubble.querySelector(`.${CONFIG.CLASS_PREFIX}screenshot-preview img`);
+        if (thumbnailImg) {
+          thumbnailImg.style.cursor = 'pointer';
+          thumbnailImg.addEventListener('click', () => {
+            this._showFullscreenScreenshot();
+          });
+        }
+      }
     }
 
     this._focusTextarea();
+  }
+
+  /**
+   * Show fullscreen screenshot preview
+   */
+  _showFullscreenScreenshot() {
+    if (!this.screenshot) return;
+
+    // Create fullscreen overlay
+    const overlay = createElement('div', `${CONFIG.CLASS_PREFIX}screenshot-fullscreen`);
+    overlay.innerHTML = `
+      <div class="${CONFIG.CLASS_PREFIX}screenshot-fullscreen-content">
+        <button class="${CONFIG.CLASS_PREFIX}screenshot-close" aria-label="Close">
+          <svg viewBox="0 0 24 24" width="24" height="24">
+            <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+        <img src="${this.screenshot}" alt="Full screenshot" />
+      </div>
+    `;
+
+    // Add to body
+    document.body.appendChild(overlay);
+
+    // Show with animation
+    requestAnimationFrame(() => {
+      overlay.classList.add(`${CONFIG.CLASS_PREFIX}visible`);
+    });
+
+    // Close handlers
+    const closeBtn = overlay.querySelector(`.${CONFIG.CLASS_PREFIX}screenshot-close`);
+    const closeFullscreen = () => {
+      overlay.classList.remove(`${CONFIG.CLASS_PREFIX}visible`);
+      setTimeout(() => {
+        if (overlay.parentNode) {
+          overlay.parentNode.removeChild(overlay);
+        }
+      }, 300);
+    };
+
+    closeBtn.addEventListener('click', closeFullscreen);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        closeFullscreen();
+      }
+    });
+
+    // ESC key to close
+    const handleEsc = (e) => {
+      if (e.key === 'Escape') {
+        closeFullscreen();
+        document.removeEventListener('keydown', handleEsc);
+      }
+    };
+    document.addEventListener('keydown', handleEsc);
   }
 
   /**
@@ -371,7 +477,11 @@ class CommentCard {
         browserInfo: browserInfo,
         breakpoint: breakpoint,
         hasDrawing: !!this.drawingData,
-        drawingData: this.drawingData ? this.drawingData.dataURL : null
+        drawingData: this.drawingData ? this.drawingData.dataURL : null,
+        // Include screenshot data
+        screenshot: this.screenshot || null,
+        thumbnail: this.thumbnail || null,
+        screenshotMetadata: this.screenshotMetadata || null
       };
 
       // Submit feedback
