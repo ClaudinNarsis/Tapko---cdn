@@ -12,6 +12,8 @@
 
 import { CONFIG } from '../config.js';
 import { RecordingManager } from '../managers/RecordingManager.js';
+import { logManager } from '../managers/LogManager.js';
+import { dataURLToBlob } from '../utils/screenshot.js';
 import {
   createElement,
   removeElement,
@@ -464,28 +466,94 @@ class CommentCard {
     this._showLoading();
 
     try {
-      // Collect feedback position and metadata
+      // 1. Prepare assets
+      const assets = {
+        screenshot: null,
+        logs: null
+      };
+
+      // 1a. Prepare screenshot if available
+      if (this.screenshot) {
+        const blob = dataURLToBlob(this.screenshot);
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.png`;
+        assets.screenshot = { blob, fileName, type: 'image/png', folder: 'screenshots' };
+      }
+
+      // 1b. Prepare logs
+      const logsBlob = logManager.getLogsAsTextBlob();
+      const logsFileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.txt`;
+      assets.logs = { blob: logsBlob, fileName: logsFileName, type: 'text/plain', folder: 'logs' };
+
+      // 2. Upload assets to S3
+      const uploadedAssets = {};
+
+      for (const [key, asset] of Object.entries(assets)) {
+        if (!asset) continue;
+
+        try {
+          // Get presigned URL
+          const presigned = await this.apiClient.getPresignedUrl({
+            folderName: asset.folder,
+            fileName: asset.fileName,
+            fileType: asset.type
+          });
+
+          if (!presigned || !presigned.success || !presigned.data) {
+            console.warn(`[Tapko] Failed to get presigned URL for ${key}`);
+            continue;
+          }
+
+          // Upload to S3
+          await this.apiClient.uploadToS3(
+            presigned.data.uploadUrl,
+            asset.blob,
+            asset.type
+          );
+
+          // Store successful upload info
+          uploadedAssets[key] = {
+            key: presigned.data.key,
+            url: presigned.data.url, // Assuming backend returns public/signed URL or we construct it
+            bucket: presigned.data.bucket, // Optional
+            mimeType: asset.type,
+            ...(key === 'screenshot' && this.screenshotMetadata ? { metadata: this.screenshotMetadata } : {})
+          };
+        } catch (e) {
+          console.error(`[Tapko] Failed to upload ${key}:`, e);
+          // Continue even if upload fails? Or fail hard?
+          // For now, continue but maybe log it
+        }
+      }
+
+      // 3. Prepare final payload
       const feedbackPosition = getFeedbackPosition(this.target);
       const browserInfo = getBrowserInfo();
       const breakpoint = getCurrentBreakpoint();
 
-      // Prepare feedback data with enhanced metadata
-      const feedbackData = {
-        feedbackTitle: this._generateFeedbackTitle(text),
-        feedbackDescription: sanitizeHTML(text),
-        feedbackPosition: feedbackPosition,
-        browserInfo: browserInfo,
-        breakpoint: breakpoint,
-        hasDrawing: !!this.drawingData,
-        drawingData: this.drawingData ? this.drawingData.dataURL : null,
-        // Include screenshot data
-        screenshot: this.screenshot || null,
-        thumbnail: this.thumbnail || null,
-        screenshotMetadata: this.screenshotMetadata || null
+      const payload = {
+        title: this._generateFeedbackTitle(text),
+        description: sanitizeHTML(text),
+        assets: uploadedAssets,
+        context: {
+          pageUrl: window.location.href,
+          userAgent: navigator.userAgent,
+          timestamp: new Date().toISOString(),
+          viewport: this.screenshotMetadata ? {
+            width: this.screenshotMetadata.viewportWidth,
+            height: this.screenshotMetadata.viewportHeight,
+            devicePixelRatio: this.screenshotMetadata.devicePixelRatio
+          } : undefined,
+          browserInfo,
+          breakpoint,
+          feedbackPosition
+        },
+        // Legacy fields for backward compatibility if needed
+        projectId: this.apiClient.projectId,
+        userId: this.apiClient.userId
       };
 
-      // Submit feedback
-      const response = await this.apiClient.submitFeedback(feedbackData);
+      // 4. Submit feedback
+      const response = await this.apiClient.submitFeedback(payload);
 
       // Show success state
       this._showSuccess(text || '(Drawing)');
@@ -493,8 +561,9 @@ class CommentCard {
       // Dispatch event
       dispatchCustomEvent(CONFIG.EVENTS.COMMENT_SUBMITTED, {
         feedbackId: response.feedbackId,
-        data: feedbackData
+        data: payload
       });
+
     } catch (error) {
       console.error('[Tapko] Submit error:', error);
       this._showError('Failed to submit comment. Please try again.');

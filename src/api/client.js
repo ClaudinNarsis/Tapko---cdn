@@ -200,11 +200,70 @@ class APIClient {
   }
 
   /**
+   * Get presigned URL for S3 upload
+   * @param {Object} fileData - { folderName, fileName, fileType }
+   */
+  async getPresignedUrl(fileData) {
+    return this.post('/upload/presigned-url', {
+      projectId: this.projectId,
+      userId: this.userId,
+      ...fileData
+    });
+  }
+
+  /**
+   * Upload binary data to S3 using presigned URL
+   */
+  async uploadToS3(uploadUrl, data, contentType) {
+    const headers = {};
+    const urlObj = new URL(uploadUrl);
+
+    // Parse SignedHeaders to know what headers MUST be sent
+    const signedHeadersParam = urlObj.searchParams.get('X-Amz-SignedHeaders');
+    const signedHeaders = signedHeadersParam ? signedHeadersParam.split(';') : [];
+
+    // 1. Content-Type
+    // Only send if it is in the signed headers list
+    if (signedHeaders.includes('content-type')) {
+      headers['Content-Type'] = contentType;
+    }
+
+    // 2. x-amz-acl
+    // If in signed headers, try to find the value from query params (common pattern) or default
+    if (signedHeaders.includes('x-amz-acl')) {
+      const acl = urlObj.searchParams.get('x-amz-acl');
+      if (acl) {
+        headers['x-amz-acl'] = acl;
+      }
+    }
+
+    const response = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers,
+      body: data
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[Tapko] S3 Error Details:', errorText);
+      throw new Error(`S3 Upload failed: ${response.status} ${errorText}`);
+    }
+
+    return true;
+  }
+
+  /**
    * Submit feedback with enhanced metadata
    */
   async submitFeedback(feedbackData) {
     const endpoint = '/feedback/submit';
 
+    // If payload already matches new structure, send it directly
+    if (feedbackData.context && feedbackData.assets) {
+      return this.post(endpoint, feedbackData);
+    }
+
+    // Fallback for legacy calls
     const payload = {
       projectId: this.projectId,
       userId: this.userId,

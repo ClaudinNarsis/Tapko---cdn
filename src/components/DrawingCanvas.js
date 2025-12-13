@@ -151,7 +151,8 @@ class DrawingCanvas {
     }, { passive: true });
 
     // Handle window resize
-    window.addEventListener('resize', () => this._handleResize());
+    this.resizeHandler = () => this._handleResize();
+    window.addEventListener('resize', this.resizeHandler);
   }
 
   /**
@@ -249,6 +250,7 @@ class DrawingCanvas {
    * Redraw all paths
    */
   _redraw() {
+    if (!this.ctx) return;
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
     this.paths.forEach(path => {
@@ -269,23 +271,30 @@ class DrawingCanvas {
    * Handle resize event
    */
   _handleResize() {
+    if (!this.ctx || !this.canvas) return;
+
     const oldCanvas = this.canvas;
-    const oldImageData = this.ctx.getImageData(0, 0, oldCanvas.width, oldCanvas.height);
+    // Safety check just in case
+    try {
+      const oldImageData = this.ctx.getImageData(0, 0, oldCanvas.width, oldCanvas.height);
 
-    const dpr = window.devicePixelRatio || 1;
-    this.canvas.width = window.innerWidth * dpr;
-    this.canvas.height = window.innerHeight * dpr;
-    this.canvas.style.width = `${window.innerWidth}px`;
-    this.canvas.style.height = `${window.innerHeight}px`;
+      const dpr = window.devicePixelRatio || 1;
+      this.canvas.width = window.innerWidth * dpr;
+      this.canvas.height = window.innerHeight * dpr;
+      this.canvas.style.width = `${window.innerWidth}px`;
+      this.canvas.style.height = `${window.innerHeight}px`;
 
-    this.ctx.scale(dpr, dpr);
-    this.ctx.strokeStyle = this.strokeColor;
-    this.ctx.lineWidth = this.strokeWidth;
-    this.ctx.lineCap = 'round';
-    this.ctx.lineJoin = 'round';
+      this.ctx.scale(dpr, dpr);
+      this.ctx.strokeStyle = this.strokeColor;
+      this.ctx.lineWidth = this.strokeWidth;
+      this.ctx.lineCap = 'round';
+      this.ctx.lineJoin = 'round';
 
-    // Redraw
-    this._redraw();
+      // Redraw
+      this._redraw();
+    } catch (e) {
+      console.warn('[Tapko] Error handling resize:', e);
+    }
   }
 
   /**
@@ -434,6 +443,13 @@ class DrawingCanvas {
   destroy() {
     if (this.container) {
       this.container.classList.remove(`${CONFIG.CLASS_PREFIX}visible`);
+
+      // Cleanup resize listener immediately
+      if (this.resizeHandler) {
+        window.removeEventListener('resize', this.resizeHandler);
+        this.resizeHandler = null;
+      }
+
       setTimeout(() => {
         if (this.container && this.container.parentNode) {
           this.container.parentNode.removeChild(this.container);

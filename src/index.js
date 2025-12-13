@@ -27,8 +27,9 @@ import { FeedbackModeOverlay } from './components/FeedbackModeOverlay.js';
 import { CommentCard } from './components/CommentCard.js';
 import { DrawingCanvas } from './components/DrawingCanvas.js';
 import { dispatchCustomEvent } from './utils/dom.js';
+import { logManager } from './managers/LogManager.js';
 
-(function(window, document) {
+(function (window, document) {
   'use strict';
 
   // Prevent multiple initializations
@@ -47,6 +48,9 @@ import { dispatchCustomEvent } from './utils/dom.js';
       this.isInitialized = false;
       this.isDisabled = false;
       this.projectData = null;
+
+      // Initialize log capture immediately
+      logManager.init();
 
       // V2 Components
       this.floatingButton = new FloatingEntryButton();
