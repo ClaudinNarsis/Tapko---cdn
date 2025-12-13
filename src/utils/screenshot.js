@@ -39,7 +39,7 @@ async function loadHtml2Canvas() {
  * 
  * @returns {Promise<Object>} Object containing screenshot dataURL and metadata
  */
-async function captureViewportScreenshot() {
+async function captureViewportScreenshot(options = {}) {
   try {
     // Load html2canvas library
     const html2canvas = await loadHtml2Canvas();
@@ -75,8 +75,17 @@ async function captureViewportScreenshot() {
       allowTaint: false,
       backgroundColor: '#ffffff',
 
-      // Ignore Tapko widget elements EXCEPT the drawing canvas
+      // Ignore Tapko widget elements EXCEPT the drawing canvas and explicitly included elements
       ignoreElements: (element) => {
+        // Check if element should be explicitly included
+        if (options.elementsToInclude && options.elementsToInclude.length > 0) {
+          for (const includedEl of options.elementsToInclude) {
+            if (includedEl === element || includedEl.contains(element)) {
+              return false;
+            }
+          }
+        }
+
         const className = element.className || '';
         if (typeof className !== 'string') return false;
 

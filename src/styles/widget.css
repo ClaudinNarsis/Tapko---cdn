@@ -663,3 +663,27 @@
 .dtc-anchored-container {
   position: relative !important;
 }
+
+/* ===========================================
+   SCREENSHOT MODE
+   =========================================== */
+.dtc-screenshot-mode .dtc-comment-actions,
+.dtc-screenshot-mode .dtc-screenshot-preview,
+.dtc-screenshot-mode .dtc-btn-cancel,
+.dtc-screenshot-mode .dtc-remove-screenshot {
+  display: none !important;
+}
+
+.dtc-screenshot-mode .dtc-comment-textarea {
+  border-color: transparent !important;
+  background: transparent !important;
+  padding: 0 !important;
+  resize: none !important;
+  min-height: auto !important;
+  box-shadow: none !important;
+}
+
+.dtc-screenshot-mode.dtc-comment-bubble {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+  border: 1px solid #e5e7eb !important;
+}

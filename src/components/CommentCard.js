@@ -13,7 +13,7 @@
 import { CONFIG } from '../config.js';
 import { RecordingManager } from '../managers/RecordingManager.js';
 import { logManager } from '../managers/LogManager.js';
-import { dataURLToBlob } from '../utils/screenshot.js';
+import { dataURLToBlob, captureViewportScreenshot, generateThumbnail } from '../utils/screenshot.js';
 import {
   createElement,
   removeElement,
@@ -456,9 +456,68 @@ class CommentCard {
     }
 
     this.isSubmitting = true;
-    this._showLoading();
 
     try {
+      // 0. Auto-capture screenshot if not already present
+      if (!this.screenshot) {
+        this._showLoading('Capturing screenshot...');
+
+        // Set screenshot mode to clean up UI
+        this.card.classList.add(`${CONFIG.CLASS_PREFIX}screenshot-mode`);
+
+        // Handle text rendering for screenshot
+        // html2canvas issues with textarea: replace with div
+        let textDiv = null;
+        if (textarea) {
+          // Create temporary div to display text
+          textDiv = document.createElement('div');
+          textDiv.className = textarea.className;
+          textDiv.textContent = textarea.value;
+
+          // Apply critical styles to match textarea look
+          const style = window.getComputedStyle(textarea);
+          textDiv.style.font = style.font;
+          textDiv.style.lineHeight = style.lineHeight;
+          textDiv.style.padding = style.padding;
+          textDiv.style.minHeight = style.height; // Use current height
+          textDiv.style.whiteSpace = 'pre-wrap';
+          textDiv.style.wordBreak = 'break-word';
+          textDiv.style.color = style.color;
+
+          // Insert div and hide textarea
+          textarea.parentNode.insertBefore(textDiv, textarea);
+          textarea.style.display = 'none';
+        }
+
+        // Brief delay to ensure render update
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        await new Promise(resolve => setTimeout(resolve, 50));
+
+        try {
+          // Capture screenshot INCLUDING this card and the pin
+          const screenshotData = await captureViewportScreenshot({
+            elementsToInclude: [this.card, this.pinMarker]
+          });
+
+          this.screenshot = screenshotData.dataURL;
+          this.screenshotMetadata = screenshotData.metadata;
+          this.thumbnail = await generateThumbnail(this.screenshot);
+        } catch (e) {
+          console.warn('[Tapko] Auto-screenshot failed:', e);
+          // Proceed without screenshot if it fails
+        } finally {
+          // Restore UI
+          this.card.classList.remove(`${CONFIG.CLASS_PREFIX}screenshot-mode`);
+
+          if (textDiv) {
+            textDiv.remove();
+            textarea.style.display = '';
+          }
+        }
+      }
+
+      this._showLoading('Submitting...');
+
       // 1. Prepare assets
       const assets = {
         screenshot: null,
@@ -538,7 +597,12 @@ class CommentCard {
           } : undefined,
           browserInfo,
           breakpoint,
-          feedbackPosition
+          feedbackPosition,
+          // Explicitly include the comment box location relative to the page
+          commentPosition: {
+            x: this.coordinates.x + (window.pageXOffset || document.documentElement.scrollLeft),
+            y: this.coordinates.y + (window.pageYOffset || document.documentElement.scrollTop)
+          }
         },
         // Legacy fields for backward compatibility if needed
         projectId: this.apiClient.projectId,
@@ -578,11 +642,11 @@ class CommentCard {
   /**
    * Show loading state
    */
-  _showLoading() {
+  _showLoading(text = 'Submitting...') {
     const submitBtn = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}btn-submit`);
     if (submitBtn) {
       submitBtn.disabled = true;
-      submitBtn.textContent = 'Submitting...';
+      submitBtn.textContent = text;
     }
   }
 
