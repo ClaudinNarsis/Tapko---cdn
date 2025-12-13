@@ -16,6 +16,7 @@ class FloatingEntryButton {
   constructor() {
     this.button = null;
     this.isInFeedbackMode = false;
+    this.isDisabled = false;
     this.onClick = null;
   }
 
@@ -71,6 +72,23 @@ class FloatingEntryButton {
     }
 
     this._updateIcon(isActive);
+  }
+
+  /**
+   * Set disabled state
+   */
+  setDisabled(isDisabled) {
+    if (!this.button) return;
+
+    this.isDisabled = isDisabled;
+
+    if (isDisabled) {
+      this.button.classList.add(`${CONFIG.CLASS_PREFIX}disabled`);
+      this.button.setAttribute('aria-disabled', 'true');
+    } else {
+      this.button.classList.remove(`${CONFIG.CLASS_PREFIX}disabled`);
+      this.button.removeAttribute('aria-disabled');
+    }
   }
 
   /**

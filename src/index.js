@@ -26,6 +26,7 @@ import { FloatingEntryButton } from './components/FloatingEntryButton.js';
 import { FeedbackModeOverlay } from './components/FeedbackModeOverlay.js';
 import { CommentCard } from './components/CommentCard.js';
 import { DrawingCanvas } from './components/DrawingCanvas.js';
+import { FeedbackDisabledPopup } from './components/FeedbackDisabledPopup.js';
 import { dispatchCustomEvent } from './utils/dom.js';
 import { logManager } from './managers/LogManager.js';
 
@@ -56,6 +57,7 @@ import { logManager } from './managers/LogManager.js';
       this.floatingButton = new FloatingEntryButton();
       this.feedbackOverlay = null;
       this.drawingCanvas = null;
+      this.disabledPopup = new FeedbackDisabledPopup();
 
       // State
       this.isInFeedbackMode = false;
@@ -106,15 +108,16 @@ import { logManager } from './managers/LogManager.js';
         if (!validation.status.isCollectingFeedback) {
           console.warn('[Tapko] Project is not currently collecting feedback. Widget is disabled.');
           this.isDisabled = true;
-          dispatchCustomEvent(CONFIG.EVENTS.ERROR, {
-            message: 'Project is not collecting feedback',
-            type: 'PROJECT_DISABLED',
-            validation
-          });
-          // Don't show button if disabled
-          this.isInitialized = true;
-          return;
+          // dispatchCustomEvent(CONFIG.EVENTS.ERROR, {
+          //   message: 'Project is not collecting feedback',
+          //   type: 'PROJECT_DISABLED',
+          //   validation
+          // });
+          // Don't return, allow initialization in disabled state
         }
+
+        // TEMP: Force disabled state for Verification
+        this.isDisabled = true;
 
         this.projectData = validation.data;
       } catch (error) {
@@ -129,6 +132,9 @@ import { logManager } from './managers/LogManager.js';
 
       // Create floating entry button
       this.floatingButton.create(() => this._toggleFeedbackMode());
+      if (this.isDisabled) {
+        this.floatingButton.setDisabled(true);
+      }
       this.floatingButton.show();
 
       // Setup ESC key handler
@@ -209,6 +215,11 @@ import { logManager } from './managers/LogManager.js';
      * Toggle feedback mode
      */
     _toggleFeedbackMode() {
+      if (this.isDisabled) {
+        this.disabledPopup.show();
+        return;
+      }
+
       if (this.isInFeedbackMode) {
         this._exitFeedbackMode();
       } else {
@@ -402,6 +413,11 @@ import { logManager } from './managers/LogManager.js';
       // Destroy floating button
       if (this.floatingButton) {
         this.floatingButton.destroy();
+      }
+
+      // Destroy disabled popup
+      if (this.disabledPopup) {
+        this.disabledPopup.destroy();
       }
 
       // Remove styles
