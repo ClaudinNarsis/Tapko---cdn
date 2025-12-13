@@ -281,15 +281,7 @@ class CommentCard {
 
     this.isMinimized = true;
     this.card.classList.add(`${CONFIG.CLASS_PREFIX}minimized`);
-
-    const bubble = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}comment-bubble`);
-    if (bubble) {
-      bubble.innerHTML = `
-        <div class="${CONFIG.CLASS_PREFIX}minimized-label">
-          <span>Comment #1 — Drawing</span>
-        </div>
-      `;
-    }
+    this.card.style.display = 'none';
   }
 
   /**
@@ -300,6 +292,7 @@ class CommentCard {
 
     this.isMinimized = false;
     this.card.classList.remove(`${CONFIG.CLASS_PREFIX}minimized`);
+    this.card.style.display = '';
 
     // Re-create bubble content
     const bubble = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}comment-bubble`);

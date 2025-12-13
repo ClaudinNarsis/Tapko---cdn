@@ -116,8 +116,7 @@ import { logManager } from './managers/LogManager.js';
           // Don't return, allow initialization in disabled state
         }
 
-        // TEMP: Force disabled state for Verification
-        this.isDisabled = true;
+
 
         this.projectData = validation.data;
       } catch (error) {
