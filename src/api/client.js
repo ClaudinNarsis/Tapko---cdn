@@ -107,6 +107,10 @@ class APIClient {
    * POST request
    */
   async post(endpoint, data = {}) {
+    // Log POST requests for debugging
+    if (endpoint.includes('/feedback/submit')) {
+      console.log('[Tapko API] POST request to', endpoint, 'with data keys:', Object.keys(data));
+    }
     return this._request(endpoint, {
       method: 'POST',
       body: JSON.stringify(data)
@@ -204,23 +208,51 @@ class APIClient {
    * @param {Object} fileData - { folderName, fileName, fileType }
    */
   async getPresignedUrl(fileData) {
-    return this.post('/upload/presigned-url', {
+    console.log('[Tapko S3] Requesting presigned URL:', {
+      folderName: fileData.folderName,
+      fileName: fileData.fileName,
+      fileType: fileData.fileType,
+      projectId: this.projectId,
+      userId: this.userId
+    });
+
+    const response = await this.post('/upload/presigned-url', {
       projectId: this.projectId,
       userId: this.userId,
       ...fileData
     });
+
+    console.log('[Tapko S3] Presigned URL response:', {
+      success: response.success,
+      hasUploadUrl: !!response.data?.uploadUrl,
+      hasKey: !!response.data?.key,
+      key: response.data?.key,
+      bucket: response.data?.bucket,
+      url: response.data?.url
+    });
+
+    return response;
   }
 
   /**
    * Upload binary data to S3 using presigned URL
    */
   async uploadToS3(uploadUrl, data, contentType) {
+    console.log('[Tapko S3] Starting S3 upload:', {
+      uploadUrlHost: new URL(uploadUrl).host,
+      uploadUrlPath: new URL(uploadUrl).pathname,
+      contentType,
+      dataSize: data?.size || data?.length || 'unknown'
+    });
+
     const headers = {};
     const urlObj = new URL(uploadUrl);
 
     // Parse SignedHeaders to know what headers MUST be sent
     const signedHeadersParam = urlObj.searchParams.get('X-Amz-SignedHeaders');
     const signedHeaders = signedHeadersParam ? signedHeadersParam.split(';') : [];
+
+    console.log('[Tapko S3] Signed headers:', signedHeaders);
 
     // 1. Content-Type
     // Only send if it is in the signed headers list
@@ -237,18 +269,27 @@ class APIClient {
       }
     }
 
+    console.log('[Tapko S3] Upload headers:', headers);
+
     const response = await fetch(uploadUrl, {
       method: 'PUT',
       headers,
       body: data
     });
 
+    console.log('[Tapko S3] Upload response:', {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok
+    });
+
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('[Tapko] S3 Error Details:', errorText);
+      console.error('[Tapko S3] Upload error details:', errorText);
       throw new Error(`S3 Upload failed: ${response.status} ${errorText}`);
     }
 
+    console.log('[Tapko S3] Upload successful');
     return true;
   }
 
@@ -260,10 +301,25 @@ class APIClient {
 
     // If payload already matches new structure, send it directly
     if (feedbackData.context && feedbackData.assets) {
+      console.log('[Tapko API] Submitting feedback with new structure:', {
+        endpoint,
+        title: feedbackData.title,
+        hasAssets: !!feedbackData.assets,
+        assetKeys: feedbackData.assets ? Object.keys(feedbackData.assets) : [],
+        screenshotKey: feedbackData.assets?.screenshot?.key,
+        logsKey: feedbackData.assets?.logs?.key,
+        projectId: feedbackData.projectId || this.projectId,
+        userId: feedbackData.userId || this.userId
+      });
+
+      console.log('[Tapko API] Screenshot asset detail:', feedbackData.assets?.screenshot);
+      console.log('[Tapko API] Logs asset detail:', feedbackData.assets?.logs);
+
       return this.post(endpoint, feedbackData);
     }
 
     // Fallback for legacy calls
+    console.log('[Tapko API] Submitting feedback with legacy structure');
     const payload = {
       projectId: this.projectId,
       userId: this.userId,

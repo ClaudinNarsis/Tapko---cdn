@@ -529,6 +529,12 @@ class CommentCard {
         const blob = dataURLToBlob(this.screenshot);
         const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.png`;
         assets.screenshot = { blob, fileName, type: 'image/png', folder: 'screenshots' };
+        console.log('[Tapko Screenshot] Screenshot prepared for upload:', {
+          fileName,
+          blobSize: blob.size,
+          blobType: blob.type,
+          folder: 'screenshots'
+        });
       }
 
       // 1b. Prepare logs
@@ -539,10 +545,14 @@ class CommentCard {
       // 2. Upload assets to S3
       const uploadedAssets = {};
 
+      console.log('[Tapko Upload] Starting asset uploads. Total assets:', Object.keys(assets).filter(k => assets[k]).length);
+
       for (const [key, asset] of Object.entries(assets)) {
         if (!asset) continue;
 
         try {
+          console.log(`[Tapko Upload] Processing ${key} upload...`);
+
           // Get presigned URL
           const presigned = await this.apiClient.getPresignedUrl({
             folderName: asset.folder,
@@ -551,9 +561,11 @@ class CommentCard {
           });
 
           if (!presigned || !presigned.success || !presigned.data) {
-            console.warn(`[Tapko] Failed to get presigned URL for ${key}`);
+            console.warn(`[Tapko Upload] Failed to get presigned URL for ${key}:`, presigned);
             continue;
           }
+
+          console.log(`[Tapko Upload] Got presigned URL for ${key}. Key from backend:`, presigned.data.key);
 
           // Upload to S3
           await this.apiClient.uploadToS3(
@@ -570,12 +582,19 @@ class CommentCard {
             mimeType: asset.type,
             ...(key === 'screenshot' && this.screenshotMetadata ? { metadata: this.screenshotMetadata } : {})
           };
+
+          console.log(`[Tapko Upload] Successfully uploaded ${key}. S3 Key:`, presigned.data.key);
         } catch (e) {
-          console.error(`[Tapko] Failed to upload ${key}:`, e);
+          console.error(`[Tapko Upload] Failed to upload ${key}:`, e);
           // Continue even if upload fails? Or fail hard?
           // For now, continue but maybe log it
         }
       }
+
+      console.log('[Tapko Upload] All uploads complete. Uploaded assets:', {
+        count: Object.keys(uploadedAssets).length,
+        keys: Object.fromEntries(Object.entries(uploadedAssets).map(([k, v]) => [k, v.key]))
+      });
 
       // 3. Prepare final payload
       const feedbackPosition = getFeedbackPosition(this.target);
@@ -609,8 +628,23 @@ class CommentCard {
         userId: this.apiClient.userId
       };
 
+      console.log('[Tapko Feedback] Prepared payload for submission:', {
+        title: payload.title,
+        hasDescription: !!payload.description,
+        assetKeys: Object.fromEntries(Object.entries(payload.assets).map(([k, v]) => [k, v.key])),
+        projectId: payload.projectId,
+        userId: payload.userId
+      });
+
+      console.log('[Tapko Feedback] Full asset details being sent:', payload.assets);
+
       // 4. Submit feedback
+      console.log('[Tapko Feedback] Submitting feedback to /feedback/submit...');
       const response = await this.apiClient.submitFeedback(payload);
+      console.log('[Tapko Feedback] Feedback submitted successfully:', {
+        feedbackId: response.feedbackId,
+        success: response.success
+      });
 
       // Show success state
       this._showSuccess(text || '(Drawing)');
