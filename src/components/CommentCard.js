@@ -294,80 +294,90 @@ class CommentCard {
     this.card.classList.remove(`${CONFIG.CLASS_PREFIX}minimized`);
     this.card.style.display = '';
 
-    // Re-create bubble content
-    const bubble = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}comment-bubble`);
-    if (bubble) {
-      const currentText = this._getCurrentText();
-
-      // Build screenshot preview HTML if available
-      let screenshotPreviewHTML = '';
-      if (this.thumbnail && this.screenshotMetadata) {
-        const meta = this.screenshotMetadata;
-        screenshotPreviewHTML = `
-          <div class="${CONFIG.CLASS_PREFIX}screenshot-preview">
-            <img src="${this.thumbnail}" alt="Screenshot" />
-            <span class="${CONFIG.CLASS_PREFIX}screenshot-info">
-              Viewport: ${meta.viewportWidth}×${meta.viewportHeight} at scroll (${meta.scrollX}, ${meta.scrollY})
-            </span>
-            <button type="button" class="${CONFIG.CLASS_PREFIX}remove-screenshot" title="Remove screenshot">
-              <svg viewBox="0 0 24 24" width="14" height="14">
-                <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-              </svg>
-            </button>
-          </div>
-        `;
-      }
-
-      bubble.innerHTML = `
-        <textarea
-          class="${CONFIG.CLASS_PREFIX}comment-textarea"
-          rows="3"
-          placeholder="What's on your mind?"
-          maxlength="500"
-        >${currentText}</textarea>
-        ${screenshotPreviewHTML}
-        <div class="${CONFIG.CLASS_PREFIX}comment-actions">
-          <button type="button" class="${CONFIG.CLASS_PREFIX}btn-cancel">Cancel</button>
-          <button type="button" class="${CONFIG.CLASS_PREFIX}btn-draw">
-            <svg viewBox="0 0 24 24" width="16" height="16">
-              <path d="M12 19l7-7 3 3-7 7-3-3z" fill="none" stroke="currentColor" stroke-width="2"/>
-              <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" fill="none" stroke="currentColor" stroke-width="2"/>
-              <path d="M2 2l7.586 7.586" stroke="currentColor" stroke-width="2"/>
-              <circle cx="11" cy="11" r="2" fill="currentColor"/>
-            </svg>
-            ${this.drawingData ? 'Edit drawing' : 'Draw on page'}
-          </button>
-          <button type="button" class="${CONFIG.CLASS_PREFIX}btn-submit">Submit</button>
-        </div>
-      `;
-
-      // Re-attach events
-      this._attachEventListeners();
-
-      // Attach remove screenshot button event if present
-      if (this.thumbnail) {
-        const removeBtn = bubble.querySelector(`.${CONFIG.CLASS_PREFIX}remove-screenshot`);
-        if (removeBtn) {
-          removeBtn.addEventListener('click', () => {
-            this.screenshot = null;
-            this.thumbnail = null;
-            this.screenshotMetadata = null;
-            this.restore(); // Re-render without screenshot
-          });
-        }
-
-        // Add click handler on thumbnail to show fullscreen
-        const thumbnailImg = bubble.querySelector(`.${CONFIG.CLASS_PREFIX}screenshot-preview img`);
-        if (thumbnailImg) {
-          thumbnailImg.style.cursor = 'pointer';
-          thumbnailImg.addEventListener('click', () => {
-            this._showFullscreenScreenshot();
-          });
-        }
-      }
-    }
+    // Re-render bubble content
+    this._renderBubbleContent();
 
     this._focusTextarea();
+  }
+
+  /**
+   * Render or re-render the bubble content
+   */
+  _renderBubbleContent() {
+    const bubble = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}comment-bubble`);
+    if (!bubble) return;
+
+    const currentText = this._getCurrentText();
+
+    // Build screenshot preview HTML if available
+    let screenshotPreviewHTML = '';
+    if (this.thumbnail && this.screenshotMetadata) {
+      const meta = this.screenshotMetadata;
+      screenshotPreviewHTML = `
+        <div class="${CONFIG.CLASS_PREFIX}screenshot-preview">
+          <img src="${this.thumbnail}" alt="Screenshot" />
+          <span class="${CONFIG.CLASS_PREFIX}screenshot-info">
+            Viewport: ${meta.viewportWidth}×${meta.viewportHeight} at scroll (${meta.scrollX}, ${meta.scrollY})
+          </span>
+          <button type="button" class="${CONFIG.CLASS_PREFIX}remove-screenshot" title="Remove screenshot">
+            <svg viewBox="0 0 24 24" width="14" height="14">
+              <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+      `;
+    }
+
+    bubble.innerHTML = `
+      <textarea
+        class="${CONFIG.CLASS_PREFIX}comment-textarea"
+        rows="3"
+        placeholder="What's on your mind?"
+        maxlength="500"
+      >${currentText}</textarea>
+      ${screenshotPreviewHTML}
+      <div class="${CONFIG.CLASS_PREFIX}comment-actions">
+        <button type="button" class="${CONFIG.CLASS_PREFIX}btn-cancel">Cancel</button>
+        <button type="button" class="${CONFIG.CLASS_PREFIX}btn-draw">
+          <svg viewBox="0 0 24 24" width="16" height="16">
+            <path d="M12 19l7-7 3 3-7 7-3-3z" fill="none" stroke="currentColor" stroke-width="2"/>
+            <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" fill="none" stroke="currentColor" stroke-width="2"/>
+            <path d="M2 2l7.586 7.586" stroke="currentColor" stroke-width="2"/>
+            <circle cx="11" cy="11" r="2" fill="currentColor"/>
+          </svg>
+          ${this.drawingData ? 'Edit drawing' : 'Draw on page'}
+        </button>
+        <button type="button" class="${CONFIG.CLASS_PREFIX}btn-submit">Submit</button>
+      </div>
+    `;
+
+    // Re-attach events
+    this._attachEventListeners();
+
+    // Attach remove screenshot button event if present
+    if (this.thumbnail) {
+      const removeBtn = bubble.querySelector(`.${CONFIG.CLASS_PREFIX}remove-screenshot`);
+      if (removeBtn) {
+        removeBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          this.drawingData = null;
+          this.screenshot = null;
+          this.thumbnail = null;
+          this.screenshotMetadata = null;
+          this._renderBubbleContent(); // Re-render without screenshot
+        });
+      }
+
+      // Add click handler on thumbnail to show fullscreen
+      const thumbnailImg = bubble.querySelector(`.${CONFIG.CLASS_PREFIX}screenshot-preview img`);
+      if (thumbnailImg) {
+        thumbnailImg.style.cursor = 'pointer';
+        thumbnailImg.addEventListener('click', () => {
+          this._showFullscreenScreenshot();
+        });
+      }
+    }
   }
 
   /**
