@@ -13,7 +13,7 @@ export const CONFIG = {
       ? process.env.API_URL
       : 'https://5mjiz034ia.execute-api.ap-south-1.amazonaws.com/dev/api',
     version: '',
-    timeout: 5000,
+    timeout: 20000,
     retries: 3
   },
 

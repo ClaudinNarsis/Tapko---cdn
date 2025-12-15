@@ -623,6 +623,8 @@ class CommentCard {
             y: this.coordinates.y + (window.pageYOffset || document.documentElement.scrollTop)
           }
         },
+        // Add idempotency token to prevent duplicate submissions on retry
+        idempotencyKey: `${this.apiClient.userId}-${Date.now()}-${Math.random().toString(36).substring(7)}`,
         // Legacy fields for backward compatibility if needed
         projectId: this.apiClient.projectId,
         userId: this.apiClient.userId

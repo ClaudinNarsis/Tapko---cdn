@@ -76,11 +76,33 @@ class APIClient {
     } catch (error) {
       clearTimeout(timeoutId);
 
-      // Retry on network errors
-      if (attempt < this.retries && (error.name === 'AbortError' || error.name === 'TypeError')) {
-        console.warn(`[Tapko] Request failed, retrying (${attempt}/${this.retries})...`);
-        await this._delay(1000 * attempt);
-        return this._request(endpoint, options, attempt + 1);
+      const isNetworkError = error.name === 'AbortError' || error.name === 'TypeError';
+      const canRetry = attempt < this.retries && isNetworkError;
+
+      // For POST requests with idempotencyKey, we can safely retry
+      // For other POST requests without idempotency, only retry on timeout (AbortError)
+      const isPostRequest = options.method === 'POST';
+      const hasIdempotencyKey = options.body && JSON.parse(options.body).idempotencyKey;
+
+      // Enhanced logging for debugging
+      console.error(`[Tapko] Request failed:`, {
+        endpoint,
+        method: options.method,
+        attempt,
+        errorName: error.name,
+        errorMessage: error.message,
+        isNetworkError,
+        canRetry,
+        hasIdempotencyKey
+      });
+
+      if (canRetry) {
+        // Only retry POST if it has idempotency key or if it's just a timeout
+        if (!isPostRequest || hasIdempotencyKey || error.name === 'AbortError') {
+          console.warn(`[Tapko] Request failed (${error.name}), retrying (${attempt}/${this.retries})...`);
+          await this._delay(1000 * attempt);
+          return this._request(endpoint, options, attempt + 1);
+        }
       }
 
       throw error;
