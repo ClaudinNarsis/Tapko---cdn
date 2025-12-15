@@ -167,13 +167,13 @@ async function captureViewportScreenshot(options = {}) {
 
 /**
  * Generate thumbnail from screenshot
- * 
+ *
  * @param {string} screenshotDataURL - Base64 data URL of the screenshot
- * @param {number} maxWidth - Maximum width (default 200)
- * @param {number} maxHeight - Maximum height (default 200)
+ * @param {number} maxWidth - Maximum width (default 25)
+ * @param {number} maxHeight - Maximum height (default 25)
  * @returns {Promise<string>} Thumbnail data URL
  */
-async function generateThumbnail(screenshotDataURL, maxWidth = 200, maxHeight = 200) {
+async function generateThumbnail(screenshotDataURL, maxWidth = 25, maxHeight = 25) {
   return new Promise((resolve, reject) => {
     try {
       const img = new Image();
