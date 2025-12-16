@@ -73,6 +73,14 @@ export const CONFIG = {
   NAMESPACE: 'Tapko'
 };
 
+// Log the API URL being used
+console.log('🔍 [Tapko Config] Environment Check:');
+console.log('  - process exists:', typeof process !== 'undefined');
+console.log('  - process.env exists:', typeof process !== 'undefined' && process.env);
+console.log('  - process.env.API_URL:', typeof process !== 'undefined' && process.env && process.env.API_URL);
+console.log('  - Final API baseUrl:', CONFIG.API.baseUrl);
+console.log('---');
+
 // Freeze config to prevent modifications
 Object.freeze(CONFIG);
 Object.freeze(CONFIG.API);

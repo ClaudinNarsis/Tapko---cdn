@@ -7,6 +7,31 @@ const esbuild = require('esbuild');
 const fs = require('fs');
 const path = require('path');
 
+// Load environment variables from .env file
+const envPath = path.join(__dirname, '.env');
+if (fs.existsSync(envPath)) {
+  const envContent = fs.readFileSync(envPath, 'utf8');
+  const envVars = envContent.split('\n')
+    .filter(line => line.trim() && !line.startsWith('#'))
+    .reduce((acc, line) => {
+      const [key, ...valueParts] = line.split('=');
+      if (key && valueParts.length) {
+        acc[key.trim()] = valueParts.join('=').trim();
+      }
+      return acc;
+    }, {});
+
+  // Only set env vars if they don't already exist
+  Object.keys(envVars).forEach(key => {
+    if (!process.env[key]) {
+      process.env[key] = envVars[key];
+    }
+  });
+
+  console.log('📝 Loaded .env file');
+  console.log('   API_URL from .env:', envVars.API_URL);
+}
+
 const isProduction = process.env.NODE_ENV === 'production';
 const isWatch = process.argv.includes('--watch');
 
@@ -67,6 +92,8 @@ const buildOptions = {
 async function build() {
   try {
     console.log(`Building Tapko Widget (${isProduction ? 'production' : 'development'})...`);
+    console.log('🔍 API_URL being injected into build:', process.env.API_URL || 'https://api.tapko.com');
+    console.log('---');
 
     if (isWatch) {
       const context = await esbuild.context(buildOptions);
