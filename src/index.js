@@ -29,6 +29,11 @@ import { DrawingCanvas } from './components/DrawingCanvas.js';
 import { FeedbackDisabledPopup } from './components/FeedbackDisabledPopup.js';
 import { dispatchCustomEvent } from './utils/dom.js';
 import { logManager } from './managers/LogManager.js';
+import FeedbackQueueManager from './managers/FeedbackQueueManager.js';
+import SyncStatusIndicator from './components/SyncStatusIndicator.js';
+import QueueViewerModal from './components/QueueViewerModal.js';
+import SyncLifecycleManager from './managers/SyncLifecycleManager.js';
+import NetworkStatusManager from './managers/NetworkStatusManager.js';
 
 (function (window, document) {
   'use strict';
@@ -58,6 +63,13 @@ import { logManager } from './managers/LogManager.js';
       this.feedbackOverlay = null;
       this.drawingCanvas = null;
       this.disabledPopup = new FeedbackDisabledPopup();
+
+      // Queue system components (NEW)
+      this.queueManager = null;
+      this.syncIndicator = null;
+      this.queueViewer = null;
+      this.lifecycleManager = null;
+      this.networkManager = null;
 
       // State
       this.isInFeedbackMode = false;
@@ -129,6 +141,9 @@ import { logManager } from './managers/LogManager.js';
       // Inject styles
       this._injectStyles();
 
+      // Initialize queue system (NEW)
+      await this._initializeQueueSystem();
+
       // Create floating entry button
       this.floatingButton.create(() => this._toggleFeedbackMode());
       if (this.isDisabled) {
@@ -146,7 +161,8 @@ import { logManager } from './managers/LogManager.js';
         version: CONFIG.VERSION,
         config: this.config,
         projectData: this.projectData,
-        isDisabled: this.isDisabled
+        isDisabled: this.isDisabled,
+        queueEnabled: this.queueManager?.initialized || false
       });
 
       console.log('[Tapko] Widget initialized', CONFIG.VERSION);
@@ -419,6 +435,23 @@ import { logManager } from './managers/LogManager.js';
         this.disabledPopup.destroy();
       }
 
+      // Destroy queue system components (NEW)
+      if (this.queueManager) {
+        this.queueManager.destroy();
+      }
+      if (this.syncIndicator) {
+        this.syncIndicator.destroy();
+      }
+      if (this.queueViewer) {
+        this.queueViewer.destroy();
+      }
+      if (this.lifecycleManager) {
+        this.lifecycleManager.destroy();
+      }
+      if (this.networkManager) {
+        this.networkManager.destroy();
+      }
+
       // Remove styles
       const styleEl = document.getElementById('__tapko_widget_styles');
       if (styleEl) styleEl.remove();
@@ -452,6 +485,105 @@ import { logManager } from './managers/LogManager.js';
         projectData: this.projectData
       };
     }
+
+    /**
+     * Initialize queue system (NEW)
+     */
+    async _initializeQueueSystem() {
+      try {
+        console.log('[Tapko] Initializing queue system...');
+
+        // Create queue manager
+        this.queueManager = new FeedbackQueueManager(this.apiClient, {
+          maxRetries: 5,
+          baseRetryDelay: 5000,
+          maxRetryDelay: 120000,
+          autoCleanup: true,
+          completedRetentionDays: 1
+        });
+
+        // Initialize queue manager
+        const initialized = await this.queueManager.init();
+
+        if (initialized) {
+          // Create UI components
+          this.syncIndicator = new SyncStatusIndicator(this.queueManager);
+          this.queueViewer = new QueueViewerModal(this.queueManager);
+          this.lifecycleManager = new SyncLifecycleManager(this.queueManager, this.syncIndicator);
+          this.networkManager = new NetworkStatusManager(this.queueManager, this.syncIndicator);
+
+          console.log('[Tapko] Queue system initialized successfully');
+        } else {
+          console.warn('[Tapko] Queue system not available (IndexedDB not supported)');
+        }
+      } catch (error) {
+        console.error('[Tapko] Failed to initialize queue system:', error);
+      }
+    }
+
+    /**
+     * Show queue viewer modal (NEW)
+     */
+    showQueueViewer() {
+      if (this.queueViewer) {
+        this.queueViewer.open();
+      }
+    }
+
+    /**
+     * Close queue viewer modal (NEW)
+     */
+    closeQueueViewer() {
+      if (this.queueViewer) {
+        this.queueViewer.close();
+      }
+    }
+
+    /**
+     * Retry a specific queue item (NEW)
+     */
+    async retryQueueItem(itemId) {
+      if (!this.queueManager) return;
+
+      try {
+        const item = await this.queueManager.getById(itemId);
+        if (item) {
+          item.attempts = 0;
+          item.error = null;
+          await this.queueManager.updateItem(itemId, item);
+          await this.queueManager.updateStatus(itemId, 'pending');
+
+          // Trigger processing
+          setTimeout(() => this.queueManager.processQueue(), 500);
+        }
+      } catch (error) {
+        console.error('[Tapko] Error retrying queue item:', error);
+      }
+    }
+
+    /**
+     * Remove a specific queue item (NEW)
+     */
+    async removeQueueItem(itemId) {
+      if (!this.queueManager) return;
+
+      try {
+        await this.queueManager.remove(itemId);
+      } catch (error) {
+        console.error('[Tapko] Error removing queue item:', error);
+      }
+    }
+
+    /**
+     * Get queue statistics (NEW)
+     */
+    async getQueueStats() {
+      if (!this.queueManager) {
+        return { pending: 0, processing: 0, failed: 0, completed: 0 };
+      }
+
+      return await this.queueManager.getQueueStats();
+    }
   }
 
   // Create global instance
@@ -472,6 +604,18 @@ import { logManager } from './managers/LogManager.js';
     getVersion: tapko.getVersion.bind(tapko),
     isReady: tapko.isReady.bind(tapko),
     getProjectStatus: tapko.getProjectStatus.bind(tapko),
+
+    // Queue system methods (NEW)
+    showQueueViewer: tapko.showQueueViewer.bind(tapko),
+    closeQueueViewer: tapko.closeQueueViewer.bind(tapko),
+    retryQueueItem: tapko.retryQueueItem.bind(tapko),
+    removeQueueItem: tapko.removeQueueItem.bind(tapko),
+    getQueueStats: tapko.getQueueStats.bind(tapko),
+
+    // Direct access to managers (for advanced usage)
+    get queueManager() { return tapko.queueManager; },
+    get syncIndicator() { return tapko.syncIndicator; },
+    get queueViewer() { return tapko.queueViewer; },
 
     // Config (read-only)
     config: CONFIG,

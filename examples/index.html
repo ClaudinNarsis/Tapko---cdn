@@ -328,6 +328,26 @@
       </div>
 
       <div class="demo-section">
+        <h2>🆕 Queue System Controls</h2>
+        <p>The new queue system provides instant submission and background sync.</p>
+        <div class="controls">
+          <button class="btn btn-primary" onclick="showQueueViewer()">
+            Show Queue Viewer
+          </button>
+          <button class="btn btn-secondary" onclick="checkQueueStats()">
+            Check Queue Stats
+          </button>
+          <button class="btn btn-secondary" onclick="retryAllFailed()">
+            Retry All Failed
+          </button>
+          <button class="btn btn-secondary" onclick="clearCompleted()">
+            Clear Completed
+          </button>
+        </div>
+        <div id="queue-status"></div>
+      </div>
+
+      <div class="demo-section">
         <h2>Key Features</h2>
         <div class="demo-grid">
           <div class="demo-card">
@@ -365,14 +385,29 @@
     // Initialize widget
     (async () => {
       try {
+        console.log('[Demo] Initializing Tapko widget...');
+
         await Tapko.init({
           projectId: '59e0ad62-b8f3-44e3-937d-ccaf0d14655f',
           apiKey: 'demo-api-key',
           userId: 'user_36PrQyirxWUXgwmtnnhuXI8G4xu'
         });
 
-        showStatus('Widget initialized successfully! Click the floating button to start.', 'success');
+        console.log('[Demo] Widget initialized!');
+        console.log('[Demo] Queue system:', Tapko.queueManager ? 'ENABLED ✅' : 'DISABLED');
+        console.log('[Demo] IndexedDB support:', 'indexedDB' in window);
+
+        const status = Tapko.getProjectStatus();
+        console.log('[Demo] Project status:', status);
+
+        if (status.queueEnabled) {
+          showStatus('Widget initialized with QUEUE SYSTEM! ✅', 'success');
+          showQueueStatus('Queue system is active and ready', 'success');
+        } else {
+          showStatus('Widget initialized (legacy mode - queue not available)', 'info');
+        }
       } catch (error) {
+        console.error('[Demo] Initialization error:', error);
         showStatus('Failed to initialize widget: ' + error.message, 'info');
       }
     })();
@@ -394,7 +429,13 @@
 
     window.addEventListener('tapko:comment:submitted', (e) => {
       console.log('Comment submitted:', e.detail);
-      showStatus('Comment submitted successfully!', 'success');
+      showStatus('Comment submitted successfully! (Legacy flow)', 'success');
+    });
+
+    // NEW: Listen for queued submissions
+    window.addEventListener('tapko:comment:queued', (e) => {
+      console.log('Comment queued:', e.detail);
+      showStatus('Feedback queued for sync! (Queue system active)', 'success');
     });
 
     window.addEventListener('tapko:drawing:started', (e) => {
@@ -421,14 +462,29 @@
       showStatus('All feedback closed', 'success');
     }
 
-    function checkStatus() {
+    async function checkStatus() {
       const status = Tapko.getProjectStatus();
       const version = Tapko.getVersion();
       const mode = status.isInFeedbackMode ? 'ACTIVE' : 'INACTIVE';
+      const queueEnabled = status.queueEnabled ? 'ENABLED ✅' : 'DISABLED (Legacy)';
+
+      let queueStats = '';
+      if (Tapko.queueManager) {
+        const stats = await Tapko.getQueueStats();
+        queueStats = ` | Queue: ${stats.pending}P ${stats.processing}W ${stats.failed}F ${stats.completed}C`;
+      }
+
       showStatus(
-        `Widget v${version} | Feedback Mode: ${mode} | Ready: ${status.isInitialized}`,
+        `Widget v${version} | Feedback Mode: ${mode} | Queue: ${queueEnabled}${queueStats}`,
         'info'
       );
+
+      console.log('Full status:', {
+        version,
+        status,
+        queueManager: Tapko.queueManager,
+        queueEnabled: status.queueEnabled
+      });
     }
 
     function showStatus(message, type) {
@@ -440,6 +496,57 @@
         statusEl.textContent = '';
         statusEl.className = '';
       }, 5000);
+    }
+
+    function showQueueStatus(message, type) {
+      const statusEl = document.getElementById('queue-status');
+      statusEl.className = 'status ' + type;
+      statusEl.textContent = message;
+
+      setTimeout(() => {
+        statusEl.textContent = '';
+        statusEl.className = '';
+      }, 5000);
+    }
+
+    // Queue system functions
+    function showQueueViewer() {
+      if (Tapko.showQueueViewer) {
+        Tapko.showQueueViewer();
+      } else {
+        showQueueStatus('Queue system not available', 'info');
+      }
+    }
+
+    async function checkQueueStats() {
+      if (Tapko.getQueueStats) {
+        const stats = await Tapko.getQueueStats();
+        showQueueStatus(
+          `Queue Stats: ${stats.pending} pending, ${stats.processing} processing, ${stats.failed} failed, ${stats.completed} completed`,
+          'info'
+        );
+        console.log('Queue stats:', stats);
+      } else {
+        showQueueStatus('Queue system not available', 'info');
+      }
+    }
+
+    async function retryAllFailed() {
+      if (Tapko.queueManager) {
+        await Tapko.queueManager.retryFailed();
+        showQueueStatus('Retrying all failed items...', 'info');
+      } else {
+        showQueueStatus('Queue system not available', 'info');
+      }
+    }
+
+    async function clearCompleted() {
+      if (Tapko.queueManager) {
+        await Tapko.queueManager.clearCompleted();
+        showQueueStatus('Completed items cleared', 'success');
+      } else {
+        showQueueStatus('Queue system not available', 'info');
+      }
     }
   </script>
 </body>

@@ -455,7 +455,7 @@ class CommentCard {
    */
   async submit() {
     const timingStart = performance.now();
-    console.log('[Tapko Timing] ========== SUBMIT STARTED ==========');
+    console.log('[Tapko] ========== QUEUED SUBMIT STARTED ==========');
 
     if (this.isSubmitting) return;
 
@@ -471,252 +471,292 @@ class CommentCard {
     this.isSubmitting = true;
 
     try {
-      // 0. Auto-capture screenshot if not already present
-      const screenshotStart = performance.now();
-      if (!this.screenshot) {
-        this._showLoading('Capturing screenshot...');
+      // Check if queue is available (IndexedDB supported)
+      const useQueue = window.Tapko?.queueManager?.initialized;
 
-        // Set screenshot mode to clean up UI
-        this.card.classList.add(`${CONFIG.CLASS_PREFIX}screenshot-mode`);
-
-        // Handle text rendering for screenshot
-        // html2canvas issues with textarea: replace with div
-        let textDiv = null;
-        if (textarea) {
-          // Create temporary div to display text
-          textDiv = document.createElement('div');
-          textDiv.className = textarea.className;
-          textDiv.textContent = textarea.value;
-
-          // Apply critical styles to match textarea look
-          const style = window.getComputedStyle(textarea);
-          textDiv.style.font = style.font;
-          textDiv.style.lineHeight = style.lineHeight;
-          textDiv.style.padding = style.padding;
-          textDiv.style.minHeight = style.height; // Use current height
-          textDiv.style.whiteSpace = 'pre-wrap';
-          textDiv.style.wordBreak = 'break-word';
-          textDiv.style.color = style.color;
-
-          // Insert div and hide textarea
-          textarea.parentNode.insertBefore(textDiv, textarea);
-          textarea.style.display = 'none';
-        }
-
-        // Brief delay to ensure render update
-        await new Promise(resolve => requestAnimationFrame(resolve));
-        await new Promise(resolve => setTimeout(resolve, 50));
-
-        try {
-          // Capture screenshot INCLUDING this card and the pin
-          const screenshotData = await captureViewportScreenshot({
-            elementsToInclude: [this.card, this.pinMarker]
-          });
-
-          this.screenshot = screenshotData.dataURL;
-          this.screenshotMetadata = screenshotData.metadata;
-          this.thumbnail = await generateThumbnail(this.screenshot);
-        } catch (e) {
-          console.warn('[Tapko] Auto-screenshot failed:', e);
-          // Proceed without screenshot if it fails
-        } finally {
-          // Restore UI
-          this.card.classList.remove(`${CONFIG.CLASS_PREFIX}screenshot-mode`);
-
-          if (textDiv) {
-            textDiv.remove();
-            textarea.style.display = '';
-          }
-        }
+      if (useQueue) {
+        // NEW QUEUED FLOW - Instant submission with background sync
+        await this._submitQueued(text, textarea);
+      } else {
+        // LEGACY SYNCHRONOUS FLOW - Fallback for unsupported browsers
+        console.warn('[Tapko] Queue not available, using legacy synchronous submission');
+        await this._submitLegacy(text, textarea, timingStart);
       }
-
-      const screenshotEnd = performance.now();
-      console.log(`[Tapko Timing] Screenshot capture: ${(screenshotEnd - screenshotStart).toFixed(2)}ms`);
-
-      this._showLoading('Submitting...');
-
-      // 1. Prepare assets
-      const prepareStart = performance.now();
-      const assets = {
-        screenshot: null,
-        logs: null
-      };
-
-      // 1a. Prepare screenshot if available
-      if (this.screenshot) {
-        const blob = dataURLToBlob(this.screenshot);
-        // Use .jpg extension for JPEG screenshots
-        const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
-        assets.screenshot = { blob, fileName, type: 'image/jpeg', folder: 'screenshots' };
-        console.log('[Tapko Screenshot] Screenshot prepared for upload:', {
-          fileName,
-          blobSize: blob.size,
-          blobType: blob.type,
-          folder: 'screenshots'
-        });
-      }
-
-      // 1b. Prepare logs
-      const logsBlob = logManager.getLogsAsTextBlob();
-      const logsFileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.txt`;
-      assets.logs = { blob: logsBlob, fileName: logsFileName, type: 'text/plain', folder: 'logs' };
-
-      const prepareEnd = performance.now();
-      console.log(`[Tapko Timing] Asset preparation: ${(prepareEnd - prepareStart).toFixed(2)}ms`);
-
-      // 2. Upload assets to S3 (in parallel for performance)
-      const uploadStart = performance.now();
-      const uploadedAssets = {};
-
-      console.log('[Tapko Upload] Starting asset uploads in parallel. Total assets:', Object.keys(assets).filter(k => assets[k]).length);
-
-      // Create upload promises for all assets to run in parallel
-      const uploadPromises = Object.entries(assets).map(async ([key, asset]) => {
-        if (!asset) return null;
-
-        try {
-          const assetUploadStart = performance.now();
-          console.log(`[Tapko Upload] Processing ${key} upload...`);
-
-          // Get presigned URL
-          const presignedStart = performance.now();
-          const presigned = await this.apiClient.getPresignedUrl({
-            folderName: asset.folder,
-            fileName: asset.fileName,
-            fileType: asset.type
-          });
-          const presignedEnd = performance.now();
-          console.log(`[Tapko Timing] Get presigned URL for ${key}: ${(presignedEnd - presignedStart).toFixed(2)}ms`);
-
-          if (!presigned || !presigned.success || !presigned.data) {
-            console.warn(`[Tapko Upload] Failed to get presigned URL for ${key}:`, presigned);
-            return null;
-          }
-
-          console.log(`[Tapko Upload] Got presigned URL for ${key}. Key from backend:`, presigned.data.key);
-
-          // Upload to S3
-          const s3UploadStart = performance.now();
-          await this.apiClient.uploadToS3(
-            presigned.data.uploadUrl,
-            asset.blob,
-            asset.type
-          );
-          const s3UploadEnd = performance.now();
-          console.log(`[Tapko Timing] S3 upload for ${key}: ${(s3UploadEnd - s3UploadStart).toFixed(2)}ms`);
-
-          // Store successful upload info
-          const uploadInfo = {
-            key: presigned.data.key,
-            url: presigned.data.url, // Assuming backend returns public/signed URL or we construct it
-            bucket: presigned.data.bucket, // Optional
-            mimeType: asset.type,
-            ...(key === 'screenshot' && this.screenshotMetadata ? { metadata: this.screenshotMetadata } : {})
-          };
-
-          const assetUploadEnd = performance.now();
-          console.log(`[Tapko Timing] Total time for ${key} upload: ${(assetUploadEnd - assetUploadStart).toFixed(2)}ms`);
-          console.log(`[Tapko Upload] Successfully uploaded ${key}. S3 Key:`, presigned.data.key);
-
-          return { key, uploadInfo };
-        } catch (e) {
-          console.error(`[Tapko Upload] Failed to upload ${key}:`, e);
-          return null;
-        }
-      });
-
-      // Wait for all uploads to complete in parallel
-      const uploadResults = await Promise.all(uploadPromises);
-
-      // Collect successful uploads
-      uploadResults.forEach(result => {
-        if (result && result.uploadInfo) {
-          uploadedAssets[result.key] = result.uploadInfo;
-        }
-      });
-
-      const uploadEnd = performance.now();
-      console.log(`[Tapko Timing] Total upload time for all assets (parallel): ${(uploadEnd - uploadStart).toFixed(2)}ms`);
-      console.log('[Tapko Upload] All uploads complete. Uploaded assets:', {
-        count: Object.keys(uploadedAssets).length,
-        keys: Object.fromEntries(Object.entries(uploadedAssets).map(([k, v]) => [k, v.key]))
-      });
-
-      // 3. Prepare final payload
-      const payloadStart = performance.now();
-      const feedbackPosition = getFeedbackPosition(this.target);
-      const browserInfo = getBrowserInfo();
-      const breakpoint = getCurrentBreakpoint();
-
-      const payload = {
-        title: this._generateFeedbackTitle(text),
-        description: sanitizeHTML(text),
-        assets: uploadedAssets,
-        context: {
-          pageUrl: window.location.href,
-          userAgent: navigator.userAgent,
-          timestamp: new Date().toISOString(),
-          viewport: this.screenshotMetadata ? {
-            width: this.screenshotMetadata.viewportWidth,
-            height: this.screenshotMetadata.viewportHeight,
-            devicePixelRatio: this.screenshotMetadata.devicePixelRatio
-          } : undefined,
-          browserInfo,
-          breakpoint,
-          feedbackPosition,
-          // Explicitly include the comment box location relative to the page
-          commentPosition: {
-            x: this.coordinates.x + (window.pageXOffset || document.documentElement.scrollLeft),
-            y: this.coordinates.y + (window.pageYOffset || document.documentElement.scrollTop)
-          }
-        },
-        // Add idempotency token to prevent duplicate submissions on retry
-        idempotencyKey: `${this.apiClient.userId}-${Date.now()}-${Math.random().toString(36).substring(7)}`,
-        // Legacy fields for backward compatibility if needed
-        projectId: this.apiClient.projectId,
-        userId: this.apiClient.userId
-      };
-
-      console.log('[Tapko Feedback] Prepared payload for submission:', {
-        title: payload.title,
-        hasDescription: !!payload.description,
-        assetKeys: Object.fromEntries(Object.entries(payload.assets).map(([k, v]) => [k, v.key])),
-        projectId: payload.projectId,
-        userId: payload.userId
-      });
-
-      console.log('[Tapko Feedback] Full asset details being sent:', payload.assets);
-
-      const payloadEnd = performance.now();
-      console.log(`[Tapko Timing] Payload preparation: ${(payloadEnd - payloadStart).toFixed(2)}ms`);
-
-      // 4. Submit feedback
-      const submitStart = performance.now();
-      console.log('[Tapko Feedback] Submitting feedback to /feedback/submit...');
-      const response = await this.apiClient.submitFeedback(payload);
-      const submitEnd = performance.now();
-      console.log(`[Tapko Timing] Feedback API submission: ${(submitEnd - submitStart).toFixed(2)}ms`);
-      console.log('[Tapko Feedback] Feedback submitted successfully:', {
-        feedbackId: response.feedbackId,
-        success: response.success
-      });
-
-      // Show success state
-      this._showSuccess(text || '(Drawing)');
-
-      // Dispatch event
-      dispatchCustomEvent(CONFIG.EVENTS.COMMENT_SUBMITTED, {
-        feedbackId: response.feedbackId,
-        data: payload
-      });
-
-      const timingEnd = performance.now();
-      console.log(`[Tapko Timing] ========== TOTAL SUBMIT TIME: ${(timingEnd - timingStart).toFixed(2)}ms ==========`);
 
     } catch (error) {
       console.error('[Tapko] Submit error:', error);
       this._showError('Failed to submit comment. Please try again.');
       this.isSubmitting = false;
+    }
+  }
+
+  /**
+   * NEW: Queued submission flow - instant with background sync
+   */
+  async _submitQueued(text, textarea) {
+    console.log('[Tapko] Using queued submission flow...');
+
+    this._showLoading('Preparing...');
+
+    // 1. Auto-capture screenshot if not already present
+    if (!this.screenshot) {
+      await this._captureScreenshot(textarea);
+    }
+
+    // 2. Prepare screenshot blob
+    let screenshotBlob = null;
+    if (this.screenshot) {
+      screenshotBlob = dataURLToBlob(this.screenshot);
+      console.log('[Tapko Queue] Screenshot blob prepared:', screenshotBlob.size, 'bytes');
+    }
+
+    // 3. Prepare logs blob
+    const logsBlob = logManager.getLogsAsTextBlob();
+    console.log('[Tapko Queue] Logs blob prepared:', logsBlob.size, 'bytes');
+
+    // 4. Prepare context
+    const feedbackPosition = getFeedbackPosition(this.target);
+    const browserInfo = getBrowserInfo();
+    const breakpoint = getCurrentBreakpoint();
+
+    const feedbackData = {
+      title: this._generateFeedbackTitle(text),
+      description: sanitizeHTML(text),
+      screenshot: screenshotBlob,
+      logs: logsBlob,
+      context: {
+        pageUrl: window.location.href,
+        userAgent: navigator.userAgent,
+        timestamp: new Date().toISOString(),
+        viewport: this.screenshotMetadata ? {
+          width: this.screenshotMetadata.viewportWidth,
+          height: this.screenshotMetadata.viewportHeight,
+          devicePixelRatio: this.screenshotMetadata.devicePixelRatio
+        } : {
+          width: window.innerWidth,
+          height: window.innerHeight,
+          devicePixelRatio: window.devicePixelRatio || 1
+        },
+        browserInfo,
+        breakpoint,
+        feedbackPosition,
+        commentPosition: {
+          x: this.coordinates.x + (window.pageXOffset || document.documentElement.scrollLeft),
+          y: this.coordinates.y + (window.pageYOffset || document.documentElement.scrollTop)
+        }
+      },
+      idempotencyKey: `${this.apiClient.userId}-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+      projectId: this.apiClient.projectId,
+      userId: this.apiClient.userId
+    };
+
+    // 5. Add to queue (instant!)
+    const queueId = await window.Tapko.queueManager.enqueue(feedbackData);
+    console.log('[Tapko Queue] Feedback queued successfully:', queueId);
+
+    // 6. Show "queued" success state
+    this._showQueued();
+
+    // 7. Dispatch queued event
+    dispatchCustomEvent('tapko:comment:queued', { queueId });
+
+    // 8. Close card after brief confirmation display
+    setTimeout(() => {
+      this.close();
+    }, 1500);
+
+    // 9. Trigger queue processing (async, non-blocking)
+    setTimeout(() => {
+      window.Tapko.queueManager.processQueue();
+    }, 100);
+  }
+
+  /**
+   * LEGACY: Original synchronous submission flow
+   */
+  async _submitLegacy(text, textarea, timingStart) {
+    console.log('[Tapko Timing] ========== LEGACY SUBMIT STARTED ==========');
+
+    // 0. Auto-capture screenshot if not already present
+    const screenshotStart = performance.now();
+    if (!this.screenshot) {
+      await this._captureScreenshot(textarea);
+    }
+    const screenshotEnd = performance.now();
+    console.log(`[Tapko Timing] Screenshot capture: ${(screenshotEnd - screenshotStart).toFixed(2)}ms`);
+
+    this._showLoading('Submitting...');
+
+    // 1. Prepare assets
+    const prepareStart = performance.now();
+    const assets = {
+      screenshot: null,
+      logs: null
+    };
+
+    // 1a. Prepare screenshot if available
+    if (this.screenshot) {
+      const blob = dataURLToBlob(this.screenshot);
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
+      assets.screenshot = { blob, fileName, type: 'image/jpeg', folder: 'screenshots' };
+    }
+
+    // 1b. Prepare logs
+    const logsBlob = logManager.getLogsAsTextBlob();
+    const logsFileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.txt`;
+    assets.logs = { blob: logsBlob, fileName: logsFileName, type: 'text/plain', folder: 'logs' };
+
+    const prepareEnd = performance.now();
+    console.log(`[Tapko Timing] Asset preparation: ${(prepareEnd - prepareStart).toFixed(2)}ms`);
+
+    // 2. Upload assets to S3 (in parallel for performance)
+    const uploadStart = performance.now();
+    const uploadedAssets = {};
+
+    const uploadPromises = Object.entries(assets).map(async ([key, asset]) => {
+      if (!asset) return null;
+
+      try {
+        const presigned = await this.apiClient.getPresignedUrl({
+          folderName: asset.folder,
+          fileName: asset.fileName,
+          fileType: asset.type
+        });
+
+        if (!presigned || !presigned.success || !presigned.data) {
+          return null;
+        }
+
+        await this.apiClient.uploadToS3(
+          presigned.data.uploadUrl,
+          asset.blob,
+          asset.type
+        );
+
+        const uploadInfo = {
+          key: presigned.data.key,
+          url: presigned.data.url,
+          bucket: presigned.data.bucket,
+          mimeType: asset.type,
+          ...(key === 'screenshot' && this.screenshotMetadata ? { metadata: this.screenshotMetadata } : {})
+        };
+
+        return { key, uploadInfo };
+      } catch (e) {
+        console.error(`[Tapko Upload] Failed to upload ${key}:`, e);
+        return null;
+      }
+    });
+
+    const uploadResults = await Promise.all(uploadPromises);
+    uploadResults.forEach(result => {
+      if (result && result.uploadInfo) {
+        uploadedAssets[result.key] = result.uploadInfo;
+      }
+    });
+
+    const uploadEnd = performance.now();
+    console.log(`[Tapko Timing] Total upload time: ${(uploadEnd - uploadStart).toFixed(2)}ms`);
+
+    // 3. Prepare final payload
+    const feedbackPosition = getFeedbackPosition(this.target);
+    const browserInfo = getBrowserInfo();
+    const breakpoint = getCurrentBreakpoint();
+
+    const payload = {
+      title: this._generateFeedbackTitle(text),
+      description: sanitizeHTML(text),
+      assets: uploadedAssets,
+      context: {
+        pageUrl: window.location.href,
+        userAgent: navigator.userAgent,
+        timestamp: new Date().toISOString(),
+        viewport: this.screenshotMetadata ? {
+          width: this.screenshotMetadata.viewportWidth,
+          height: this.screenshotMetadata.viewportHeight,
+          devicePixelRatio: this.screenshotMetadata.devicePixelRatio
+        } : undefined,
+        browserInfo,
+        breakpoint,
+        feedbackPosition,
+        commentPosition: {
+          x: this.coordinates.x + (window.pageXOffset || document.documentElement.scrollLeft),
+          y: this.coordinates.y + (window.pageYOffset || document.documentElement.scrollTop)
+        }
+      },
+      idempotencyKey: `${this.apiClient.userId}-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+      projectId: this.apiClient.projectId,
+      userId: this.apiClient.userId
+    };
+
+    // 4. Submit feedback
+    const submitStart = performance.now();
+    const response = await this.apiClient.submitFeedback(payload);
+    const submitEnd = performance.now();
+    console.log(`[Tapko Timing] Feedback API submission: ${(submitEnd - submitStart).toFixed(2)}ms`);
+
+    // Show success state
+    this._showSuccess(text || '(Drawing)');
+
+    // Dispatch event
+    dispatchCustomEvent(CONFIG.EVENTS.COMMENT_SUBMITTED, {
+      feedbackId: response.feedbackId,
+      data: payload
+    });
+
+    const timingEnd = performance.now();
+    console.log(`[Tapko Timing] ========== TOTAL SUBMIT TIME: ${(timingEnd - timingStart).toFixed(2)}ms ==========`);
+  }
+
+  /**
+   * Capture screenshot helper
+   */
+  async _captureScreenshot(textarea) {
+    this._showLoading('Capturing screenshot...');
+
+    // Set screenshot mode to clean up UI
+    this.card.classList.add(`${CONFIG.CLASS_PREFIX}screenshot-mode`);
+
+    // Handle text rendering for screenshot
+    let textDiv = null;
+    if (textarea) {
+      textDiv = document.createElement('div');
+      textDiv.className = textarea.className;
+      textDiv.textContent = textarea.value;
+
+      const style = window.getComputedStyle(textarea);
+      textDiv.style.font = style.font;
+      textDiv.style.lineHeight = style.lineHeight;
+      textDiv.style.padding = style.padding;
+      textDiv.style.minHeight = style.height;
+      textDiv.style.whiteSpace = 'pre-wrap';
+      textDiv.style.wordBreak = 'break-word';
+      textDiv.style.color = style.color;
+
+      textarea.parentNode.insertBefore(textDiv, textarea);
+      textarea.style.display = 'none';
+    }
+
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    try {
+      const screenshotData = await captureViewportScreenshot({
+        elementsToInclude: [this.card, this.pinMarker]
+      });
+
+      this.screenshot = screenshotData.dataURL;
+      this.screenshotMetadata = screenshotData.metadata;
+      this.thumbnail = await generateThumbnail(this.screenshot);
+    } catch (e) {
+      console.warn('[Tapko] Auto-screenshot failed:', e);
+    } finally {
+      this.card.classList.remove(`${CONFIG.CLASS_PREFIX}screenshot-mode`);
+
+      if (textDiv) {
+        textDiv.remove();
+        textarea.style.display = '';
+      }
     }
   }
 
@@ -739,6 +779,24 @@ class CommentCard {
     if (submitBtn) {
       submitBtn.disabled = true;
       submitBtn.textContent = text;
+    }
+  }
+
+  /**
+   * Show queued state (NEW for queued flow)
+   */
+  _showQueued() {
+    const submitBtn = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}btn-submit`);
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" width="16" height="16" style="display: inline-block; vertical-align: middle; margin-right: 6px;">
+          <path d="M20 6L9 17l-5-5" stroke="#10b981" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Queued for sync
+      `;
+      submitBtn.style.background = '#10b981';
+      submitBtn.style.color = 'white';
     }
   }
 
