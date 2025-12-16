@@ -40,9 +40,15 @@ async function loadHtml2Canvas() {
  * @returns {Promise<Object>} Object containing screenshot dataURL and metadata
  */
 async function captureViewportScreenshot(options = {}) {
+  const timingStart = performance.now();
+  console.log('[Tapko Timing] Starting screenshot capture');
+
   try {
     // Load html2canvas library
+    const loadLibStart = performance.now();
     const html2canvas = await loadHtml2Canvas();
+    const loadLibEnd = performance.now();
+    console.log(`[Tapko Timing] html2canvas library load: ${(loadLibEnd - loadLibStart).toFixed(2)}ms`);
 
     // Get current viewport and scroll position
     const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
@@ -53,6 +59,7 @@ async function captureViewportScreenshot(options = {}) {
 
     // Capture viewport-only screenshot
     // CRITICAL: These options ensure we capture ONLY the visible viewport
+    const captureStart = performance.now();
     const canvas = await html2canvas(document.body, {
       // Viewport dimensions - this is what limits the capture to viewport only
       windowWidth: viewportWidth,
@@ -98,6 +105,8 @@ async function captureViewportScreenshot(options = {}) {
         return className.includes('dtc-');
       }
     });
+    const captureEnd = performance.now();
+    console.log(`[Tapko Timing] html2canvas render: ${(captureEnd - captureStart).toFixed(2)}ms`);
 
     // Create a new canvas to composite everything
     // This ensures we have a clean 2D context and avoids any potential issues with the html2canvas object
@@ -110,6 +119,7 @@ async function captureViewportScreenshot(options = {}) {
     finalCtx.drawImage(canvas, 0, 0);
 
     // 2. Manual composite of drawing canvas onto screenshot
+    const compositeStart = performance.now();
     const drawingCanvas = document.querySelector('.dtc-drawing-canvas');
     if (drawingCanvas) {
       // Convert drawing canvas to data URL (this renders the scale transform)
@@ -132,9 +142,16 @@ async function captureViewportScreenshot(options = {}) {
         });
       }
     }
+    const compositeEnd = performance.now();
+    console.log(`[Tapko Timing] Drawing canvas composite: ${(compositeEnd - compositeStart).toFixed(2)}ms`);
 
-    // Convert final canvas to data URL
-    const dataURL = finalCanvas.toDataURL('image/png', 1.0);
+    // Convert final canvas to data URL with compression
+    // Use JPEG with 0.85 quality for better compression (much smaller file size)
+    const toDataURLStart = performance.now();
+    const dataURL = finalCanvas.toDataURL('image/jpeg', 0.85);
+    const toDataURLEnd = performance.now();
+    const sizeKB = Math.round((dataURL.length * 0.75) / 1024); // Approximate size in KB
+    console.log(`[Tapko Timing] Canvas to DataURL conversion (JPEG 85%): ${(toDataURLEnd - toDataURLStart).toFixed(2)}ms, size: ~${sizeKB}KB`);
 
     // Get zoom level (if detectable)
     let zoomLevel = 1;
@@ -145,6 +162,9 @@ async function captureViewportScreenshot(options = {}) {
     }
 
     // Return screenshot with complete metadata
+    const timingEnd = performance.now();
+    console.log(`[Tapko Timing] Total screenshot capture: ${(timingEnd - timingStart).toFixed(2)}ms`);
+
     return {
       dataURL,
       metadata: {
@@ -174,6 +194,7 @@ async function captureViewportScreenshot(options = {}) {
  * @returns {Promise<string>} Thumbnail data URL
  */
 async function generateThumbnail(screenshotDataURL, maxWidth = 25, maxHeight = 25) {
+  const timingStart = performance.now();
   return new Promise((resolve, reject) => {
     try {
       const img = new Image();
@@ -206,6 +227,8 @@ async function generateThumbnail(screenshotDataURL, maxWidth = 25, maxHeight = 2
 
         // Convert to data URL
         const thumbnailDataURL = canvas.toDataURL('image/png', 0.8);
+        const timingEnd = performance.now();
+        console.log(`[Tapko Timing] Thumbnail generation: ${(timingEnd - timingStart).toFixed(2)}ms`);
         resolve(thumbnailDataURL);
       };
 

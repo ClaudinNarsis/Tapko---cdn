@@ -230,6 +230,7 @@ class APIClient {
    * @param {Object} fileData - { folderName, fileName, fileType }
    */
   async getPresignedUrl(fileData) {
+    const timingStart = performance.now();
     console.log('[Tapko S3] Requesting presigned URL:', {
       folderName: fileData.folderName,
       fileName: fileData.fileName,
@@ -244,6 +245,8 @@ class APIClient {
       ...fileData
     });
 
+    const timingEnd = performance.now();
+    console.log(`[Tapko Timing] getPresignedUrl API call: ${(timingEnd - timingStart).toFixed(2)}ms`);
     console.log('[Tapko S3] Presigned URL response:', {
       success: response.success,
       hasUploadUrl: !!response.data?.uploadUrl,
@@ -260,6 +263,7 @@ class APIClient {
    * Upload binary data to S3 using presigned URL
    */
   async uploadToS3(uploadUrl, data, contentType) {
+    const timingStart = performance.now();
     console.log('[Tapko S3] Starting S3 upload:', {
       uploadUrlHost: new URL(uploadUrl).host,
       uploadUrlPath: new URL(uploadUrl).pathname,
@@ -293,11 +297,14 @@ class APIClient {
 
     console.log('[Tapko S3] Upload headers:', headers);
 
+    const fetchStart = performance.now();
     const response = await fetch(uploadUrl, {
       method: 'PUT',
       headers,
       body: data
     });
+    const fetchEnd = performance.now();
+    console.log(`[Tapko Timing] S3 PUT request: ${(fetchEnd - fetchStart).toFixed(2)}ms`);
 
     console.log('[Tapko S3] Upload response:', {
       status: response.status,
@@ -311,6 +318,8 @@ class APIClient {
       throw new Error(`S3 Upload failed: ${response.status} ${errorText}`);
     }
 
+    const timingEnd = performance.now();
+    console.log(`[Tapko Timing] uploadToS3 total: ${(timingEnd - timingStart).toFixed(2)}ms`);
     console.log('[Tapko S3] Upload successful');
     return true;
   }
@@ -319,6 +328,7 @@ class APIClient {
    * Submit feedback with enhanced metadata
    */
   async submitFeedback(feedbackData) {
+    const timingStart = performance.now();
     const endpoint = '/feedback/submit';
 
     // If payload already matches new structure, send it directly
@@ -337,7 +347,10 @@ class APIClient {
       console.log('[Tapko API] Screenshot asset detail:', feedbackData.assets?.screenshot);
       console.log('[Tapko API] Logs asset detail:', feedbackData.assets?.logs);
 
-      return this.post(endpoint, feedbackData);
+      const result = await this.post(endpoint, feedbackData);
+      const timingEnd = performance.now();
+      console.log(`[Tapko Timing] submitFeedback API call: ${(timingEnd - timingStart).toFixed(2)}ms`);
+      return result;
     }
 
     // Fallback for legacy calls

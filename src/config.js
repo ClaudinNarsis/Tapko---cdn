@@ -12,6 +12,7 @@ export const CONFIG = {
     baseUrl: typeof process !== 'undefined' && process.env && process.env.API_URL
       ? process.env.API_URL
       : 'https://5mjiz034ia.execute-api.ap-south-1.amazonaws.com/dev/api',
+      // : 'http://localhost:3000/api',
     version: '',
     timeout: 20000,
     retries: 3

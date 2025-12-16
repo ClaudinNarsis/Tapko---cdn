@@ -106,6 +106,7 @@ class LogManager {
    * Get logs as Text Blob
    */
     getLogsAsTextBlob() {
+        const timingStart = performance.now();
         const logsText = this.logs.map(log => {
             const dataStr = log.data.map(arg => {
                 if (typeof arg === 'object') {
@@ -120,7 +121,10 @@ class LogManager {
             return `[${log.timestamp}] [${log.type.toUpperCase()}] ${dataStr}`;
         }).join('\n');
 
-        return new Blob([logsText], { type: 'text/plain' });
+        const blob = new Blob([logsText], { type: 'text/plain' });
+        const timingEnd = performance.now();
+        console.log(`[Tapko Timing] Log collection to blob: ${(timingEnd - timingStart).toFixed(2)}ms (${this.logs.length} logs)`);
+        return blob;
     }
 
     /**

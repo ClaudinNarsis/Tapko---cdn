@@ -454,6 +454,9 @@ class CommentCard {
    * Submit comment
    */
   async submit() {
+    const timingStart = performance.now();
+    console.log('[Tapko Timing] ========== SUBMIT STARTED ==========');
+
     if (this.isSubmitting) return;
 
     const textarea = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}comment-textarea`);
@@ -469,6 +472,7 @@ class CommentCard {
 
     try {
       // 0. Auto-capture screenshot if not already present
+      const screenshotStart = performance.now();
       if (!this.screenshot) {
         this._showLoading('Capturing screenshot...');
 
@@ -526,9 +530,13 @@ class CommentCard {
         }
       }
 
+      const screenshotEnd = performance.now();
+      console.log(`[Tapko Timing] Screenshot capture: ${(screenshotEnd - screenshotStart).toFixed(2)}ms`);
+
       this._showLoading('Submitting...');
 
       // 1. Prepare assets
+      const prepareStart = performance.now();
       const assets = {
         screenshot: null,
         logs: null
@@ -537,8 +545,9 @@ class CommentCard {
       // 1a. Prepare screenshot if available
       if (this.screenshot) {
         const blob = dataURLToBlob(this.screenshot);
-        const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.png`;
-        assets.screenshot = { blob, fileName, type: 'image/png', folder: 'screenshots' };
+        // Use .jpg extension for JPEG screenshots
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
+        assets.screenshot = { blob, fileName, type: 'image/jpeg', folder: 'screenshots' };
         console.log('[Tapko Screenshot] Screenshot prepared for upload:', {
           fileName,
           blobSize: blob.size,
@@ -552,40 +561,52 @@ class CommentCard {
       const logsFileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.txt`;
       assets.logs = { blob: logsBlob, fileName: logsFileName, type: 'text/plain', folder: 'logs' };
 
-      // 2. Upload assets to S3
+      const prepareEnd = performance.now();
+      console.log(`[Tapko Timing] Asset preparation: ${(prepareEnd - prepareStart).toFixed(2)}ms`);
+
+      // 2. Upload assets to S3 (in parallel for performance)
+      const uploadStart = performance.now();
       const uploadedAssets = {};
 
-      console.log('[Tapko Upload] Starting asset uploads. Total assets:', Object.keys(assets).filter(k => assets[k]).length);
+      console.log('[Tapko Upload] Starting asset uploads in parallel. Total assets:', Object.keys(assets).filter(k => assets[k]).length);
 
-      for (const [key, asset] of Object.entries(assets)) {
-        if (!asset) continue;
+      // Create upload promises for all assets to run in parallel
+      const uploadPromises = Object.entries(assets).map(async ([key, asset]) => {
+        if (!asset) return null;
 
         try {
+          const assetUploadStart = performance.now();
           console.log(`[Tapko Upload] Processing ${key} upload...`);
 
           // Get presigned URL
+          const presignedStart = performance.now();
           const presigned = await this.apiClient.getPresignedUrl({
             folderName: asset.folder,
             fileName: asset.fileName,
             fileType: asset.type
           });
+          const presignedEnd = performance.now();
+          console.log(`[Tapko Timing] Get presigned URL for ${key}: ${(presignedEnd - presignedStart).toFixed(2)}ms`);
 
           if (!presigned || !presigned.success || !presigned.data) {
             console.warn(`[Tapko Upload] Failed to get presigned URL for ${key}:`, presigned);
-            continue;
+            return null;
           }
 
           console.log(`[Tapko Upload] Got presigned URL for ${key}. Key from backend:`, presigned.data.key);
 
           // Upload to S3
+          const s3UploadStart = performance.now();
           await this.apiClient.uploadToS3(
             presigned.data.uploadUrl,
             asset.blob,
             asset.type
           );
+          const s3UploadEnd = performance.now();
+          console.log(`[Tapko Timing] S3 upload for ${key}: ${(s3UploadEnd - s3UploadStart).toFixed(2)}ms`);
 
           // Store successful upload info
-          uploadedAssets[key] = {
+          const uploadInfo = {
             key: presigned.data.key,
             url: presigned.data.url, // Assuming backend returns public/signed URL or we construct it
             bucket: presigned.data.bucket, // Optional
@@ -593,20 +614,36 @@ class CommentCard {
             ...(key === 'screenshot' && this.screenshotMetadata ? { metadata: this.screenshotMetadata } : {})
           };
 
+          const assetUploadEnd = performance.now();
+          console.log(`[Tapko Timing] Total time for ${key} upload: ${(assetUploadEnd - assetUploadStart).toFixed(2)}ms`);
           console.log(`[Tapko Upload] Successfully uploaded ${key}. S3 Key:`, presigned.data.key);
+
+          return { key, uploadInfo };
         } catch (e) {
           console.error(`[Tapko Upload] Failed to upload ${key}:`, e);
-          // Continue even if upload fails? Or fail hard?
-          // For now, continue but maybe log it
+          return null;
         }
-      }
+      });
 
+      // Wait for all uploads to complete in parallel
+      const uploadResults = await Promise.all(uploadPromises);
+
+      // Collect successful uploads
+      uploadResults.forEach(result => {
+        if (result && result.uploadInfo) {
+          uploadedAssets[result.key] = result.uploadInfo;
+        }
+      });
+
+      const uploadEnd = performance.now();
+      console.log(`[Tapko Timing] Total upload time for all assets (parallel): ${(uploadEnd - uploadStart).toFixed(2)}ms`);
       console.log('[Tapko Upload] All uploads complete. Uploaded assets:', {
         count: Object.keys(uploadedAssets).length,
         keys: Object.fromEntries(Object.entries(uploadedAssets).map(([k, v]) => [k, v.key]))
       });
 
       // 3. Prepare final payload
+      const payloadStart = performance.now();
       const feedbackPosition = getFeedbackPosition(this.target);
       const browserInfo = getBrowserInfo();
       const breakpoint = getCurrentBreakpoint();
@@ -650,9 +687,15 @@ class CommentCard {
 
       console.log('[Tapko Feedback] Full asset details being sent:', payload.assets);
 
+      const payloadEnd = performance.now();
+      console.log(`[Tapko Timing] Payload preparation: ${(payloadEnd - payloadStart).toFixed(2)}ms`);
+
       // 4. Submit feedback
+      const submitStart = performance.now();
       console.log('[Tapko Feedback] Submitting feedback to /feedback/submit...');
       const response = await this.apiClient.submitFeedback(payload);
+      const submitEnd = performance.now();
+      console.log(`[Tapko Timing] Feedback API submission: ${(submitEnd - submitStart).toFixed(2)}ms`);
       console.log('[Tapko Feedback] Feedback submitted successfully:', {
         feedbackId: response.feedbackId,
         success: response.success
@@ -666,6 +709,9 @@ class CommentCard {
         feedbackId: response.feedbackId,
         data: payload
       });
+
+      const timingEnd = performance.now();
+      console.log(`[Tapko Timing] ========== TOTAL SUBMIT TIME: ${(timingEnd - timingStart).toFixed(2)}ms ==========`);
 
     } catch (error) {
       console.error('[Tapko] Submit error:', error);
