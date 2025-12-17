@@ -5,18 +5,19 @@
  * Specifications:
  * - 4-5% opacity tint (rgba(0,0,0,0.04))
  * - Intercepts all pointer events except scrolling
- * - Shows "Feedback mode — tap anything" label
+ * - Uses Snackbar component for messages
  * - Custom cursor (target indicator)
  * - Full-screen coverage
  */
 
 import { CONFIG } from '../config.js';
 import { createElement, dispatchCustomEvent } from '../utils/dom.js';
+import { Snackbar } from './Snackbar.js';
 
 class FeedbackModeOverlay {
   constructor() {
     this.overlay = null;
-    this.label = null;
+    this.snackbar = null;
     this.onTap = null;
   }
 
@@ -33,11 +34,9 @@ class FeedbackModeOverlay {
     // Create overlay container
     this.overlay = createElement('div', `${CONFIG.CLASS_PREFIX}feedback-overlay`);
 
-    // Create label
-    this.label = createElement('div', `${CONFIG.CLASS_PREFIX}feedback-label`);
-    this.label.textContent = 'Feedback mode — tap anything';
-
-    this.overlay.appendChild(this.label);
+    // Create snackbar for messages
+    this.snackbar = new Snackbar();
+    this.snackbar.create();
 
     // Attach events
     this._attachEventListeners();
@@ -47,6 +46,8 @@ class FeedbackModeOverlay {
     // Show with animation
     requestAnimationFrame(() => {
       this.overlay.classList.add(`${CONFIG.CLASS_PREFIX}visible`);
+      // Show initial message
+      this.snackbar.show('Feedback mode — tap anything', { type: 'info' });
     });
 
     return this.overlay;
@@ -97,10 +98,15 @@ class FeedbackModeOverlay {
     // Ignore clicks on the overlay itself or feedback UI elements
     if (!targetElement ||
         targetElement === this.overlay ||
-        targetElement.classList.contains(`${CONFIG.CLASS_PREFIX}feedback-label`) ||
+        targetElement.classList.contains(`${CONFIG.CLASS_PREFIX}snackbar`) ||
         targetElement.closest(`.${CONFIG.CLASS_PREFIX}comment-card`) ||
         targetElement.closest(`.${CONFIG.CLASS_PREFIX}floating-entry-button`)) {
       return;
+    }
+
+    // Hide snackbar when comment card is about to be created
+    if (this.snackbar) {
+      this.snackbar.hide();
     }
 
     // Dispatch tap event with target element
@@ -115,26 +121,17 @@ class FeedbackModeOverlay {
   }
 
   /**
-   * Update label text
-   */
-  setLabel(text) {
-    if (this.label) {
-      this.label.textContent = text;
-    }
-  }
-
-  /**
    * Show drawing mode indicator
    */
   setDrawingMode(isActive) {
-    if (!this.overlay) return;
+    if (!this.overlay || !this.snackbar) return;
 
     if (isActive) {
       this.overlay.classList.add(`${CONFIG.CLASS_PREFIX}drawing-mode`);
-      this.setLabel('Drawing mode — Press Done when finished');
+      this.snackbar.show('Drawing mode — Press Done when finished', { type: 'info' });
     } else {
       this.overlay.classList.remove(`${CONFIG.CLASS_PREFIX}drawing-mode`);
-      this.setLabel('Feedback mode — tap anything');
+      this.snackbar.show('Feedback mode — tap anything', { type: 'info' });
     }
   }
 
@@ -162,12 +159,18 @@ class FeedbackModeOverlay {
   destroy() {
     if (this.overlay) {
       this.overlay.classList.remove(`${CONFIG.CLASS_PREFIX}visible`);
+
+      // Hide and destroy snackbar
+      if (this.snackbar) {
+        this.snackbar.destroy();
+      }
+
       setTimeout(() => {
         if (this.overlay && this.overlay.parentNode) {
           this.overlay.parentNode.removeChild(this.overlay);
         }
         this.overlay = null;
-        this.label = null;
+        this.snackbar = null;
         this.onTap = null;
       }, CONFIG.UI.animationDuration);
     }

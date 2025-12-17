@@ -328,6 +328,10 @@ import NetworkStatusManager from './managers/NetworkStatusManager.js';
           originalClose();
           if (this.activeCard === card) {
             this.activeCard = null;
+            // Show snackbar again when card is closed
+            if (this.isInFeedbackMode && this.feedbackOverlay && this.feedbackOverlay.snackbar) {
+              this.feedbackOverlay.snackbar.show('Feedback mode — tap anything', { type: 'info' });
+            }
           }
         };
 
