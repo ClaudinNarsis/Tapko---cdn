@@ -34,6 +34,7 @@ import SyncStatusIndicator from './components/SyncStatusIndicator.js';
 import QueueViewerModal from './components/QueueViewerModal.js';
 import SyncLifecycleManager from './managers/SyncLifecycleManager.js';
 import NetworkStatusManager from './managers/NetworkStatusManager.js';
+import PulseMarkerManager from './managers/PulseMarkerManager.js';
 
 (function (window, document) {
   'use strict';
@@ -70,6 +71,7 @@ import NetworkStatusManager from './managers/NetworkStatusManager.js';
       this.queueViewer = null;
       this.lifecycleManager = null;
       this.networkManager = null;
+      this.pulseMarkerManager = null;
 
       // State
       this.isInFeedbackMode = false;
@@ -259,6 +261,11 @@ import NetworkStatusManager from './managers/NetworkStatusManager.js';
         this._createCommentCard(element, coordinates);
       });
 
+      // Show pulse markers when entering feedback mode
+      if (this.pulseMarkerManager) {
+        this.pulseMarkerManager.showAll();
+      }
+
       // Dispatch event
       dispatchCustomEvent(CONFIG.EVENTS.FEEDBACK_MODE_ENTERED);
 
@@ -293,6 +300,11 @@ import NetworkStatusManager from './managers/NetworkStatusManager.js';
         this.feedbackOverlay = null;
       }
 
+      // Hide pulse markers when exiting feedback mode
+      if (this.pulseMarkerManager) {
+        this.pulseMarkerManager.hideAll();
+      }
+
       // Dispatch event
       dispatchCustomEvent(CONFIG.EVENTS.FEEDBACK_MODE_EXITED);
 
@@ -310,6 +322,11 @@ import NetworkStatusManager from './managers/NetworkStatusManager.js';
       // Close existing card
       if (this.activeCard) {
         this.activeCard.close();
+      }
+
+      // Hide pulse markers when opening a comment card
+      if (this.pulseMarkerManager) {
+        this.pulseMarkerManager.hideAll();
       }
 
       try {
@@ -331,6 +348,10 @@ import NetworkStatusManager from './managers/NetworkStatusManager.js';
             // Show snackbar again when card is closed
             if (this.isInFeedbackMode && this.feedbackOverlay && this.feedbackOverlay.snackbar) {
               this.feedbackOverlay.snackbar.show('Feedback mode — tap anything', { type: 'info' });
+            }
+            // Show pulse markers again when card is closed (if still in feedback mode)
+            if (this.isInFeedbackMode && this.pulseMarkerManager) {
+              this.pulseMarkerManager.showAll();
             }
           }
         };
@@ -455,6 +476,9 @@ import NetworkStatusManager from './managers/NetworkStatusManager.js';
       if (this.networkManager) {
         this.networkManager.destroy();
       }
+      if (this.pulseMarkerManager) {
+        this.pulseMarkerManager.destroy();
+      }
 
       // Remove styles
       const styleEl = document.getElementById('__tapko_widget_styles');
@@ -515,6 +539,10 @@ import NetworkStatusManager from './managers/NetworkStatusManager.js';
           this.queueViewer = new QueueViewerModal(this.queueManager);
           this.lifecycleManager = new SyncLifecycleManager(this.queueManager, this.syncIndicator);
           this.networkManager = new NetworkStatusManager(this.queueManager, this.syncIndicator);
+
+          // Create pulse marker manager
+          this.pulseMarkerManager = new PulseMarkerManager(this.queueManager);
+          await this.pulseMarkerManager.init();
 
           console.log('[Tapko] Queue system initialized successfully');
         } else {
@@ -588,6 +616,43 @@ import NetworkStatusManager from './managers/NetworkStatusManager.js';
 
       return await this.queueManager.getQueueStats();
     }
+
+    /**
+     * Show all feedback pulse markers (NEW)
+     */
+    showPulseMarkers() {
+      if (this.pulseMarkerManager) {
+        this.pulseMarkerManager.showAll();
+      }
+    }
+
+    /**
+     * Hide all feedback pulse markers (NEW)
+     */
+    hidePulseMarkers() {
+      if (this.pulseMarkerManager) {
+        this.pulseMarkerManager.hideAll();
+      }
+    }
+
+    /**
+     * Clear all feedback pulse markers (NEW)
+     */
+    clearPulseMarkers() {
+      if (this.pulseMarkerManager) {
+        this.pulseMarkerManager.clearAll();
+      }
+    }
+
+    /**
+     * Get number of pulse markers (NEW)
+     */
+    getPulseMarkerCount() {
+      if (!this.pulseMarkerManager) {
+        return 0;
+      }
+      return this.pulseMarkerManager.getMarkerCount();
+    }
   }
 
   // Create global instance
@@ -616,10 +681,17 @@ import NetworkStatusManager from './managers/NetworkStatusManager.js';
     removeQueueItem: tapko.removeQueueItem.bind(tapko),
     getQueueStats: tapko.getQueueStats.bind(tapko),
 
+    // Pulse marker methods (NEW)
+    showPulseMarkers: tapko.showPulseMarkers.bind(tapko),
+    hidePulseMarkers: tapko.hidePulseMarkers.bind(tapko),
+    clearPulseMarkers: tapko.clearPulseMarkers.bind(tapko),
+    getPulseMarkerCount: tapko.getPulseMarkerCount.bind(tapko),
+
     // Direct access to managers (for advanced usage)
     get queueManager() { return tapko.queueManager; },
     get syncIndicator() { return tapko.syncIndicator; },
     get queueViewer() { return tapko.queueViewer; },
+    get pulseMarkerManager() { return tapko.pulseMarkerManager; },
 
     // Config (read-only)
     config: CONFIG,
