@@ -786,17 +786,21 @@ class CommentCard {
    * Show queued state (NEW for queued flow)
    */
   _showQueued() {
-    const submitBtn = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}btn-submit`);
-    if (submitBtn) {
-      submitBtn.disabled = true;
-      submitBtn.innerHTML = `
-        <svg viewBox="0 0 24 24" width="16" height="16" style="display: inline-block; vertical-align: middle; margin-right: 6px;">
-          <path d="M20 6L9 17l-5-5" stroke="#10b981" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        Queued for sync
+    const bubble = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}comment-bubble`);
+    const text = this._getCurrentText() || '(Drawing)';
+
+    if (bubble) {
+      bubble.innerHTML = `
+        <div class="${CONFIG.CLASS_PREFIX}comment-queued">
+          <div class="${CONFIG.CLASS_PREFIX}feedback-text">${sanitizeHTML(text)}</div>
+          <div class="${CONFIG.CLASS_PREFIX}queued-status">
+            <svg class="${CONFIG.CLASS_PREFIX}checkmark-icon" viewBox="0 0 52 52" width="52" height="52">
+              <circle class="${CONFIG.CLASS_PREFIX}checkmark-circle" cx="26" cy="26" r="25" fill="none"/>
+              <path class="${CONFIG.CLASS_PREFIX}checkmark-check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
+            </svg>
+          </div>
+        </div>
       `;
-      submitBtn.style.background = '#10b981';
-      submitBtn.style.color = 'white';
     }
   }
 
