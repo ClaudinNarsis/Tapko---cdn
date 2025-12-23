@@ -9,10 +9,7 @@ export const CONFIG = {
 
   // API Configuration
   API: {
-    baseUrl: typeof process !== 'undefined' && process.env && process.env.API_URL
-      ? process.env.API_URL
-      : 'https://5mjiz034ia.execute-api.ap-south-1.amazonaws.com/dev/api',
-      // : 'http://localhost:3000/api',
+    baseUrl: process.env.API_URL || 'https://5mjiz034ia.execute-api.ap-south-1.amazonaws.com/dev/api',
     version: '',
     timeout: 20000,
     retries: 3
@@ -74,11 +71,8 @@ export const CONFIG = {
 };
 
 // Log the API URL being used
-console.log('🔍 [Tapko Config] Environment Check:');
-console.log('  - process exists:', typeof process !== 'undefined');
-console.log('  - process.env exists:', typeof process !== 'undefined' && process.env);
-console.log('  - process.env.API_URL:', typeof process !== 'undefined' && process.env && process.env.API_URL);
-console.log('  - Final API baseUrl:', CONFIG.API.baseUrl);
+console.log('🔍 [Tapko Config] API Configuration:');
+console.log('  - API baseUrl:', CONFIG.API.baseUrl);
 console.log('---');
 
 // Freeze config to prevent modifications
