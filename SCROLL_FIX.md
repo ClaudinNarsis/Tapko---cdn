@@ -156,7 +156,7 @@ Works in all modern browsers:
    - Changed positioning from `fixed` to `absolute`
    - Added `pointer-events: none` to pin marker
 
-3. `dist/tapko-widget-v2.js`
+3. `dist/tapko-widget.js`
    - Rebuilt with fixes (67.34 KB)
 
 ---

@@ -77,7 +77,7 @@ async uploadAsset(blob, mimeType, type) {
 
 ## Build Status
 ✅ **Both fixes applied and rebuilt successfully**
-- File: dist/tapko-widget-v2.js
+- File: dist/tapko-widget.js
 - Size: 174.91 KB
 - Errors: 0
 - Warnings: 0

@@ -59,7 +59,7 @@ const injectCSSPlugin = {
 
 // Build configuration
 const entryPoint = 'src/index.js';
-const outfile = 'dist/tapko-widget-v2.js';
+const outfile = 'dist/tapko-widget.js';
 const version = 'v2.0.0';
 
 const buildOptions = {

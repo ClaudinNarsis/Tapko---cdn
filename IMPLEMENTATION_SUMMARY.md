@@ -120,7 +120,7 @@ src/
 
 ```bash
 ✓ Build complete!
-  File: dist/tapko-widget-v2.js
+  File: dist/tapko-widget.js
   Size: 174.63 KB
 ```
 
