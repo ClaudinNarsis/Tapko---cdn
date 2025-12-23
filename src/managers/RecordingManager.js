@@ -124,6 +124,13 @@ class RecordingManager {
   }
 
   /**
+   * Check if there is a recording available
+   */
+  hasRecording() {
+    return this.audioChunks.length > 0;
+  }
+
+  /**
    * Get recording duration in seconds
    */
   getDuration() {
