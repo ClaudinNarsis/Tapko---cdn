@@ -73,9 +73,9 @@ const buildOptions = {
   sourcemap: !isProduction,
   plugins: [injectCSSPlugin],
   define: {
-    'process.env.API_URL': JSON.stringify(
-      process.env.API_URL || 'https://api.tapko.com'
-    ),
+    'process.env.API_URL': process.env.API_URL
+      ? JSON.stringify(process.env.API_URL)
+      : 'undefined',
     'process.env.NODE_ENV': JSON.stringify(
       isProduction ? 'production' : 'development'
     )
@@ -92,7 +92,10 @@ const buildOptions = {
 async function build() {
   try {
     console.log(`Building Tapko Widget (${isProduction ? 'production' : 'development'})...`);
-    console.log('🔍 API_URL being injected into build:', process.env.API_URL || 'https://api.tapko.com');
+    console.log('🔍 Environment Variables:');
+    console.log('  - NODE_ENV:', process.env.NODE_ENV);
+    console.log('  - API_URL from env:', process.env.API_URL || '(not set)');
+    console.log('  - Value being injected:', process.env.API_URL ? process.env.API_URL : 'undefined (will use config.js fallback)');
     console.log('---');
 
     if (isWatch) {
