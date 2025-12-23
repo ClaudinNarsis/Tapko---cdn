@@ -112,7 +112,7 @@ async function build() {
 
       if (isProduction) {
         // Also create unminified version for debugging
-        const debugOutfile = 'dist/tapko-widget-v2.debug.js';
+        const debugOutfile = 'dist/tapko-widget.debug.js';
 
         await esbuild.build({
           ...buildOptions,
