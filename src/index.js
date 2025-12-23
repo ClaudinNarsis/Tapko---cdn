@@ -29,6 +29,7 @@ import { DrawingCanvas } from './components/DrawingCanvas.js';
 import { FeedbackDisabledPopup } from './components/FeedbackDisabledPopup.js';
 import { dispatchCustomEvent } from './utils/dom.js';
 import { logManager } from './managers/LogManager.js';
+import { analyticsManager } from './managers/AnalyticsManager.js';
 import FeedbackQueueManager from './managers/FeedbackQueueManager.js';
 import SyncStatusIndicator from './components/SyncStatusIndicator.js';
 import QueueViewerModal from './components/QueueViewerModal.js';
@@ -140,6 +141,9 @@ import NetworkStatusManager from './managers/NetworkStatusManager.js';
 
       // Inject styles
       this._injectStyles();
+
+      // Initialize analytics (NEW)
+      await analyticsManager.init(this.config.projectId, this.config.userId);
 
       // Initialize queue system (NEW)
       await this._initializeQueueSystem();
@@ -438,6 +442,9 @@ import NetworkStatusManager from './managers/NetworkStatusManager.js';
       if (this.disabledPopup) {
         this.disabledPopup.destroy();
       }
+
+      // Destroy analytics (NEW)
+      analyticsManager.destroy();
 
       // Destroy queue system components (NEW)
       if (this.queueManager) {
