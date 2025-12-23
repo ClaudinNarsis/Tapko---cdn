@@ -36,16 +36,22 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
+      - name: Debug S3 configuration
+        run: |
+          echo "DEV_S3_BUCKET: ${{ secrets.DEV_S3_BUCKET }}"
+          echo "DEV_S3_PATH: ${{ secrets.DEV_S3_PATH }}"
+          echo "Full S3 path will be: s3://${{ secrets.DEV_S3_BUCKET }}${{ secrets.DEV_S3_PATH }}tapko-widget.js"
+
       - name: Upload to S3 and set public ACL
         run: |
           aws s3 cp dist/tapko-widget.js \
-            "s3://${{ secrets.DEV_S3_BUCKET }}/${{ secrets.DEV_S3_PATH }}tapko-widget.js" \
+            "s3://${{ secrets.DEV_S3_BUCKET }}${{ secrets.DEV_S3_PATH }}tapko-widget.js" \
             --acl public-read \
             --cache-control "public, max-age=300" \
             --content-type "application/javascript"
 
           aws s3 cp dist/tapko-widget.debug.js \
-            "s3://${{ secrets.DEV_S3_BUCKET }}/${{ secrets.DEV_S3_PATH }}tapko-widget.debug.js" \
+            "s3://${{ secrets.DEV_S3_BUCKET }}${{ secrets.DEV_S3_PATH }}tapko-widget.debug.js" \
             --acl public-read \
             --cache-control "public, max-age=300" \
             --content-type "application/javascript"
@@ -53,5 +59,5 @@ jobs:
       - name: Deployment Summary
         run: |
           echo "✅ Dev deployment successful!"
-          echo "📦 Files uploaded to: s3://${{ secrets.DEV_S3_BUCKET }}/${{ secrets.DEV_S3_PATH }}"
-          echo "🔗 Public URL: https://${{ secrets.DEV_S3_BUCKET }}.s3.amazonaws.com/${{ secrets.DEV_S3_PATH }}tapko-widget.js"
+          echo "📦 Files uploaded to: s3://${{ secrets.DEV_S3_BUCKET }}${{ secrets.DEV_S3_PATH }}"
+          echo "🔗 Public URL: https://${{ secrets.DEV_S3_BUCKET }}.s3.amazonaws.com${{ secrets.DEV_S3_PATH }}tapko-widget.js"
