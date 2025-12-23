@@ -33,5 +33,5 @@ After rebuild, the queue system should now work correctly. Test by:
 
 ## Build Status
 ✅ **Fixed and rebuilt successfully**
-- File: dist/tapko-widget-v2.js
+- File: dist/tapko-widget.js
 - Size: 174.57 KB
