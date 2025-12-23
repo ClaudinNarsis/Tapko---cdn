@@ -39,13 +39,13 @@ jobs:
       - name: Upload to S3 and set public ACL
         run: |
           aws s3 cp dist/tapko-widget.js \
-            s3://${{ secrets.PROD_S3_BUCKET }}/${{ secrets.PROD_S3_PATH }}tapko-widget.js \
+            "s3://${{ secrets.PROD_S3_BUCKET }}/${{ secrets.PROD_S3_PATH }}tapko-widget.js" \
             --acl public-read \
             --cache-control "public, max-age=31536000" \
             --content-type "application/javascript"
 
           aws s3 cp dist/tapko-widget.debug.js \
-            s3://${{ secrets.PROD_S3_BUCKET }}/${{ secrets.PROD_S3_PATH }}tapko-widget.debug.js \
+            "s3://${{ secrets.PROD_S3_BUCKET }}/${{ secrets.PROD_S3_PATH }}tapko-widget.debug.js" \
             --acl public-read \
             --cache-control "public, max-age=31536000" \
             --content-type "application/javascript"
