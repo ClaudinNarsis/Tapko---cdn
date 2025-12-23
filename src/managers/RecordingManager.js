@@ -93,7 +93,7 @@ class RecordingManager {
 
           dispatchCustomEvent(CONFIG.EVENTS.RECORDING_STOPPED, {
             duration,
-            size: audioBlob.size
+            audioBlob: audioBlob
           });
 
           resolve({

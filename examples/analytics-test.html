@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tapko Widget - Analytics Test</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .header {
+      text-align: center;
+      color: white;
+      margin-bottom: 40px;
+    }
+
+    .header h1 {
+      font-size: 48px;
+      margin-bottom: 16px;
+      font-weight: 700;
+    }
+
+    .header p {
+      font-size: 20px;
+      opacity: 0.9;
+    }
+
+    .content {
+      background: white;
+      border-radius: 24px;
+      padding: 40px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+
+    .section {
+      margin-bottom: 32px;
+    }
+
+    .section h2 {
+      font-size: 24px;
+      margin-bottom: 16px;
+      color: #1f2937;
+    }
+
+    .section p {
+      font-size: 16px;
+      line-height: 1.6;
+      color: #4b5563;
+      margin-bottom: 16px;
+    }
+
+    .events-log {
+      background: #1f2937;
+      color: #10b981;
+      padding: 20px;
+      border-radius: 12px;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      max-height: 400px;
+      overflow-y: auto;
+      margin-top: 16px;
+    }
+
+    .event-item {
+      margin-bottom: 8px;
+      padding: 8px;
+      background: rgba(16, 185, 129, 0.1);
+      border-left: 3px solid #10b981;
+      border-radius: 4px;
+    }
+
+    .event-item .timestamp {
+      color: #6b7280;
+      margin-right: 8px;
+    }
+
+    .event-item .event-name {
+      color: #10b981;
+      font-weight: bold;
+    }
+
+    .event-item .params {
+      color: #9ca3af;
+      margin-left: 16px;
+      display: block;
+      margin-top: 4px;
+    }
+
+    .controls {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 16px;
+    }
+
+    .btn {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn-primary {
+      background: #4f46e5;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #4338ca;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+    }
+
+    .btn-secondary {
+      background: #e5e7eb;
+      color: #1f2937;
+    }
+
+    .btn-secondary:hover {
+      background: #d1d5db;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    .stat-card {
+      background: #f9fafb;
+      border: 2px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .stat-value {
+      font-size: 32px;
+      font-weight: bold;
+      color: #4f46e5;
+      margin-bottom: 8px;
+    }
+
+    .stat-label {
+      font-size: 14px;
+      color: #6b7280;
+    }
+
+    .demo-card {
+      background: #f9fafb;
+      border: 2px solid #e5e7eb;
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 16px;
+      transition: all 0.3s ease;
+    }
+
+    .demo-card:hover {
+      border-color: #c6b8ff;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+    }
+
+    .demo-card h3 {
+      font-size: 20px;
+      margin-bottom: 12px;
+      color: #1f2937;
+    }
+
+    .alert {
+      background: #fef3c7;
+      border-left: 4px solid #f59e0b;
+      padding: 16px;
+      border-radius: 8px;
+      margin-bottom: 24px;
+    }
+
+    .alert strong {
+      color: #92400e;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>📊 Analytics Test Dashboard</h1>
+      <p>Google Analytics 4 Integration Test</p>
+    </div>
+
+    <div class="content">
+      <div class="alert">
+        <strong>⚠️ Important:</strong> This page tracks all widget interactions to Google Analytics 4 (G-KBPCZXZR96).
+        Open your browser's console to see events being sent, or check your GA4 Real-Time reports.
+      </div>
+
+      <div class="section">
+        <h2>📈 Event Statistics</h2>
+        <div class="stats">
+          <div class="stat-card">
+            <div class="stat-value" id="total-events">0</div>
+            <div class="stat-label">Total Events</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="widget-events">0</div>
+            <div class="stat-label">Widget Events</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="comment-events">0</div>
+            <div class="stat-label">Comment Events</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="drawing-events">0</div>
+            <div class="stat-label">Drawing Events</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>🎯 Test Actions</h2>
+        <p>Click these buttons to trigger different widget actions and see analytics events in real-time:</p>
+        <div class="controls">
+          <button class="btn btn-primary" onclick="enterFeedbackMode()">Enter Feedback Mode</button>
+          <button class="btn btn-secondary" onclick="exitFeedbackMode()">Exit Feedback Mode</button>
+          <button class="btn btn-secondary" onclick="clearLog()">Clear Event Log</button>
+          <button class="btn btn-secondary" onclick="checkGA()">Check GA4 Status</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>🎨 Interactive Test Area</h2>
+        <p>Enter feedback mode and click these cards to test comment creation and analytics tracking:</p>
+
+        <div class="demo-card">
+          <h3>🎯 Test Card 1</h3>
+          <p>Click this card in feedback mode to create a comment and track the interaction.</p>
+        </div>
+
+        <div class="demo-card">
+          <h3>✏️ Test Card 2</h3>
+          <p>Try the drawing feature when commenting on this card.</p>
+        </div>
+
+        <div class="demo-card">
+          <h3>🎤 Test Card 3</h3>
+          <p>Test voice recording on this card (if enabled).</p>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>📋 Events Log</h2>
+        <p>All widget events being tracked to Google Analytics 4:</p>
+        <div class="events-log" id="events-log">
+          <div style="color: #6b7280;">Waiting for events...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Load Tapko Widget -->
+  <script src="../dist/tapko-widget.js"></script>
+  <script>
+    let eventCount = {
+      total: 0,
+      widget: 0,
+      comment: 0,
+      drawing: 0
+    };
+
+    // Initialize widget
+    (async () => {
+      try {
+        console.log('[Analytics Test] Initializing Tapko widget...');
+
+        await Tapko.init({
+          projectId: '59e0ad62-b8f3-44e3-937d-ccaf0d14655f',
+          apiKey: 'demo-api-key',
+          userId: 'analytics-test-user-' + Date.now()
+        });
+
+        console.log('[Analytics Test] Widget initialized!');
+        logEvent('widget_initialized', { status: 'success' });
+      } catch (error) {
+        console.error('[Analytics Test] Initialization error:', error);
+        logEvent('initialization_error', { error: error.message });
+      }
+    })();
+
+    // Listen for all Tapko events
+    const tapkoEvents = [
+      'tapko:initialized',
+      'tapko:feedback:mode:entered',
+      'tapko:feedback:mode:exited',
+      'tapko:feedback:target:selected',
+      'tapko:comment:created',
+      'tapko:comment:submitted',
+      'tapko:comment:closed',
+      'tapko:drawing:started',
+      'tapko:drawing:completed',
+      'tapko:drawing:undo',
+      'tapko:drawing:cleared',
+      'tapko:recording:started',
+      'tapko:recording:stopped',
+      'tapko:error'
+    ];
+
+    tapkoEvents.forEach(eventName => {
+      window.addEventListener(eventName, (e) => {
+        console.log(`[Analytics Test] Event fired: ${eventName}`, e.detail);
+        logEvent(eventName, e.detail || {});
+
+        // Update counts
+        eventCount.total++;
+        if (eventName.includes('comment')) eventCount.comment++;
+        if (eventName.includes('drawing')) eventCount.drawing++;
+        if (eventName === 'tapko:initialized') eventCount.widget++;
+
+        updateStats();
+      });
+    });
+
+    // Intercept gtag calls to show what's being sent to GA4
+    if (window.gtag) {
+      const originalGtag = window.gtag;
+      window.gtag = function(...args) {
+        if (args[0] === 'event') {
+          console.log('[GA4] Event sent:', args[1], args[2]);
+        }
+        return originalGtag.apply(this, args);
+      };
+    }
+
+    // Wait for gtag to be loaded by AnalyticsManager
+    setTimeout(() => {
+      if (window.gtag) {
+        const originalGtag = window.gtag;
+        window.gtag = function(...args) {
+          if (args[0] === 'event') {
+            console.log('[GA4] Event sent:', args[1], args[2]);
+          }
+          return originalGtag.apply(this, args);
+        };
+      }
+    }, 2000);
+
+    function logEvent(eventName, params) {
+      const log = document.getElementById('events-log');
+      const timestamp = new Date().toLocaleTimeString();
+
+      const eventItem = document.createElement('div');
+      eventItem.className = 'event-item';
+      eventItem.innerHTML = `
+        <span class="timestamp">${timestamp}</span>
+        <span class="event-name">${eventName}</span>
+        <span class="params">${JSON.stringify(params, null, 2)}</span>
+      `;
+
+      if (log.firstChild.style && log.firstChild.style.color === 'rgb(107, 114, 128)') {
+        log.innerHTML = '';
+      }
+
+      log.insertBefore(eventItem, log.firstChild);
+
+      // Keep only last 50 events
+      while (log.children.length > 50) {
+        log.removeChild(log.lastChild);
+      }
+    }
+
+    function updateStats() {
+      document.getElementById('total-events').textContent = eventCount.total;
+      document.getElementById('widget-events').textContent = eventCount.widget;
+      document.getElementById('comment-events').textContent = eventCount.comment;
+      document.getElementById('drawing-events').textContent = eventCount.drawing;
+    }
+
+    function enterFeedbackMode() {
+      Tapko.enterFeedbackMode();
+    }
+
+    function exitFeedbackMode() {
+      Tapko.exitFeedbackMode();
+    }
+
+    function clearLog() {
+      document.getElementById('events-log').innerHTML = '<div style="color: #6b7280;">Log cleared. Waiting for events...</div>';
+      eventCount = { total: 0, widget: 0, comment: 0, drawing: 0 };
+      updateStats();
+    }
+
+    function checkGA() {
+      const hasGtag = !!window.gtag;
+      const hasDataLayer = !!window.dataLayer;
+
+      logEvent('ga4_check', {
+        gtag_loaded: hasGtag,
+        dataLayer_loaded: hasDataLayer,
+        dataLayer_size: hasDataLayer ? window.dataLayer.length : 0
+      });
+
+      alert(`Google Analytics 4 Status:\n\n` +
+            `✓ gtag loaded: ${hasGtag}\n` +
+            `✓ dataLayer loaded: ${hasDataLayer}\n` +
+            `✓ dataLayer size: ${hasDataLayer ? window.dataLayer.length : 0}\n\n` +
+            `Check console for detailed event tracking.`);
+    }
+
+    // Log initial page view
+    window.addEventListener('load', () => {
+      logEvent('page_loaded', { url: window.location.href });
+    });
+  </script>
+</body>
+</html>

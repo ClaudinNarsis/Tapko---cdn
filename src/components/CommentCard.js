@@ -557,8 +557,19 @@ class CommentCard {
     // 6. Show "queued" success state
     this._showQueued();
 
-    // 7. Dispatch queued event
+    // 7. Dispatch events
     dispatchCustomEvent('tapko:comment:queued', { queueId });
+    dispatchCustomEvent(CONFIG.EVENTS.COMMENT_SUBMITTED, {
+      queueId,
+      hasText: !!text,
+      hasEmoji: !!this.selectedEmoji,
+      hasScreenshot: !!this.screenshot,
+      hasDrawing: !!this.drawingData,
+      hasRecording: this.recordingManager.hasRecording(),
+      targetTag: this.target.tagName,
+      commentLength: text.length,
+      wasQueued: true
+    });
 
     // 8. Close card after brief confirmation display
     setTimeout(() => {
@@ -701,7 +712,15 @@ class CommentCard {
     // Dispatch event
     dispatchCustomEvent(CONFIG.EVENTS.COMMENT_SUBMITTED, {
       feedbackId: response.feedbackId,
-      data: payload
+      data: payload,
+      hasText: !!text,
+      hasEmoji: !!this.selectedEmoji,
+      hasScreenshot: !!this.screenshot,
+      hasDrawing: !!this.drawingData,
+      hasRecording: this.recordingManager.hasRecording(),
+      targetTag: this.target.tagName,
+      commentLength: text.length,
+      wasQueued: false
     });
 
     const timingEnd = performance.now();
