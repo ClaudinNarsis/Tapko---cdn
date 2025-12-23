@@ -7,6 +7,31 @@ const esbuild = require('esbuild');
 const fs = require('fs');
 const path = require('path');
 
+// Load environment variables from .env file
+const envPath = path.join(__dirname, '.env');
+if (fs.existsSync(envPath)) {
+  const envContent = fs.readFileSync(envPath, 'utf8');
+  const envVars = envContent.split('\n')
+    .filter(line => line.trim() && !line.startsWith('#'))
+    .reduce((acc, line) => {
+      const [key, ...valueParts] = line.split('=');
+      if (key && valueParts.length) {
+        acc[key.trim()] = valueParts.join('=').trim();
+      }
+      return acc;
+    }, {});
+
+  // Only set env vars if they don't already exist
+  Object.keys(envVars).forEach(key => {
+    if (!process.env[key]) {
+      process.env[key] = envVars[key];
+    }
+  });
+
+  console.log('📝 Loaded .env file');
+  console.log('   API_URL from .env:', envVars.API_URL);
+}
+
 const isProduction = process.env.NODE_ENV === 'production';
 const isWatch = process.argv.includes('--watch');
 
@@ -33,10 +58,14 @@ const injectCSSPlugin = {
 };
 
 // Build configuration
+const entryPoint = 'src/index.js';
+const outfile = 'dist/tapko-widget-v2.js';
+const version = 'v2.0.0';
+
 const buildOptions = {
-  entryPoints: ['src/index.js'],
+  entryPoints: [entryPoint],
   bundle: true,
-  outfile: 'dist/tapko-widget.js',
+  outfile: outfile,
   format: 'iife',
   target: ['es2015'],
   platform: 'browser',
@@ -53,7 +82,7 @@ const buildOptions = {
   },
   banner: {
     js: `/**
- * Tapko Widget v1.0.0
+ * Tapko Widget ${version}
  * Copyright (c) ${new Date().getFullYear()}
  * Licensed under MIT
  */`
@@ -63,6 +92,8 @@ const buildOptions = {
 async function build() {
   try {
     console.log(`Building Tapko Widget (${isProduction ? 'production' : 'development'})...`);
+    console.log('🔍 API_URL being injected into build:', process.env.API_URL || 'https://api.tapko.com');
+    console.log('---');
 
     if (isWatch) {
       const context = await esbuild.context(buildOptions);
@@ -72,22 +103,24 @@ async function build() {
       await esbuild.build(buildOptions);
 
       // Get file size
-      const stats = fs.statSync('dist/tapko-widget.js');
+      const stats = fs.statSync(outfile);
       const fileSizeInKB = (stats.size / 1024).toFixed(2);
 
       console.log(`✓ Build complete!`);
-      console.log(`  File: dist/tapko-widget.js`);
+      console.log(`  File: ${outfile}`);
       console.log(`  Size: ${fileSizeInKB} KB`);
 
       if (isProduction) {
         // Also create unminified version for debugging
+        const debugOutfile = 'dist/tapko-widget-v2.debug.js';
+
         await esbuild.build({
           ...buildOptions,
-          outfile: 'dist/tapko-widget.debug.js',
+          outfile: debugOutfile,
           minify: false,
           sourcemap: true
         });
-        console.log(`  Debug: dist/tapko-widget.debug.js`);
+        console.log(`  Debug: ${debugOutfile}`);
       }
     }
   } catch (error) {

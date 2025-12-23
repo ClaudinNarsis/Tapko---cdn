@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tapko V2 - Click Precision Test</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f9fafb;
+      padding: 40px 20px;
+      min-height: 200vh;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 60px;
+      background: white;
+      padding: 40px;
+      border-radius: 16px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .header h1 {
+      font-size: 36px;
+      margin-bottom: 16px;
+      color: #1f2937;
+    }
+
+    .instructions {
+      background: #eff6ff;
+      border-left: 4px solid #3b82f6;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 30px;
+    }
+
+    .instructions h3 {
+      color: #1e40af;
+      margin-bottom: 12px;
+      font-size: 18px;
+    }
+
+    .instructions ol {
+      margin-left: 24px;
+      color: #1e3a8a;
+      line-height: 1.8;
+    }
+
+    .test-section {
+      background: white;
+      border-radius: 16px;
+      padding: 40px;
+      margin-bottom: 40px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .test-section h2 {
+      font-size: 24px;
+      margin-bottom: 20px;
+      color: #1f2937;
+    }
+
+    /* Long text test */
+    .long-text {
+      font-size: 18px;
+      line-height: 1.8;
+      color: #374151;
+      padding: 20px;
+      background: #f9fafb;
+      border-radius: 12px;
+      margin-bottom: 20px;
+    }
+
+    .highlight {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+
+    /* Image test */
+    .image-container {
+      position: relative;
+      margin-bottom: 20px;
+    }
+
+    .test-image {
+      width: 100%;
+      height: 400px;
+      object-fit: cover;
+      border-radius: 12px;
+      cursor: pointer;
+    }
+
+    /* Button test */
+    .button-container {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+
+    .test-button {
+      padding: 16px 32px;
+      font-size: 16px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .test-button.primary {
+      background: #4f46e5;
+      color: white;
+    }
+
+    .test-button.secondary {
+      background: #e5e7eb;
+      color: #1f2937;
+    }
+
+    /* Grid test */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+
+    .grid-item {
+      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      color: white;
+      padding: 30px;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: transform 0.2s ease;
+    }
+
+    .grid-item:hover {
+      transform: scale(1.02);
+    }
+
+    .grid-item h3 {
+      font-size: 18px;
+      margin-bottom: 10px;
+    }
+
+    /* Large paragraph test */
+    .paragraph {
+      font-size: 16px;
+      line-height: 1.8;
+      color: #4b5563;
+      margin-bottom: 20px;
+    }
+
+    .success-box {
+      background: #d1fae5;
+      border: 2px solid #10b981;
+      border-radius: 8px;
+      padding: 16px;
+      color: #065f46;
+      margin-top: 20px;
+    }
+
+    .spacer {
+      height: 300px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #f3f4f6;
+      border-radius: 12px;
+      color: #6b7280;
+      font-size: 18px;
+      margin: 40px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🎯 Click Precision Test</h1>
+      <p>Testing that pin markers appear exactly where you click</p>
+    </div>
+
+    <div class="test-section">
+      <div class="instructions">
+        <h3>Test Instructions</h3>
+        <ol>
+          <li>Click the floating button (bottom-right) to enter feedback mode</li>
+          <li>Click anywhere on the elements below</li>
+          <li>✅ The pin marker should appear EXACTLY where you clicked</li>
+          <li>✅ The comment bubble should appear next to your click point</li>
+          <li>✅ When scrolling, the pin should stay at that same relative position on the element</li>
+        </ol>
+      </div>
+    </div>
+
+    <!-- Test 1: Long Text -->
+    <div class="test-section">
+      <h2>Test 1: Long Text - Click Anywhere in the Text</h2>
+      <div class="long-text">
+        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+        <span class="highlight">Try clicking in the middle of this highlighted text</span> and watch the pin marker appear exactly where you clicked,
+        not at the beginning of the element. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+        Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
+      </div>
+      <div class="success-box">
+        ✅ Expected: Pin appears at your exact click location, even if you click in the middle of a word
+      </div>
+    </div>
+
+    <div class="spacer">↓ Scroll to test more scenarios ↓</div>
+
+    <!-- Test 2: Image -->
+    <div class="test-section">
+      <h2>Test 2: Image - Click Different Parts</h2>
+      <div class="image-container">
+        <img src="https://images.unsplash.com/photo-1557821552-17105176677c?w=1200&h=400&fit=crop"
+             alt="Test"
+             class="test-image">
+      </div>
+      <div class="success-box">
+        ✅ Expected: Pin appears exactly where you click on the image (top-left, center, bottom-right, anywhere)
+      </div>
+    </div>
+
+    <!-- Test 3: Buttons -->
+    <div class="test-section">
+      <h2>Test 3: Buttons - Click Different Spots</h2>
+      <div class="button-container">
+        <button class="test-button primary">Click Left Side of This Button</button>
+        <button class="test-button secondary">Click Right Side of This Button</button>
+        <button class="test-button primary">Click Center of Button</button>
+      </div>
+      <div class="success-box">
+        ✅ Expected: Pin appears at the exact spot you clicked on each button
+      </div>
+    </div>
+
+    <div class="spacer">↓ More tests below ↓</div>
+
+    <!-- Test 4: Grid -->
+    <div class="test-section">
+      <h2>Test 4: Grid Items - Click Corners and Center</h2>
+      <div class="grid">
+        <div class="grid-item">
+          <h3>Item 1</h3>
+          <p>Click top-left corner</p>
+        </div>
+        <div class="grid-item">
+          <h3>Item 2</h3>
+          <p>Click center</p>
+        </div>
+        <div class="grid-item">
+          <h3>Item 3</h3>
+          <p>Click bottom-right corner</p>
+        </div>
+        <div class="grid-item">
+          <h3>Item 4</h3>
+          <p>Click anywhere</p>
+        </div>
+      </div>
+      <div class="success-box">
+        ✅ Expected: Pin appears at your exact click point within each grid item
+      </div>
+    </div>
+
+    <!-- Test 5: Large Paragraph -->
+    <div class="test-section">
+      <h2>Test 5: Multi-Line Paragraph - Click Different Lines</h2>
+      <div class="paragraph">
+        This is line one of the paragraph. Try clicking at the beginning of this line.<br><br>
+
+        This is line two. Try clicking in the middle of this line somewhere around here.<br><br>
+
+        This is line three. Try clicking at the very end of this line to see if the pin appears there.<br><br>
+
+        This is the final line. Click anywhere and scroll to verify the pin stays at the exact click location relative to the text element.
+      </div>
+      <div class="success-box">
+        ✅ Expected: Pin appears on the exact line and position where you clicked
+      </div>
+    </div>
+
+    <div class="spacer">🎉 End of precision tests 🎉</div>
+
+    <!-- Summary -->
+    <div class="test-section">
+      <h2>✅ All Tests Should Show</h2>
+      <ul style="margin-left: 24px; line-height: 2;">
+        <li>Pin marker at EXACT click coordinates</li>
+        <li>Comment bubble positioned next to click point</li>
+        <li>Pin stays at same relative position when scrolling</li>
+        <li>Works for all element types (text, images, buttons, divs)</li>
+        <li>Works anywhere within the element (start, middle, end, corners)</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Load Tapko Widget V2 -->
+  <script src="../dist/tapko-widget-v2.js"></script>
+  <script>
+    // Initialize widget
+    (async () => {
+      try {
+        await Tapko.init({
+          projectId: '59e0ad62-b8f3-44e3-937d-ccaf0d14655f',
+          apiKey: 'demo-api-key',
+          userId: 'test-user-precision'
+        });
+
+        console.log('✅ Widget initialized - Click floating button to start');
+      } catch (error) {
+        console.error('❌ Failed to initialize:', error.message);
+      }
+    })();
+
+    // Log click positions for debugging
+    window.addEventListener('tapko:feedback:target:selected', (e) => {
+      console.log('Click detected at:', {
+        x: e.detail.coordinates.x,
+        y: e.detail.coordinates.y,
+        element: e.detail.element.tagName
+      });
+    });
+  </script>
+</body>
+</html>

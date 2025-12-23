@@ -1,30 +1,42 @@
 /**
  * Tapko Widget - Main Entry Point
- * CDN-served commenting widget for third-party websites
+ * CDN-served feedback widget with gesture-free, discoverable design
+ *
+ * Architecture:
+ * - Floating Entry Button (always visible)
+ * - Feedback Mode Overlay (4% tint, intercepts clicks)
+ * - Single-tap comment creation
+ * - Explicit drawing mode via button
+ * - No hidden gestures
  *
  * Usage:
- *   <script src="https://cdn.tapko.com/v1/tapko-widget.min.js"></script>
+ *   <script src="https://cdn.tapko.com/tapko-widget.min.js"></script>
  *   <script>
- *     // init() is async and validates the project before initializing
  *     await Tapko.init({
  *       projectId: 'your-project-id',
- *       apiKey: 'your-api-key', // Optional
- *       userId: 'user-123' // Optional: identify the current user
+ *       apiKey: 'your-api-key',
+ *       userId: 'user-123'
  *     });
  *   </script>
- *
- * The widget will:
- * - Validate the projectId and userId with the backend
- * - Throw an error if the project doesn't exist
- * - Disable itself if the project is not collecting feedback
  */
 
 import { CONFIG } from './config.js';
 import { APIClient } from './api/client.js';
+import { FloatingEntryButton } from './components/FloatingEntryButton.js';
+import { FeedbackModeOverlay } from './components/FeedbackModeOverlay.js';
 import { CommentCard } from './components/CommentCard.js';
+import { DrawingCanvas } from './components/DrawingCanvas.js';
+import { FeedbackDisabledPopup } from './components/FeedbackDisabledPopup.js';
 import { dispatchCustomEvent } from './utils/dom.js';
+import { logManager } from './managers/LogManager.js';
+import FeedbackQueueManager from './managers/FeedbackQueueManager.js';
+import SyncStatusIndicator from './components/SyncStatusIndicator.js';
+import QueueViewerModal from './components/QueueViewerModal.js';
+import SyncLifecycleManager from './managers/SyncLifecycleManager.js';
+import NetworkStatusManager from './managers/NetworkStatusManager.js';
+import PulseMarkerManager from './managers/PulseMarkerManager.js';
 
-(function(window, document) {
+(function (window, document) {
   'use strict';
 
   // Prevent multiple initializations
@@ -43,16 +55,29 @@ import { dispatchCustomEvent } from './utils/dom.js';
       this.isInitialized = false;
       this.isDisabled = false;
       this.projectData = null;
-      this.activeCards = new Set();
 
-      // Event handlers (stored for cleanup)
-      this.handleDoubleClick = null;
-      this.handleTouchStart = null;
-      this.handleDragStart = null;
+      // Initialize log capture immediately
+      logManager.init();
 
-      // Double-tap tracking
-      this.lastTapTime = 0;
-      this.lastTapTarget = null;
+      // V2 Components
+      this.floatingButton = new FloatingEntryButton();
+      this.feedbackOverlay = null;
+      this.drawingCanvas = null;
+      this.disabledPopup = new FeedbackDisabledPopup();
+
+      // Queue system components (NEW)
+      this.queueManager = null;
+      this.syncIndicator = null;
+      this.queueViewer = null;
+      this.lifecycleManager = null;
+      this.networkManager = null;
+      this.pulseMarkerManager = null;
+
+      // State
+      this.isInFeedbackMode = false;
+      this.activeCard = null;
+      this.escPressCount = 0;
+      this.escTimeout = null;
     }
 
     /**
@@ -97,30 +122,39 @@ import { dispatchCustomEvent } from './utils/dom.js';
         if (!validation.status.isCollectingFeedback) {
           console.warn('[Tapko] Project is not currently collecting feedback. Widget is disabled.');
           this.isDisabled = true;
-          dispatchCustomEvent(CONFIG.EVENTS.ERROR, {
-            message: 'Project is not collecting feedback',
-            type: 'PROJECT_DISABLED',
-            validation
-          });
+          // dispatchCustomEvent(CONFIG.EVENTS.ERROR, {
+          //   message: 'Project is not collecting feedback',
+          //   type: 'PROJECT_DISABLED',
+          //   validation
+          // });
+          // Don't return, allow initialization in disabled state
         }
+
+
 
         this.projectData = validation.data;
       } catch (error) {
-        // If validation fails, throw error
         if (error.message.includes('Project not found')) {
           throw error;
         }
-        // For network errors, warn but continue (fail gracefully)
         console.warn('[Tapko] Failed to validate project:', error.message);
       }
 
       // Inject styles
       this._injectStyles();
 
-      // Setup event listeners (only if not disabled)
-      if (!this.isDisabled) {
-        this._setupEventListeners();
+      // Initialize queue system (NEW)
+      await this._initializeQueueSystem();
+
+      // Create floating entry button
+      this.floatingButton.create(() => this._toggleFeedbackMode());
+      if (this.isDisabled) {
+        this.floatingButton.setDisabled(true);
       }
+      this.floatingButton.show();
+
+      // Setup ESC key handler
+      this._setupEscapeHandler();
 
       this.isInitialized = true;
 
@@ -129,10 +163,11 @@ import { dispatchCustomEvent } from './utils/dom.js';
         version: CONFIG.VERSION,
         config: this.config,
         projectData: this.projectData,
-        isDisabled: this.isDisabled
+        isDisabled: this.isDisabled,
+        queueEnabled: this.queueManager?.initialized || false
       });
 
-      console.log('[Tapko] Widget initialized', CONFIG.VERSION, this.isDisabled ? '(disabled - not collecting feedback)' : '');
+      console.log('[Tapko] Widget initialized', CONFIG.VERSION);
     }
 
     /**
@@ -149,97 +184,180 @@ import { dispatchCustomEvent } from './utils/dom.js';
     }
 
     /**
-     * Setup event listeners for double-click and double-tap
+     * Setup ESC key handler
      */
-    _setupEventListeners() {
-      // Double-click (desktop)
-      if (this.config.doubleClickEnabled) {
-        this.handleDoubleClick = this._onDoubleClick.bind(this);
-        document.addEventListener('dblclick', this.handleDoubleClick, true);
-      }
-
-      // Double-tap (mobile)
-      if (this.config.doubleTapEnabled) {
-        this.handleTouchStart = this._onTouchStart.bind(this);
-        document.addEventListener('touchstart', this.handleTouchStart, true);
-      }
-
-      // Prevent image dragging from interfering
-      this.handleDragStart = (e) => {
-        if (e.target.tagName === 'IMG') {
-          e.preventDefault();
+    _setupEscapeHandler() {
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          this._handleEscape();
         }
-      };
-      document.addEventListener('dragstart', this.handleDragStart, true);
+      });
     }
 
     /**
-     * Handle double-click event
+     * Handle ESC key press
+     * First ESC closes active card, second ESC exits feedback mode
      */
-    _onDoubleClick(event) {
-      // Prevent default behaviors
-      event.preventDefault();
-      event.stopPropagation();
-
-      // Make images explicitly support comments
-      if (event.target.tagName === 'IMG') {
-        event.target.style.userSelect = 'none';
+    _handleEscape() {
+      // Clear previous timeout
+      if (this.escTimeout) {
+        clearTimeout(this.escTimeout);
       }
 
-      this._createCommentCard(event.target);
-    }
+      this.escPressCount++;
 
-    /**
-     * Handle touch start for double-tap detection
-     */
-    _onTouchStart(event) {
-      const now = Date.now();
-      const tapTarget = event.target;
-      const delta = now - this.lastTapTime;
+      if (this.escPressCount === 1) {
+        // First ESC: close active card or drawing
+        if (this.activeCard) {
+          this.activeCard.close();
+          this.activeCard = null;
+        } else if (this.drawingCanvas) {
+          this._exitDrawingMode();
+        }
 
-      if (delta > 0 && delta < this.config.doubleTapDelay && tapTarget === this.lastTapTarget) {
-        event.preventDefault();
-        event.stopPropagation();
-        this._createCommentCard(tapTarget);
-        this.lastTapTime = 0;
-        this.lastTapTarget = null;
-      } else {
-        this.lastTapTime = now;
-        this.lastTapTarget = tapTarget;
+        // Reset count after 1 second
+        this.escTimeout = setTimeout(() => {
+          this.escPressCount = 0;
+        }, 1000);
+      } else if (this.escPressCount === 2) {
+        // Second ESC: exit feedback mode
+        if (this.isInFeedbackMode) {
+          this._exitFeedbackMode();
+        }
+        this.escPressCount = 0;
       }
     }
 
     /**
-     * Create comment card
+     * Toggle feedback mode
      */
-    _createCommentCard(target) {
-      if (!this.isInitialized) {
-        console.warn('[Tapko] Widget not initialized');
-        return;
-      }
-
+    _toggleFeedbackMode() {
       if (this.isDisabled) {
-        console.warn('[Tapko] Widget is disabled. Project is not collecting feedback.');
-        dispatchCustomEvent(CONFIG.EVENTS.ERROR, {
-          message: 'Widget is disabled. Project is not collecting feedback.',
-          type: 'WIDGET_DISABLED'
-        });
+        this.disabledPopup.show();
         return;
+      }
+
+      if (this.isInFeedbackMode) {
+        this._exitFeedbackMode();
+      } else {
+        this._enterFeedbackMode();
+      }
+    }
+
+    /**
+     * Enter feedback mode
+     */
+    _enterFeedbackMode() {
+      if (this.isInFeedbackMode || this.isDisabled) return;
+
+      this.isInFeedbackMode = true;
+
+      // Update floating button
+      this.floatingButton.setFeedbackMode(true);
+
+      // Create overlay
+      this.feedbackOverlay = new FeedbackModeOverlay();
+      this.feedbackOverlay.create((element, coordinates) => {
+        this._createCommentCard(element, coordinates);
+      });
+
+      // Show pulse markers when entering feedback mode
+      if (this.pulseMarkerManager) {
+        this.pulseMarkerManager.showAll();
+      }
+
+      // Dispatch event
+      dispatchCustomEvent(CONFIG.EVENTS.FEEDBACK_MODE_ENTERED);
+
+      console.log('[Tapko] Entered feedback mode');
+    }
+
+    /**
+     * Exit feedback mode
+     */
+    _exitFeedbackMode() {
+      if (!this.isInFeedbackMode) return;
+
+      this.isInFeedbackMode = false;
+
+      // Update floating button
+      this.floatingButton.setFeedbackMode(false);
+
+      // Close active card
+      if (this.activeCard) {
+        this.activeCard.close();
+        this.activeCard = null;
+      }
+
+      // Exit drawing mode
+      if (this.drawingCanvas) {
+        this._exitDrawingMode();
+      }
+
+      // Destroy overlay
+      if (this.feedbackOverlay) {
+        this.feedbackOverlay.destroy();
+        this.feedbackOverlay = null;
+      }
+
+      // Hide pulse markers when exiting feedback mode
+      if (this.pulseMarkerManager) {
+        this.pulseMarkerManager.hideAll();
+      }
+
+      // Dispatch event
+      dispatchCustomEvent(CONFIG.EVENTS.FEEDBACK_MODE_EXITED);
+
+      console.log('[Tapko] Exited feedback mode');
+    }
+
+    /**
+     * Create comment card at tapped location
+     */
+    _createCommentCard(element, coordinates) {
+      if (!this.isInitialized || this.isDisabled) {
+        return;
+      }
+
+      // Close existing card
+      if (this.activeCard) {
+        this.activeCard.close();
+      }
+
+      // Hide pulse markers when opening a comment card
+      if (this.pulseMarkerManager) {
+        this.pulseMarkerManager.hideAll();
       }
 
       try {
-        const card = new CommentCard(target, this.apiClient);
-        this.activeCards.add(card);
+        const card = new CommentCard(element, coordinates, this.apiClient);
 
-        // Remove from active cards when closed
+        // Set draw callback
+        card.setDrawCallback((onComplete) => {
+          this._enterDrawingMode(onComplete);
+        });
+
+        this.activeCard = card;
+
+        // Remove from active when closed
         const originalClose = card.close.bind(card);
         card.close = () => {
           originalClose();
-          this.activeCards.delete(card);
+          if (this.activeCard === card) {
+            this.activeCard = null;
+            // Show snackbar again when card is closed
+            if (this.isInFeedbackMode && this.feedbackOverlay && this.feedbackOverlay.snackbar) {
+              this.feedbackOverlay.snackbar.show('Feedback mode — tap anything', { type: 'info' });
+            }
+            // Show pulse markers again when card is closed (if still in feedback mode)
+            if (this.isInFeedbackMode && this.pulseMarkerManager) {
+              this.pulseMarkerManager.showAll();
+            }
+          }
         };
 
         dispatchCustomEvent(CONFIG.EVENTS.COMMENT_CREATED, {
-          targetTag: target.tagName
+          targetTag: element.tagName
         });
       } catch (error) {
         console.error('[Tapko] Error creating comment card:', error);
@@ -251,27 +369,76 @@ import { dispatchCustomEvent } from './utils/dom.js';
     }
 
     /**
-     * Programmatically create comment on element
+     * Enter drawing mode
      */
-    createComment(selector) {
-      const element = typeof selector === 'string'
-        ? document.querySelector(selector)
-        : selector;
+    _enterDrawingMode(onComplete) {
+      if (this.drawingCanvas) return;
 
-      if (!element) {
-        console.error('[Tapko] Element not found:', selector);
-        return;
+      // Update overlay label
+      if (this.feedbackOverlay) {
+        this.feedbackOverlay.setDrawingMode(true);
       }
 
-      this._createCommentCard(element);
+      // Create drawing canvas
+      this.drawingCanvas = new DrawingCanvas();
+      this.drawingCanvas.create(
+        (drawingData) => {
+          // Done callback
+          if (onComplete) {
+            onComplete(drawingData);
+          }
+          this._exitDrawingMode();
+        },
+        () => {
+          // Cancel callback
+          this._exitDrawingMode();
+        }
+      );
+
+      dispatchCustomEvent(CONFIG.EVENTS.DRAWING_STARTED);
     }
 
     /**
-     * Close all active comment cards
+     * Exit drawing mode
+     */
+    _exitDrawingMode() {
+      if (!this.drawingCanvas) return;
+
+      // Update overlay label
+      if (this.feedbackOverlay) {
+        this.feedbackOverlay.setDrawingMode(false);
+      }
+
+      // Destroy canvas
+      this.drawingCanvas.destroy();
+      this.drawingCanvas = null;
+    }
+
+    /**
+     * Programmatically enter feedback mode
+     */
+    enterFeedbackMode() {
+      this._enterFeedbackMode();
+    }
+
+    /**
+     * Programmatically exit feedback mode
+     */
+    exitFeedbackMode() {
+      this._exitFeedbackMode();
+    }
+
+    /**
+     * Close all active components
      */
     closeAll() {
-      this.activeCards.forEach(card => card.close());
-      this.activeCards.clear();
+      if (this.activeCard) {
+        this.activeCard.close();
+        this.activeCard = null;
+      }
+      if (this.isInFeedbackMode) {
+        this._exitFeedbackMode();
+      }
     }
 
     /**
@@ -280,19 +447,38 @@ import { dispatchCustomEvent } from './utils/dom.js';
     destroy() {
       if (!this.isInitialized) return;
 
-      // Remove event listeners
-      if (this.handleDoubleClick) {
-        document.removeEventListener('dblclick', this.handleDoubleClick, true);
-      }
-      if (this.handleTouchStart) {
-        document.removeEventListener('touchstart', this.handleTouchStart, true);
-      }
-      if (this.handleDragStart) {
-        document.removeEventListener('dragstart', this.handleDragStart, true);
+      // Exit feedback mode
+      this._exitFeedbackMode();
+
+      // Destroy floating button
+      if (this.floatingButton) {
+        this.floatingButton.destroy();
       }
 
-      // Close all cards
-      this.closeAll();
+      // Destroy disabled popup
+      if (this.disabledPopup) {
+        this.disabledPopup.destroy();
+      }
+
+      // Destroy queue system components (NEW)
+      if (this.queueManager) {
+        this.queueManager.destroy();
+      }
+      if (this.syncIndicator) {
+        this.syncIndicator.destroy();
+      }
+      if (this.queueViewer) {
+        this.queueViewer.destroy();
+      }
+      if (this.lifecycleManager) {
+        this.lifecycleManager.destroy();
+      }
+      if (this.networkManager) {
+        this.networkManager.destroy();
+      }
+      if (this.pulseMarkerManager) {
+        this.pulseMarkerManager.destroy();
+      }
 
       // Remove styles
       const styleEl = document.getElementById('__tapko_widget_styles');
@@ -323,8 +509,149 @@ import { dispatchCustomEvent } from './utils/dom.js';
       return {
         isInitialized: this.isInitialized,
         isDisabled: this.isDisabled,
+        isInFeedbackMode: this.isInFeedbackMode,
         projectData: this.projectData
       };
+    }
+
+    /**
+     * Initialize queue system (NEW)
+     */
+    async _initializeQueueSystem() {
+      try {
+        console.log('[Tapko] Initializing queue system...');
+
+        // Create queue manager
+        this.queueManager = new FeedbackQueueManager(this.apiClient, {
+          maxRetries: 5,
+          baseRetryDelay: 5000,
+          maxRetryDelay: 120000,
+          autoCleanup: true,
+          completedRetentionDays: 1
+        });
+
+        // Initialize queue manager
+        const initialized = await this.queueManager.init();
+
+        if (initialized) {
+          // Create UI components
+          this.syncIndicator = new SyncStatusIndicator(this.queueManager);
+          this.queueViewer = new QueueViewerModal(this.queueManager);
+          this.lifecycleManager = new SyncLifecycleManager(this.queueManager, this.syncIndicator);
+          this.networkManager = new NetworkStatusManager(this.queueManager, this.syncIndicator);
+
+          // Create pulse marker manager
+          this.pulseMarkerManager = new PulseMarkerManager(this.queueManager);
+          await this.pulseMarkerManager.init();
+
+          console.log('[Tapko] Queue system initialized successfully');
+        } else {
+          console.warn('[Tapko] Queue system not available (IndexedDB not supported)');
+        }
+      } catch (error) {
+        console.error('[Tapko] Failed to initialize queue system:', error);
+      }
+    }
+
+    /**
+     * Show queue viewer modal (NEW)
+     */
+    showQueueViewer() {
+      if (this.queueViewer) {
+        this.queueViewer.open();
+      }
+    }
+
+    /**
+     * Close queue viewer modal (NEW)
+     */
+    closeQueueViewer() {
+      if (this.queueViewer) {
+        this.queueViewer.close();
+      }
+    }
+
+    /**
+     * Retry a specific queue item (NEW)
+     */
+    async retryQueueItem(itemId) {
+      if (!this.queueManager) return;
+
+      try {
+        const item = await this.queueManager.getById(itemId);
+        if (item) {
+          item.attempts = 0;
+          item.error = null;
+          await this.queueManager.updateItem(itemId, item);
+          await this.queueManager.updateStatus(itemId, 'pending');
+
+          // Trigger processing
+          setTimeout(() => this.queueManager.processQueue(), 500);
+        }
+      } catch (error) {
+        console.error('[Tapko] Error retrying queue item:', error);
+      }
+    }
+
+    /**
+     * Remove a specific queue item (NEW)
+     */
+    async removeQueueItem(itemId) {
+      if (!this.queueManager) return;
+
+      try {
+        await this.queueManager.remove(itemId);
+      } catch (error) {
+        console.error('[Tapko] Error removing queue item:', error);
+      }
+    }
+
+    /**
+     * Get queue statistics (NEW)
+     */
+    async getQueueStats() {
+      if (!this.queueManager) {
+        return { pending: 0, processing: 0, failed: 0, completed: 0 };
+      }
+
+      return await this.queueManager.getQueueStats();
+    }
+
+    /**
+     * Show all feedback pulse markers (NEW)
+     */
+    showPulseMarkers() {
+      if (this.pulseMarkerManager) {
+        this.pulseMarkerManager.showAll();
+      }
+    }
+
+    /**
+     * Hide all feedback pulse markers (NEW)
+     */
+    hidePulseMarkers() {
+      if (this.pulseMarkerManager) {
+        this.pulseMarkerManager.hideAll();
+      }
+    }
+
+    /**
+     * Clear all feedback pulse markers (NEW)
+     */
+    clearPulseMarkers() {
+      if (this.pulseMarkerManager) {
+        this.pulseMarkerManager.clearAll();
+      }
+    }
+
+    /**
+     * Get number of pulse markers (NEW)
+     */
+    getPulseMarkerCount() {
+      if (!this.pulseMarkerManager) {
+        return 0;
+      }
+      return this.pulseMarkerManager.getMarkerCount();
     }
   }
 
@@ -337,12 +664,34 @@ import { dispatchCustomEvent } from './utils/dom.js';
     init: tapko.init.bind(tapko),
     destroy: tapko.destroy.bind(tapko),
 
+    // Feedback mode control
+    enterFeedbackMode: tapko.enterFeedbackMode.bind(tapko),
+    exitFeedbackMode: tapko.exitFeedbackMode.bind(tapko),
+
     // Utility methods
-    createComment: tapko.createComment.bind(tapko),
     closeAll: tapko.closeAll.bind(tapko),
     getVersion: tapko.getVersion.bind(tapko),
     isReady: tapko.isReady.bind(tapko),
     getProjectStatus: tapko.getProjectStatus.bind(tapko),
+
+    // Queue system methods (NEW)
+    showQueueViewer: tapko.showQueueViewer.bind(tapko),
+    closeQueueViewer: tapko.closeQueueViewer.bind(tapko),
+    retryQueueItem: tapko.retryQueueItem.bind(tapko),
+    removeQueueItem: tapko.removeQueueItem.bind(tapko),
+    getQueueStats: tapko.getQueueStats.bind(tapko),
+
+    // Pulse marker methods (NEW)
+    showPulseMarkers: tapko.showPulseMarkers.bind(tapko),
+    hidePulseMarkers: tapko.hidePulseMarkers.bind(tapko),
+    clearPulseMarkers: tapko.clearPulseMarkers.bind(tapko),
+    getPulseMarkerCount: tapko.getPulseMarkerCount.bind(tapko),
+
+    // Direct access to managers (for advanced usage)
+    get queueManager() { return tapko.queueManager; },
+    get syncIndicator() { return tapko.syncIndicator; },
+    get queueViewer() { return tapko.queueViewer; },
+    get pulseMarkerManager() { return tapko.pulseMarkerManager; },
 
     // Config (read-only)
     config: CONFIG,

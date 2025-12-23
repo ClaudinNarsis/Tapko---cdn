@@ -76,11 +76,33 @@ class APIClient {
     } catch (error) {
       clearTimeout(timeoutId);
 
-      // Retry on network errors
-      if (attempt < this.retries && (error.name === 'AbortError' || error.name === 'TypeError')) {
-        console.warn(`[Tapko] Request failed, retrying (${attempt}/${this.retries})...`);
-        await this._delay(1000 * attempt);
-        return this._request(endpoint, options, attempt + 1);
+      const isNetworkError = error.name === 'AbortError' || error.name === 'TypeError';
+      const canRetry = attempt < this.retries && isNetworkError;
+
+      // For POST requests with idempotencyKey, we can safely retry
+      // For other POST requests without idempotency, only retry on timeout (AbortError)
+      const isPostRequest = options.method === 'POST';
+      const hasIdempotencyKey = options.body && JSON.parse(options.body).idempotencyKey;
+
+      // Enhanced logging for debugging
+      console.error(`[Tapko] Request failed:`, {
+        endpoint,
+        method: options.method,
+        attempt,
+        errorName: error.name,
+        errorMessage: error.message,
+        isNetworkError,
+        canRetry,
+        hasIdempotencyKey
+      });
+
+      if (canRetry) {
+        // Only retry POST if it has idempotency key or if it's just a timeout
+        if (!isPostRequest || hasIdempotencyKey || error.name === 'AbortError') {
+          console.warn(`[Tapko] Request failed (${error.name}), retrying (${attempt}/${this.retries})...`);
+          await this._delay(1000 * attempt);
+          return this._request(endpoint, options, attempt + 1);
+        }
       }
 
       throw error;
@@ -107,6 +129,10 @@ class APIClient {
    * POST request
    */
   async post(endpoint, data = {}) {
+    // Log POST requests for debugging
+    if (endpoint.includes('/feedback/submit')) {
+      console.log('[Tapko API] POST request to', endpoint, 'with data keys:', Object.keys(data));
+    }
     return this._request(endpoint, {
       method: 'POST',
       body: JSON.stringify(data)
@@ -200,21 +226,155 @@ class APIClient {
   }
 
   /**
-   * Track widget event (analytics)
+   * Get presigned URL for S3 upload
+   * @param {Object} fileData - { folderName, fileName, fileType }
    */
-  async trackEvent(eventType, eventData = {}) {
-    return this.post('/events', {
+  async getPresignedUrl(fileData) {
+    const timingStart = performance.now();
+    console.log('[Tapko S3] Requesting presigned URL:', {
+      folderName: fileData.folderName,
+      fileName: fileData.fileName,
+      fileType: fileData.fileType,
+      projectId: this.projectId,
+      userId: this.userId
+    });
+
+    const response = await this.post('/upload/presigned-url', {
       projectId: this.projectId,
       userId: this.userId,
-      eventType,
-      eventData,
-      timestamp: new Date().toISOString(),
-      url: window.location.href
-    }).catch(error => {
-      // Don't throw on analytics errors, just log
-      console.warn('[Tapko] Failed to track event:', error);
+      ...fileData
     });
+
+    const timingEnd = performance.now();
+    console.log(`[Tapko Timing] getPresignedUrl API call: ${(timingEnd - timingStart).toFixed(2)}ms`);
+    console.log('[Tapko S3] Presigned URL response:', {
+      success: response.success,
+      hasUploadUrl: !!response.data?.uploadUrl,
+      hasKey: !!response.data?.key,
+      key: response.data?.key,
+      bucket: response.data?.bucket,
+      url: response.data?.url
+    });
+
+    return response;
   }
+
+  /**
+   * Upload binary data to S3 using presigned URL
+   */
+  async uploadToS3(uploadUrl, data, contentType) {
+    const timingStart = performance.now();
+    console.log('[Tapko S3] Starting S3 upload:', {
+      uploadUrlHost: new URL(uploadUrl).host,
+      uploadUrlPath: new URL(uploadUrl).pathname,
+      contentType,
+      dataSize: data?.size || data?.length || 'unknown'
+    });
+
+    const headers = {};
+    const urlObj = new URL(uploadUrl);
+
+    // Parse SignedHeaders to know what headers MUST be sent
+    const signedHeadersParam = urlObj.searchParams.get('X-Amz-SignedHeaders');
+    const signedHeaders = signedHeadersParam ? signedHeadersParam.split(';') : [];
+
+    console.log('[Tapko S3] Signed headers:', signedHeaders);
+
+    // 1. Content-Type
+    // Only send if it is in the signed headers list
+    if (signedHeaders.includes('content-type')) {
+      headers['Content-Type'] = contentType;
+    }
+
+    // 2. x-amz-acl
+    // If in signed headers, try to find the value from query params (common pattern) or default
+    if (signedHeaders.includes('x-amz-acl')) {
+      const acl = urlObj.searchParams.get('x-amz-acl');
+      if (acl) {
+        headers['x-amz-acl'] = acl;
+      }
+    }
+
+    console.log('[Tapko S3] Upload headers:', headers);
+
+    const fetchStart = performance.now();
+    const response = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers,
+      body: data
+    });
+    const fetchEnd = performance.now();
+    console.log(`[Tapko Timing] S3 PUT request: ${(fetchEnd - fetchStart).toFixed(2)}ms`);
+
+    console.log('[Tapko S3] Upload response:', {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[Tapko S3] Upload error details:', errorText);
+      throw new Error(`S3 Upload failed: ${response.status} ${errorText}`);
+    }
+
+    const timingEnd = performance.now();
+    console.log(`[Tapko Timing] uploadToS3 total: ${(timingEnd - timingStart).toFixed(2)}ms`);
+    console.log('[Tapko S3] Upload successful');
+    return true;
+  }
+
+  /**
+   * Submit feedback with enhanced metadata
+   */
+  async submitFeedback(feedbackData) {
+    const timingStart = performance.now();
+    const endpoint = '/feedback/submit';
+
+    // If payload already matches new structure, send it directly
+    if (feedbackData.context && feedbackData.assets) {
+      console.log('[Tapko API] Submitting feedback with new structure:', {
+        endpoint,
+        title: feedbackData.title,
+        hasAssets: !!feedbackData.assets,
+        assetKeys: feedbackData.assets ? Object.keys(feedbackData.assets) : [],
+        screenshotKey: feedbackData.assets?.screenshot?.key,
+        logsKey: feedbackData.assets?.logs?.key,
+        projectId: feedbackData.projectId || this.projectId,
+        userId: feedbackData.userId || this.userId
+      });
+
+      console.log('[Tapko API] Screenshot asset detail:', feedbackData.assets?.screenshot);
+      console.log('[Tapko API] Logs asset detail:', feedbackData.assets?.logs);
+
+      const result = await this.post(endpoint, feedbackData);
+      const timingEnd = performance.now();
+      console.log(`[Tapko Timing] submitFeedback API call: ${(timingEnd - timingStart).toFixed(2)}ms`);
+      return result;
+    }
+
+    // Fallback for legacy calls
+    console.log('[Tapko API] Submitting feedback with legacy structure');
+    const payload = {
+      projectId: this.projectId,
+      userId: this.userId,
+      feedbackTitle: feedbackData.feedbackTitle || 'User Feedback',
+      feedbackDescription: feedbackData.feedbackDescription || '',
+      feedbackPosition: feedbackData.feedbackPosition || {},
+      // Additional metadata
+      browserInfo: feedbackData.browserInfo || {},
+      breakpoint: feedbackData.breakpoint || {},
+      timestamp: new Date().toISOString(),
+      url: window.location.href,
+      // Optional fields
+      ...(feedbackData.screenshot && { screenshot: feedbackData.screenshot }),
+      ...(feedbackData.emoji && { emoji: feedbackData.emoji }),
+      ...(feedbackData.hasAudio && { hasAudio: feedbackData.hasAudio })
+    };
+
+    return this.post(endpoint, payload);
+  }
+
 }
 
 export { APIClient };
