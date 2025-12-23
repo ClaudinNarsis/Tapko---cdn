@@ -1,15 +1,15 @@
-name: Deploy to S3
+name: Deploy Dev to S3
 
 on:
   push:
     branches:
-      - main  # or your production branch name
+      - dev
   workflow_dispatch:  # Allows manual triggering
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -23,10 +23,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build production bundle
+      - name: Build development bundle
         env:
-          NODE_ENV: production
-          API_URL: ${{ secrets.API_URL }}
+          NODE_ENV: development
+          API_URL: ${{ secrets.DEV_API_URL }}
         run: npm run build
 
       - name: Configure AWS credentials
@@ -38,26 +38,26 @@ jobs:
 
       - name: Debug S3 configuration
         run: |
-          echo "PROD_S3_BUCKET: ${{ secrets.PROD_S3_BUCKET }}"
-          echo "PROD_S3_PATH: ${{ secrets.PROD_S3_PATH }}"
-          echo "Full S3 path will be: s3://${{ secrets.PROD_S3_BUCKET }}/${{ secrets.PROD_S3_PATH }}tapko-widget.js"
+          echo "DEV_S3_BUCKET: ${{ secrets.DEV_S3_BUCKET }}"
+          echo "DEV_S3_PATH: ${{ secrets.DEV_S3_PATH }}"
+          echo "Full S3 path will be: s3://${{ secrets.DEV_S3_BUCKET }}/${{ secrets.DEV_S3_PATH }}tapko-widget.js"
 
       - name: Upload to S3 and set public ACL
         run: |
           aws s3 cp dist/tapko-widget.js \
-            "s3://${{ secrets.PROD_S3_BUCKET }}/${{ secrets.PROD_S3_PATH }}tapko-widget.js" \
+            "s3://${{ secrets.DEV_S3_BUCKET }}/${{ secrets.DEV_S3_PATH }}tapko-widget.js" \
             --acl public-read \
-            --cache-control "public, max-age=31536000" \
+            --cache-control "public, max-age=300" \
             --content-type "application/javascript"
 
           aws s3 cp dist/tapko-widget.js.map \
-            "s3://${{ secrets.PROD_S3_BUCKET }}/${{ secrets.PROD_S3_PATH }}tapko-widget.debug.js" \
+            "s3://${{ secrets.DEV_S3_BUCKET }}/${{ secrets.DEV_S3_PATH }}tapko-widget.debug.js" \
             --acl public-read \
-            --cache-control "public, max-age=31536000" \
+            --cache-control "public, max-age=300" \
             --content-type "application/javascript"
 
       - name: Deployment Summary
         run: |
-          echo "✅ Deployment successful!"
-          echo "📦 Files uploaded to: s3://${{ secrets.PROD_S3_BUCKET }}/${{ secrets.PROD_S3_PATH }}"
-          echo "🔗 Public URL: https://${{ secrets.PROD_S3_BUCKET }}.s3.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.PROD_S3_PATH }}tapko-widget.js"
+          echo "✅ Dev deployment successful!"
+          echo "📦 Files uploaded to: s3://${{ secrets.DEV_S3_BUCKET }}/${{ secrets.DEV_S3_PATH }}"
+          echo "🔗 Public URL: https://${{ secrets.DEV_S3_BUCKET }}.s3.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.DEV_S3_PATH }}tapko-widget.js"

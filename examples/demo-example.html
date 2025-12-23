@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CloudStore - Premium Cloud Storage Solution</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #ffffff;
+      color: #1a1a1a;
+      line-height: 1.6;
+    }
+
+    /* Navigation */
+    .navbar {
+      position: sticky;
+      top: 0;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid #e5e7eb;
+      padding: 16px 0;
+      z-index: 1000;
+    }
+
+    .nav-container {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 0 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .logo {
+      font-size: 24px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #ead066 0%, #8ba24b 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 32px;
+      list-style: none;
+      align-items: center;
+    }
+
+    .nav-links a {
+      color: #4b5563;
+      text-decoration: none;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+
+    .nav-links a:hover {
+      color: #667eea;
+    }
+
+    .nav-cta {
+      display: flex;
+      gap: 12px;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 14px;
+      transition: all 0.2s;
+      cursor: pointer;
+      border: none;
+      font-family: inherit;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #d0ea66 0%, #4f6c27 100%);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+    }
+
+    .btn-secondary {
+      background: transparent;
+      border: 2px solid #e5e7eb;
+      color: #1a1a1a;
+    }
+
+    .btn-secondary:hover {
+      border-color: #667eea;
+      color: #667eea;
+    }
+
+    /* Hero Section */
+    .hero {
+      background: linear-gradient(135deg, #b3ea66 0%, #5d7a2c 100%);
+      color: white;
+      padding: 100px 24px;
+      text-align: center;
+    }
+
+    .hero-content {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    .hero h1 {
+      font-size: 56px;
+      margin-bottom: 24px;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    .hero p {
+      font-size: 20px;
+      margin-bottom: 32px;
+      opacity: 0.95;
+    }
+
+    .hero-cta {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .btn-hero {
+      padding: 16px 32px;
+      font-size: 16px;
+    }
+
+    .btn-white {
+      background: white;
+      color: #d0ea66;
+    }
+
+    .btn-outline {
+      background: transparent;
+      border: 2px solid white;
+      color: white;
+    }
+
+    .btn-outline:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    /* Features Section */
+    .section {
+      padding: 80px 24px;
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+
+    .section-header {
+      text-align: center;
+      margin-bottom: 64px;
+    }
+
+    .section-header h2 {
+      font-size: 40px;
+      margin-bottom: 16px;
+      color: #1a1a1a;
+    }
+
+    .section-header p {
+      font-size: 18px;
+      color: #6b7280;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 32px;
+    }
+
+    .feature-card {
+      padding: 32px;
+      border-radius: 16px;
+      border: 1px solid #e5e7eb;
+      transition: all 0.3s;
+      background: white;
+    }
+
+    .feature-card:hover {
+      transform: translateY(-8px);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08);
+      border-color: #d0ea66;
+    }
+
+    .feature-icon {
+      width: 56px;
+      height: 56px;
+      background: linear-gradient(135deg, #b3ea66 0%, #5d7a2c 100%);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      margin-bottom: 20px;
+    }
+
+    .feature-card h3 {
+      font-size: 22px;
+      margin-bottom: 12px;
+      color: #1a1a1a;
+    }
+
+    .feature-card p {
+      color: #6b7280;
+      line-height: 1.7;
+    }
+
+    /* Pricing Section */
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 32px;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .pricing-card {
+      padding: 40px;
+      border-radius: 16px;
+      border: 2px solid #e5e7eb;
+      background: white;
+      position: relative;
+      transition: all 0.3s;
+    }
+
+    .pricing-card:hover {
+      border-color: #d0ea66;
+      transform: translateY(-4px);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.1);
+    }
+
+    .pricing-card.featured {
+      border-color: #d0ea66;
+      background: linear-gradient(135deg, #f5f7ff 0%, #fef5ff 100%);
+    }
+
+    .badge {
+      position: absolute;
+      top: -12px;
+      right: 20px;
+      background: linear-gradient(135deg, #b3ea66 0%, #5d7a2c 100%);
+      color: white;
+      padding: 6px 16px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .pricing-card h3 {
+      font-size: 24px;
+      margin-bottom: 8px;
+      color: #1a1a1a;
+    }
+
+    .pricing-card .price {
+      font-size: 48px;
+      font-weight: 700;
+      margin: 20px 0;
+      color: #1a1a1a;
+    }
+
+    .pricing-card .price span {
+      font-size: 18px;
+      color: #6b7280;
+      font-weight: 400;
+    }
+
+    .pricing-features {
+      list-style: none;
+      margin: 24px 0 32px;
+    }
+
+    .pricing-features li {
+      padding: 12px 0;
+      border-bottom: 1px solid #e5e7eb;
+      color: #4b5563;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .pricing-features li:last-child {
+      border-bottom: none;
+    }
+
+    .pricing-features li:before {
+      content: "✓";
+      color: #10b981;
+      font-weight: 700;
+      font-size: 18px;
+    }
+
+    /* Testimonials */
+    .testimonials-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 32px;
+    }
+
+    .testimonial-card {
+      padding: 32px;
+      background: #f9fafb;
+      border-radius: 16px;
+      border: 1px solid #e5e7eb;
+    }
+
+    .testimonial-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .testimonial-avatar {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #b3ea66 0%, #5d7a2c 100%);
+    }
+
+    .testimonial-info h4 {
+      font-size: 16px;
+      margin-bottom: 4px;
+    }
+
+    .testimonial-info p {
+      font-size: 14px;
+      color: #6b7280;
+    }
+
+    .testimonial-content {
+      color: #4b5563;
+      line-height: 1.7;
+      font-style: italic;
+    }
+
+    .stars {
+      color: #fbbf24;
+      margin-bottom: 12px;
+      font-size: 18px;
+    }
+
+    /* CTA Section */
+    .cta-section {
+      background: linear-gradient(135deg, #b3ea66 0%, #5d7a2c 100%);
+      color: white;
+      padding: 80px 24px;
+      text-align: center;
+      margin-top: 80px;
+    }
+
+    .cta-section h2 {
+      font-size: 40px;
+      margin-bottom: 16px;
+    }
+
+    .cta-section p {
+      font-size: 18px;
+      margin-bottom: 32px;
+      opacity: 0.95;
+    }
+
+    /* Footer */
+    .footer {
+      background: #1a1a1a;
+      color: #9ca3af;
+      padding: 60px 24px 32px;
+    }
+
+    .footer-container {
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+
+    .footer-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 40px;
+      margin-bottom: 40px;
+    }
+
+    .footer-column h4 {
+      color: white;
+      margin-bottom: 16px;
+      font-size: 16px;
+    }
+
+    .footer-column ul {
+      list-style: none;
+    }
+
+    .footer-column li {
+      margin-bottom: 12px;
+    }
+
+    .footer-column a {
+      color: #9ca3af;
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .footer-column a:hover {
+      color: #d0ea66;
+    }
+
+    .footer-bottom {
+      border-top: 1px solid #374151;
+      padding-top: 24px;
+      text-align: center;
+      font-size: 14px;
+    }
+
+    /* Demo Badge */
+    .demo-badge {
+      position: fixed;
+      top: 80px;
+      right: 24px;
+      background: #fef3c7;
+      border: 2px solid #f59e0b;
+      color: #92400e;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      z-index: 999;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    @media (max-width: 768px) {
+      .nav-links {
+        display: none;
+      }
+
+      .hero h1 {
+        font-size: 36px;
+      }
+
+      .section-header h2 {
+        font-size: 32px;
+      }
+
+      .pricing-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .demo-badge {
+        position: static;
+        margin: 16px;
+        text-align: center;
+      }
+    }
+  </style>
+</head>
+<body>
+  
+
+  <!-- Navigation -->
+  <nav class="navbar">
+    <div class="nav-container">
+      <div class="logo">☁️ CloudStore</div>
+      <ul class="nav-links">
+        <li><a href="#features">Features</a></li>
+        <li><a href="#pricing">Pricing</a></li>
+        <li><a href="#testimonials">Testimonials</a></li>
+        <li><a href="#about">About</a></li>
+      </ul>
+      <div class="nav-cta">
+        <a href="#" class="btn btn-secondary">Sign In</a>
+        <a href="#" class="btn btn-primary">Start Free Trial</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="hero-content">
+      <h1>Store Your Files Securely in the Cloud</h1>
+      <p>Experience lightning-fast cloud storage with enterprise-grade security. Store, sync, and share your files from anywhere in the world.</p>
+      <div class="hero-cta">
+        <a href="#" class="btn btn-hero btn-white">Get Started Free</a>
+        <a href="#" class="btn btn-hero btn-outline">Watch Demo</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features Section -->
+  <section id="features" class="section">
+    <div class="section-header">
+      <h2>Everything You Need</h2>
+      <p>Powerful features to help you store, organize, and collaborate on your files with ease.</p>
+    </div>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">🚀</div>
+        <h3>Lightning Fast</h3>
+        <p>Upload and download files at blazing speeds with our global CDN network. Experience instant sync across all your devices.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔒</div>
+        <h3>Bank-Level Security</h3>
+        <p>Your files are encrypted end-to-end with AES-256 encryption. We never have access to your unencrypted data.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">👥</div>
+        <h3>Team Collaboration</h3>
+        <p>Share folders, set permissions, and collaborate in real-time. Perfect for teams of any size.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📱</div>
+        <h3>Access Anywhere</h3>
+        <p>Native apps for iOS, Android, Windows, Mac, and Linux. Access your files from any device, anytime.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">⏰</div>
+        <h3>Version History</h3>
+        <p>Never lose work again. Restore any file to a previous version from up to 30 days of history.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🎯</div>
+        <h3>Smart Organization</h3>
+        <p>AI-powered search and automatic tagging help you find files instantly. Keep everything organized effortlessly.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pricing Section -->
+  <section id="pricing" class="section" style="background: #f9fafb;">
+    <div class="section-header">
+      <h2>Simple, Transparent Pricing</h2>
+      <p>Choose the perfect plan for your needs. No hidden fees, cancel anytime.</p>
+    </div>
+    <div class="pricing-grid">
+      <div class="pricing-card">
+        <h3>Basic</h3>
+        <p>Perfect for personal use</p>
+        <div class="price">$9<span>/month</span></div>
+        <ul class="pricing-features">
+          <li>100 GB Storage</li>
+          <li>2 GB File Upload Limit</li>
+          <li>30-Day Version History</li>
+          <li>Mobile & Desktop Apps</li>
+          <li>Email Support</li>
+        </ul>
+        <a href="#" class="btn btn-secondary" style="width: 100%;">Get Started</a>
+      </div>
+      <div class="pricing-card featured">
+        <span class="badge">Most Popular</span>
+        <h3>Professional</h3>
+        <p>For power users & small teams</p>
+        <div class="price">$29<span>/month</span></div>
+        <ul class="pricing-features">
+          <li>1 TB Storage</li>
+          <li>10 GB File Upload Limit</li>
+          <li>90-Day Version History</li>
+          <li>Team Collaboration</li>
+          <li>Priority Support</li>
+          <li>Advanced Sharing</li>
+        </ul>
+        <a href="#" class="btn btn-primary" style="width: 100%;">Get Started</a>
+      </div>
+      <div class="pricing-card">
+        <h3>Enterprise</h3>
+        <p>For large organizations</p>
+        <div class="price">$99<span>/month</span></div>
+        <ul class="pricing-features">
+          <li>Unlimited Storage</li>
+          <li>Unlimited Upload Size</li>
+          <li>Unlimited Version History</li>
+          <li>Advanced Admin Controls</li>
+          <li>24/7 Phone Support</li>
+          <li>Custom Integrations</li>
+          <li>Dedicated Account Manager</li>
+        </ul>
+        <a href="#" class="btn btn-secondary" style="width: 100%;">Contact Sales</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Testimonials Section -->
+  <section id="testimonials" class="section">
+    <div class="section-header">
+      <h2>Loved by Thousands</h2>
+      <p>See what our customers are saying about CloudStore.</p>
+    </div>
+    <div class="testimonials-grid">
+      <div class="testimonial-card">
+        <div class="stars">★★★★★</div>
+        <div class="testimonial-header">
+          <div class="testimonial-avatar"></div>
+          <div class="testimonial-info">
+            <h4>Sarah Johnson</h4>
+            <p>Product Manager at TechCorp</p>
+          </div>
+        </div>
+        <div class="testimonial-content">
+          "CloudStore has transformed how our team collaborates. The speed and reliability are unmatched. We've tried many solutions, but this is by far the best."
+        </div>
+      </div>
+      <div class="testimonial-card">
+        <div class="stars">★★★★★</div>
+        <div class="testimonial-header">
+          <div class="testimonial-avatar"></div>
+          <div class="testimonial-info">
+            <h4>Michael Chen</h4>
+            <p>Freelance Designer</p>
+          </div>
+        </div>
+        <div class="testimonial-content">
+          "As a designer working with large files, CloudStore's upload speeds are a game-changer. Plus, the version history has saved me countless times."
+        </div>
+      </div>
+      <div class="testimonial-card">
+        <div class="stars">★★★★★</div>
+        <div class="testimonial-header">
+          <div class="testimonial-avatar"></div>
+          <div class="testimonial-info">
+            <h4>Emily Rodriguez</h4>
+            <p>CEO at StartupXYZ</p>
+          </div>
+        </div>
+        <div class="testimonial-content">
+          "Security was our top priority when choosing cloud storage. CloudStore's encryption and compliance features give us complete peace of mind."
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA Section -->
+  <section class="cta-section">
+    <h2>Ready to Get Started?</h2>
+    <p>Join thousands of users who trust CloudStore with their files. Start your free 14-day trial today.</p>
+    <a href="#" class="btn btn-hero btn-white">Start Free Trial</a>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-container">
+      <div class="footer-grid">
+        <div class="footer-column">
+          <h4>Product</h4>
+          <ul>
+            <li><a href="#">Features</a></li>
+            <li><a href="#">Pricing</a></li>
+            <li><a href="#">Security</a></li>
+            <li><a href="#">Roadmap</a></li>
+          </ul>
+        </div>
+        <div class="footer-column">
+          <h4>Company</h4>
+          <ul>
+            <li><a href="#">About Us</a></li>
+            <li><a href="#">Blog</a></li>
+            <li><a href="#">Careers</a></li>
+            <li><a href="#">Press</a></li>
+          </ul>
+        </div>
+        <div class="footer-column">
+          <h4>Resources</h4>
+          <ul>
+            <li><a href="#">Documentation</a></li>
+            <li><a href="#">API Reference</a></li>
+            <li><a href="#">Help Center</a></li>
+            <li><a href="#">Community</a></li>
+          </ul>
+        </div>
+        <div class="footer-column">
+          <h4>Legal</h4>
+          <ul>
+            <li><a href="#">Privacy Policy</a></li>
+            <li><a href="#">Terms of Service</a></li>
+            <li><a href="#">Cookie Policy</a></li>
+            <li><a href="#">GDPR</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2024 CloudStore. All rights reserved. This is a staging environment.</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Load Tapko Widget -->
+  <script src="../dist/tapko-widget.js"></script>
+  <script>
+    // Initialize Tapko widget
+    (async () => {
+      try {
+        console.log('[CloudStore Demo] Initializing Tapko widget...');
+
+        await Tapko.init({
+          projectId: '499f92de-1911-409d-80f3-65ae6dc3f658',
+          apiKey: 'demo-api-key',
+          userId: 'user_36PrQyirxWUXgwmtnnhuXI8G4xu'
+        });
+
+        console.log('[CloudStore Demo] Tapko widget initialized successfully!');
+        console.log('[CloudStore Demo] Try clicking the feedback button to leave comments on any part of the page.');
+
+        // Listen for feedback events
+        window.addEventListener('tapko:feedback:mode:entered', () => {
+          console.log('[CloudStore Demo] Feedback mode active - Click anywhere to leave feedback!');
+        });
+
+        window.addEventListener('tapko:comment:queued', (e) => {
+          console.log('[CloudStore Demo] Thank you for your feedback!', e.detail);
+        });
+
+        window.addEventListener('tapko:comment:submitted', (e) => {
+          console.log('[CloudStore Demo] Feedback submitted successfully!', e.detail);
+        });
+
+      } catch (error) {
+        console.error('[CloudStore Demo] Failed to initialize Tapko widget:', error);
+      }
+    })();
+
+    // Demo: Add some interactive behavior
+    document.querySelectorAll('a[href="#"]').forEach(link => {
+      link.addEventListener('click', (e) => {
+        // In feedback mode, Tapko will intercept these clicks
+        // In normal mode, prevent default to avoid page jumps
+        if (!window.Tapko || !window.Tapko.getProjectStatus().isInFeedbackMode) {
+          e.preventDefault();
+          console.log('Link clicked:', link.textContent);
+        }
+      });
+    });
+  </script>
+</body>
+</html>

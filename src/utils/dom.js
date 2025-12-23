@@ -175,3 +175,177 @@ export function getAbsolutePosition(element) {
     height: rect.height
   };
 }
+
+/**
+ * Get element hierarchy path (from root to target)
+ */
+export function getElementHierarchy(element) {
+  const hierarchy = [];
+  let current = element;
+
+  while (current && current !== document.documentElement) {
+    const selector = getElementSelector(current);
+    hierarchy.unshift({
+      tagName: current.tagName.toLowerCase(),
+      id: current.id || null,
+      className: current.className || null,
+      selector: selector,
+      attributes: getRelevantAttributes(current)
+    });
+    current = current.parentElement;
+  }
+
+  return hierarchy;
+}
+
+/**
+ * Get a unique selector for an element
+ */
+function getElementSelector(element) {
+  if (element.id) {
+    return `#${element.id}`;
+  }
+
+  if (element.className && typeof element.className === 'string') {
+    const classes = element.className.trim().split(/\s+/).join('.');
+    if (classes) {
+      return `${element.tagName.toLowerCase()}.${classes}`;
+    }
+  }
+
+  // Get nth-child position
+  let nth = 0;
+  let sibling = element;
+  while (sibling) {
+    if (sibling.nodeType === 1 && sibling.tagName === element.tagName) {
+      nth++;
+    }
+    sibling = sibling.previousElementSibling;
+  }
+
+  return `${element.tagName.toLowerCase()}:nth-of-type(${nth})`;
+}
+
+/**
+ * Get relevant attributes from an element
+ */
+function getRelevantAttributes(element) {
+  const attrs = {};
+  const relevantAttrs = ['data-testid', 'data-id', 'aria-label', 'role', 'name', 'type', 'href', 'src'];
+
+  relevantAttrs.forEach(attr => {
+    if (element.hasAttribute(attr)) {
+      attrs[attr] = element.getAttribute(attr);
+    }
+  });
+
+  return attrs;
+}
+
+/**
+ * Get feedback position information
+ */
+export function getFeedbackPosition(element) {
+  const rect = element.getBoundingClientRect();
+  const hierarchy = getElementHierarchy(element);
+
+  return {
+    hierarchy: hierarchy,
+    selector: getElementSelector(element),
+    boundingBox: {
+      top: rect.top,
+      left: rect.left,
+      bottom: rect.bottom,
+      right: rect.right,
+      width: rect.width,
+      height: rect.height,
+      x: rect.x,
+      y: rect.y
+    },
+    scroll: {
+      x: window.pageXOffset || document.documentElement.scrollLeft,
+      y: window.pageYOffset || document.documentElement.scrollTop
+    },
+    viewport: {
+      width: window.innerWidth,
+      height: window.innerHeight
+    }
+  };
+}
+
+/**
+ * Get browser and device information
+ */
+export function getBrowserInfo() {
+  const userAgent = navigator.userAgent;
+
+  // Detect browser
+  let browserName = 'Unknown';
+  let browserVersion = 'Unknown';
+
+  if (userAgent.indexOf('Firefox') > -1) {
+    browserName = 'Firefox';
+    browserVersion = userAgent.match(/Firefox\/(\d+\.\d+)/)?.[1] || 'Unknown';
+  } else if (userAgent.indexOf('Chrome') > -1 && userAgent.indexOf('Edg') === -1) {
+    browserName = 'Chrome';
+    browserVersion = userAgent.match(/Chrome\/(\d+\.\d+)/)?.[1] || 'Unknown';
+  } else if (userAgent.indexOf('Safari') > -1 && userAgent.indexOf('Chrome') === -1) {
+    browserName = 'Safari';
+    browserVersion = userAgent.match(/Version\/(\d+\.\d+)/)?.[1] || 'Unknown';
+  } else if (userAgent.indexOf('Edg') > -1) {
+    browserName = 'Edge';
+    browserVersion = userAgent.match(/Edg\/(\d+\.\d+)/)?.[1] || 'Unknown';
+  }
+
+  // Detect OS
+  let os = 'Unknown';
+  if (userAgent.indexOf('Win') > -1) os = 'Windows';
+  else if (userAgent.indexOf('Mac') > -1) os = 'macOS';
+  else if (userAgent.indexOf('Linux') > -1) os = 'Linux';
+  else if (userAgent.indexOf('Android') > -1) os = 'Android';
+  else if (userAgent.indexOf('iOS') > -1 || userAgent.indexOf('iPhone') > -1 || userAgent.indexOf('iPad') > -1) os = 'iOS';
+
+  // Detect device type
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
+  const isTablet = /iPad|Android(?!.*Mobile)/i.test(userAgent);
+
+  let deviceType = 'Desktop';
+  if (isTablet) deviceType = 'Tablet';
+  else if (isMobile) deviceType = 'Mobile';
+
+  return {
+    browser: browserName,
+    browserVersion: browserVersion,
+    os: os,
+    deviceType: deviceType,
+    userAgent: userAgent,
+    language: navigator.language || navigator.userLanguage,
+    platform: navigator.platform,
+    screenResolution: {
+      width: window.screen.width,
+      height: window.screen.height
+    },
+    viewport: {
+      width: window.innerWidth,
+      height: window.innerHeight
+    },
+    pixelRatio: window.devicePixelRatio || 1,
+    cookieEnabled: navigator.cookieEnabled,
+    onlineStatus: navigator.onLine
+  };
+}
+
+/**
+ * Get current breakpoint based on viewport width
+ */
+export function getCurrentBreakpoint() {
+  const width = window.innerWidth;
+
+  if (width < 640) return { name: 'xs', width: width, min: 0, max: 639 };
+  if (width < 768) return { name: 'sm', width: width, min: 640, max: 767 };
+  if (width < 1024) return { name: 'md', width: width, min: 768, max: 1023 };
+  if (width < 1280) return { name: 'lg', width: width, min: 1024, max: 1279 };
+  if (width < 1536) return { name: 'xl', width: width, min: 1280, max: 1535 };
+
+  return { name: '2xl', width: width, min: 1536, max: Infinity };
+}

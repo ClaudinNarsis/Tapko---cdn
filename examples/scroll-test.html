@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tapko V2 - Scroll Test</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f9fafb;
+      padding: 40px 20px;
+      min-height: 300vh; /* Make page scrollable */
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 60px;
+      background: white;
+      padding: 40px;
+      border-radius: 16px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .header h1 {
+      font-size: 36px;
+      margin-bottom: 16px;
+      color: #1f2937;
+    }
+
+    .header p {
+      font-size: 18px;
+      color: #6b7280;
+    }
+
+    .test-section {
+      background: white;
+      border-radius: 16px;
+      padding: 40px;
+      margin-bottom: 40px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .test-section h2 {
+      font-size: 24px;
+      margin-bottom: 20px;
+      color: #1f2937;
+    }
+
+    .test-card {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 30px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+      cursor: pointer;
+      transition: transform 0.2s ease;
+    }
+
+    .test-card:hover {
+      transform: translateY(-2px);
+    }
+
+    .test-card h3 {
+      font-size: 20px;
+      margin-bottom: 10px;
+    }
+
+    .test-card p {
+      opacity: 0.9;
+      line-height: 1.6;
+    }
+
+    .spacer {
+      height: 500px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #f3f4f6;
+      border-radius: 12px;
+      color: #6b7280;
+      font-size: 18px;
+      margin: 40px 0;
+    }
+
+    .instructions {
+      background: #eff6ff;
+      border-left: 4px solid #3b82f6;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 30px;
+    }
+
+    .instructions h3 {
+      color: #1e40af;
+      margin-bottom: 12px;
+      font-size: 18px;
+    }
+
+    .instructions ol {
+      margin-left: 24px;
+      color: #1e3a8a;
+      line-height: 1.8;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🧪 Scroll Behavior Test</h1>
+      <p>Testing that comment bubbles stick to elements when scrolling</p>
+    </div>
+
+    <div class="test-section">
+      <div class="instructions">
+        <h3>Test Instructions</h3>
+        <ol>
+          <li>Click the floating button (bottom-right) to enter feedback mode</li>
+          <li>Tap on one of the colored cards below</li>
+          <li>A comment bubble will appear next to the card</li>
+          <li><strong>Now scroll the page up and down</strong></li>
+          <li>✅ The pin marker and bubble should move WITH the card</li>
+          <li>❌ They should NOT stay in a fixed position on the screen</li>
+        </ol>
+      </div>
+
+      <h2>Card at Top of Page</h2>
+      <div class="test-card">
+        <h3>Card #1 - Top Section</h3>
+        <p>Click this card in feedback mode, then scroll down. The comment bubble should move with this card.</p>
+      </div>
+    </div>
+
+    <div class="spacer">
+      ↓ Scroll down to see more test cards ↓
+    </div>
+
+    <div class="test-section">
+      <h2>Card in Middle of Page</h2>
+      <div class="test-card">
+        <h3>Card #2 - Middle Section</h3>
+        <p>Click this card in feedback mode, then scroll up and down. Watch the comment bubble stay attached to this card.</p>
+      </div>
+    </div>
+
+    <div class="spacer">
+      ↓ Keep scrolling ↓
+    </div>
+
+    <div class="test-section">
+      <h2>Card Lower on Page</h2>
+      <div class="test-card">
+        <h3>Card #3 - Lower Section</h3>
+        <p>Click this card, then scroll. The bubble should scroll with the page content, not float independently.</p>
+      </div>
+    </div>
+
+    <div class="spacer">
+      ↓ More content below ↓
+    </div>
+
+    <div class="test-section">
+      <h2>Card Near Bottom</h2>
+      <div class="test-card">
+        <h3>Card #4 - Bottom Section</h3>
+        <p>Final test card. The comment bubble positioning should work consistently at any scroll position.</p>
+      </div>
+    </div>
+
+    <div class="spacer">
+      🎉 End of test page 🎉
+    </div>
+
+    <div class="test-section">
+      <h2>Test Results</h2>
+      <div style="padding: 20px; background: #f3f4f6; border-radius: 8px;">
+        <p style="margin-bottom: 10px;"><strong>Expected Behavior:</strong></p>
+        <ul style="margin-left: 24px; line-height: 1.8;">
+          <li>Pin marker stays at the tap location on the card</li>
+          <li>Comment bubble stays next to the card</li>
+          <li>Both scroll naturally with the page content</li>
+          <li>Position updates smoothly during scroll</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Load Tapko Widget V2 -->
+  <script src="../dist/tapko-widget.js"></script>
+  <script>
+    // Initialize widget
+    (async () => {
+      try {
+        await Tapko.init({
+          projectId: '59e0ad62-b8f3-44e3-937d-ccaf0d14655f',
+          apiKey: 'demo-api-key',
+          userId: 'test-user-scroll'
+        });
+
+        console.log('✅ Widget initialized - Click floating button to start');
+      } catch (error) {
+        console.error('❌ Failed to initialize:', error.message);
+      }
+    })();
+
+    // Log scroll events for debugging
+    let scrollCount = 0;
+    window.addEventListener('scroll', () => {
+      scrollCount++;
+      if (scrollCount % 10 === 0) {
+        console.log(`Scroll position: ${window.pageYOffset}px`);
+      }
+    }, { passive: true });
+  </script>
+</body>
+</html>
