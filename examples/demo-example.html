@@ -710,11 +710,14 @@
       try {
         console.log('[CloudStore Demo] Initializing Tapko widget...');
 
-        await Tapko.init({
-          projectId: '499f92de-1911-409d-80f3-65ae6dc3f658',
-          apiKey: 'demo-api-key',
-          userId: 'user_36PrQyirxWUXgwmtnnhuXI8G4xu'
-        });
+            try {
+      await Tapko.init({
+        projectId: 'd660aad6-df24-4f7c-946e-5c5518713ba3',
+        apiKey: 'your-api-key',
+        userId: 'user_36PrQyirxWUXgwmtnnhuXI8G4xu'
+      });} catch (error) {
+            console.error('Error initializing Tapko widget:', error);
+        }
 
         console.log('[CloudStore Demo] Tapko widget initialized successfully!');
         console.log('[CloudStore Demo] Try clicking the feedback button to leave comments on any part of the page.');
