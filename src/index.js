@@ -27,6 +27,7 @@ import { FeedbackModeOverlay } from './components/FeedbackModeOverlay.js';
 import { CommentCard } from './components/CommentCard.js';
 import { DrawingCanvas } from './components/DrawingCanvas.js';
 import { FeedbackDisabledPopup } from './components/FeedbackDisabledPopup.js';
+import { FeedbackWidget } from './components/FeedbackWidget.js';
 import { dispatchCustomEvent } from './utils/dom.js';
 import { logManager } from './managers/LogManager.js';
 import { analyticsManager } from './managers/AnalyticsManager.js';
@@ -64,6 +65,7 @@ import NetworkStatusManager from './managers/NetworkStatusManager.js';
       this.feedbackOverlay = null;
       this.drawingCanvas = null;
       this.disabledPopup = new FeedbackDisabledPopup();
+      this.feedbackWidget = null;
 
       // Queue system components (NEW)
       this.queueManager = null;
@@ -254,8 +256,16 @@ import NetworkStatusManager from './managers/NetworkStatusManager.js';
 
       this.isInFeedbackMode = true;
 
-      // Update floating button
-      this.floatingButton.setFeedbackMode(true);
+      // Hide floating button when entering feedback mode
+      this.floatingButton.hide();
+
+      // Create feedback widget (exit button + counter)
+      this.feedbackWidget = new FeedbackWidget();
+      this.feedbackWidget.create(
+        () => this._exitFeedbackMode(),
+        this.config.projectId,
+        CONFIG.FEEDBACK_URL
+      );
 
       // Create overlay
       this.feedbackOverlay = new FeedbackModeOverlay();
@@ -277,8 +287,14 @@ import NetworkStatusManager from './managers/NetworkStatusManager.js';
 
       this.isInFeedbackMode = false;
 
-      // Update floating button
-      this.floatingButton.setFeedbackMode(false);
+      // Destroy feedback widget
+      if (this.feedbackWidget) {
+        this.feedbackWidget.destroy();
+        this.feedbackWidget = null;
+      }
+
+      // Show floating button again
+      this.floatingButton.show();
 
       // Close active card
       if (this.activeCard) {
@@ -441,6 +457,11 @@ import NetworkStatusManager from './managers/NetworkStatusManager.js';
       // Destroy disabled popup
       if (this.disabledPopup) {
         this.disabledPopup.destroy();
+      }
+
+      // Destroy feedback widget
+      if (this.feedbackWidget) {
+        this.feedbackWidget.destroy();
       }
 
       // Destroy analytics (NEW)
