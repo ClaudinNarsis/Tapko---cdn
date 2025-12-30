@@ -259,19 +259,18 @@ import NetworkStatusManager from './managers/NetworkStatusManager.js';
       // Hide floating button when entering feedback mode
       this.floatingButton.hide();
 
-      // Create feedback widget (exit button + counter)
+      // Create feedback widget (view all feedback button)
       this.feedbackWidget = new FeedbackWidget();
-      this.feedbackWidget.create(
-        () => this._exitFeedbackMode(),
-        this.config.projectId,
-        CONFIG.FEEDBACK_URL
-      );
+      this.feedbackWidget.create(this.config.projectId, CONFIG.FEEDBACK_URL);
 
-      // Create overlay
+      // Create overlay with exit callback
       this.feedbackOverlay = new FeedbackModeOverlay();
-      this.feedbackOverlay.create((element, coordinates) => {
-        this._createCommentCard(element, coordinates);
-      });
+      this.feedbackOverlay.create(
+        (element, coordinates) => {
+          this._createCommentCard(element, coordinates);
+        },
+        () => this._exitFeedbackMode()
+      );
 
       // Dispatch event
       dispatchCustomEvent(CONFIG.EVENTS.FEEDBACK_MODE_ENTERED);
@@ -350,7 +349,11 @@ import NetworkStatusManager from './managers/NetworkStatusManager.js';
             this.activeCard = null;
             // Show snackbar again when card is closed
             if (this.isInFeedbackMode && this.feedbackOverlay && this.feedbackOverlay.snackbar) {
-              this.feedbackOverlay.snackbar.show('Feedback mode — tap anything', { type: 'info' });
+              this.feedbackOverlay.snackbar.show('Feedback mode ON', {
+                type: 'error',
+                showExitButton: true,
+                onExit: () => this._exitFeedbackMode()
+              });
             }
           }
         };

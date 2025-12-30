@@ -69,91 +69,59 @@
 }
 
 /* ===========================================
-   FEEDBACK WIDGET (Exit + Counter)
+   FEEDBACK WIDGET (View All Button)
    =========================================== */
-.dtc-feedback-widget {
+.dtc-widget-view-all-btn {
   position: fixed;
   bottom: 24px;
   right: 24px;
+  height: 44px;
+  padding: 0 16px;
+  border-radius: 22px;
+  border: 2px solid #e5e7eb;
+  background: #ffffff;
+  color: #6b7280;
+  cursor: pointer;
   display: flex;
+  align-items: center;
   gap: 8px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
   z-index: 2147483646;
   opacity: 0;
   transform: scale(0.8) translateY(10px);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-.dtc-feedback-widget.dtc-visible {
+.dtc-widget-view-all-btn.dtc-visible {
   opacity: 1;
   transform: scale(1) translateY(0);
 }
 
-.dtc-widget-exit-btn,
-.dtc-widget-counter-btn {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  border: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+.dtc-widget-view-all-btn:hover {
+  border-color: #4f46e5;
+  color: #4f46e5;
+  transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  position: relative;
 }
 
-.dtc-widget-exit-btn {
-  background: #ef4444;
-  color: #ffffff;
-}
-
-.dtc-widget-exit-btn:hover {
-  background: #dc2626;
-  transform: scale(1.1);
-  box-shadow: 0 6px 16px rgba(239, 68, 68, 0.4);
-}
-
-.dtc-widget-counter-btn {
-  background: #4f46e5;
-  color: #ffffff;
-}
-
-.dtc-widget-counter-btn:hover {
-  background: #4338ca;
-  transform: scale(1.1);
-  box-shadow: 0 6px 16px rgba(79, 70, 229, 0.4);
-}
-
-.dtc-widget-exit-btn:active,
-.dtc-widget-counter-btn:active {
-  transform: scale(1.05);
+.dtc-widget-view-all-btn:active {
+  transform: translateY(0);
 }
 
 .dtc-widget-icon {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   pointer-events: none;
+  flex-shrink: 0;
 }
 
-.dtc-widget-counter-badge {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  background: #ef4444;
-  color: #ffffff;
-  font-size: 11px;
-  font-weight: 700;
-  min-width: 20px;
-  height: 20px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 6px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-  border: 2px solid #ffffff;
+.dtc-widget-label {
+  pointer-events: none;
+  color: inherit;
 }
 
 /* ===========================================
@@ -273,6 +241,9 @@
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   max-width: 90%;
   text-align: center;
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
 .dtc-snackbar.dtc-visible {
@@ -290,6 +261,47 @@
 
 .dtc-snackbar-error {
   background: rgba(239, 68, 68, 0.95);
+}
+
+.dtc-snackbar-message {
+  flex: 1;
+  pointer-events: none;
+}
+
+.dtc-snackbar-exit-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: all;
+  flex-shrink: 0;
+}
+
+.dtc-snackbar-exit-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: scale(1.1);
+}
+
+.dtc-snackbar-exit-btn:active {
+  transform: scale(1.05);
+}
+
+.dtc-snackbar-exit-icon {
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+}
+
+.dtc-snackbar.dtc-with-exit-btn {
+  padding: 10px 14px 10px 20px;
 }
 
 /* ===========================================
@@ -815,29 +827,17 @@
     height: 28px;
   }
 
-  .dtc-feedback-widget {
+  .dtc-widget-view-all-btn {
     bottom: 20px;
     right: 20px;
-    gap: 12px;
+    height: 48px;
+    padding: 0 14px;
+    font-size: 13px;
   }
 
-  .dtc-widget-exit-btn,
-  .dtc-widget-counter-btn {
-    width: 56px;
-    height: 56px;
-  }
-
-  .dtc-widget-icon {
-    width: 28px;
-    height: 28px;
-  }
-
-  .dtc-widget-counter-badge {
-    top: -2px;
-    right: -2px;
-    min-width: 22px;
-    height: 22px;
-    font-size: 12px;
+  .dtc-widget-view-all-btn .dtc-widget-icon {
+    width: 18px;
+    height: 18px;
   }
 
   .dtc-snackbar {
