@@ -15,6 +15,9 @@ export const CONFIG = {
     retries: 3
   },
 
+  // Feedback URL Configuration
+  FEEDBACK_URL: process.env.FEEDBACK_URL || 'http://localhost:3001/feedbacks',
+
   // Widget defaults
   DEFAULTS: {
     theme: 'light',

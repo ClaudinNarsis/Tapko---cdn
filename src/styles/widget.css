@@ -69,6 +69,62 @@
 }
 
 /* ===========================================
+   FEEDBACK WIDGET (View All Button)
+   =========================================== */
+.dtc-widget-view-all-btn {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  height: 44px;
+  padding: 0 16px;
+  border-radius: 22px;
+  border: 2px solid #e5e7eb;
+  background: #ffffff;
+  color: #6b7280;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  z-index: 2147483646;
+  opacity: 0;
+  transform: scale(0.8) translateY(10px);
+}
+
+.dtc-widget-view-all-btn.dtc-visible {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+}
+
+.dtc-widget-view-all-btn:hover {
+  border-color: #4f46e5;
+  color: #4f46e5;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.dtc-widget-view-all-btn:active {
+  transform: translateY(0);
+}
+
+.dtc-widget-icon {
+  width: 20px;
+  height: 20px;
+  pointer-events: none;
+  flex-shrink: 0;
+}
+
+.dtc-widget-label {
+  pointer-events: none;
+  color: inherit;
+}
+
+/* ===========================================
    FEEDBACK DISABLED POPUP
    =========================================== */
 .dtc-feedback-disabled-popup {
@@ -185,6 +241,9 @@
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   max-width: 90%;
   text-align: center;
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
 .dtc-snackbar.dtc-visible {
@@ -202,6 +261,47 @@
 
 .dtc-snackbar-error {
   background: rgba(239, 68, 68, 0.95);
+}
+
+.dtc-snackbar-message {
+  flex: 1;
+  pointer-events: none;
+}
+
+.dtc-snackbar-exit-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: all;
+  flex-shrink: 0;
+}
+
+.dtc-snackbar-exit-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: scale(1.1);
+}
+
+.dtc-snackbar-exit-btn:active {
+  transform: scale(1.05);
+}
+
+.dtc-snackbar-exit-icon {
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+}
+
+.dtc-snackbar.dtc-with-exit-btn {
+  padding: 10px 14px 10px 20px;
 }
 
 /* ===========================================
@@ -725,6 +825,19 @@
   .dtc-button-icon {
     width: 28px;
     height: 28px;
+  }
+
+  .dtc-widget-view-all-btn {
+    bottom: 20px;
+    right: 20px;
+    height: 48px;
+    padding: 0 14px;
+    font-size: 13px;
+  }
+
+  .dtc-widget-view-all-btn .dtc-widget-icon {
+    width: 18px;
+    height: 18px;
   }
 
   .dtc-snackbar {

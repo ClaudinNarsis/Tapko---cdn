@@ -19,17 +19,19 @@ class FeedbackModeOverlay {
     this.overlay = null;
     this.snackbar = null;
     this.onTap = null;
+    this.onExit = null;
   }
 
   /**
    * Create and show the overlay
    */
-  create(onTapCallback) {
+  create(onTapCallback, onExitCallback) {
     if (this.overlay) {
       return; // Already created
     }
 
     this.onTap = onTapCallback;
+    this.onExit = onExitCallback;
 
     // Create overlay container
     this.overlay = createElement('div', `${CONFIG.CLASS_PREFIX}feedback-overlay`);
@@ -46,8 +48,12 @@ class FeedbackModeOverlay {
     // Show with animation
     requestAnimationFrame(() => {
       this.overlay.classList.add(`${CONFIG.CLASS_PREFIX}visible`);
-      // Show initial message
-      this.snackbar.show('Feedback mode — tap anything', { type: 'info' });
+      // Show initial message with integrated exit button
+      this.snackbar.show('Feedback mode ON', {
+        type: 'error',
+        showExitButton: true,
+        onExit: this.onExit
+      });
     });
 
     return this.overlay;
@@ -131,7 +137,11 @@ class FeedbackModeOverlay {
       this.snackbar.show('Drawing mode — Press Done when finished', { type: 'info' });
     } else {
       this.overlay.classList.remove(`${CONFIG.CLASS_PREFIX}drawing-mode`);
-      this.snackbar.show('Feedback mode — tap anything', { type: 'info' });
+      this.snackbar.show('Feedback mode ON', {
+        type: 'error',
+        showExitButton: true,
+        onExit: this.onExit
+      });
     }
   }
 

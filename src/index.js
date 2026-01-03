@@ -27,6 +27,7 @@ import { FeedbackModeOverlay } from './components/FeedbackModeOverlay.js';
 import { CommentCard } from './components/CommentCard.js';
 import { DrawingCanvas } from './components/DrawingCanvas.js';
 import { FeedbackDisabledPopup } from './components/FeedbackDisabledPopup.js';
+import { FeedbackWidget } from './components/FeedbackWidget.js';
 import { dispatchCustomEvent } from './utils/dom.js';
 import { logManager } from './managers/LogManager.js';
 import { analyticsManager } from './managers/AnalyticsManager.js';
@@ -64,6 +65,7 @@ import NetworkStatusManager from './managers/NetworkStatusManager.js';
       this.feedbackOverlay = null;
       this.drawingCanvas = null;
       this.disabledPopup = new FeedbackDisabledPopup();
+      this.feedbackWidget = null;
 
       // Queue system components (NEW)
       this.queueManager = null;
@@ -254,14 +256,21 @@ import NetworkStatusManager from './managers/NetworkStatusManager.js';
 
       this.isInFeedbackMode = true;
 
-      // Update floating button
-      this.floatingButton.setFeedbackMode(true);
+      // Hide floating button when entering feedback mode
+      this.floatingButton.hide();
 
-      // Create overlay
+      // Create feedback widget (view all feedback button)
+      this.feedbackWidget = new FeedbackWidget();
+      this.feedbackWidget.create(this.config.projectId, CONFIG.FEEDBACK_URL);
+
+      // Create overlay with exit callback
       this.feedbackOverlay = new FeedbackModeOverlay();
-      this.feedbackOverlay.create((element, coordinates) => {
-        this._createCommentCard(element, coordinates);
-      });
+      this.feedbackOverlay.create(
+        (element, coordinates) => {
+          this._createCommentCard(element, coordinates);
+        },
+        () => this._exitFeedbackMode()
+      );
 
       // Dispatch event
       dispatchCustomEvent(CONFIG.EVENTS.FEEDBACK_MODE_ENTERED);
@@ -277,8 +286,14 @@ import NetworkStatusManager from './managers/NetworkStatusManager.js';
 
       this.isInFeedbackMode = false;
 
-      // Update floating button
-      this.floatingButton.setFeedbackMode(false);
+      // Destroy feedback widget
+      if (this.feedbackWidget) {
+        this.feedbackWidget.destroy();
+        this.feedbackWidget = null;
+      }
+
+      // Show floating button again
+      this.floatingButton.show();
 
       // Close active card
       if (this.activeCard) {
@@ -334,7 +349,11 @@ import NetworkStatusManager from './managers/NetworkStatusManager.js';
             this.activeCard = null;
             // Show snackbar again when card is closed
             if (this.isInFeedbackMode && this.feedbackOverlay && this.feedbackOverlay.snackbar) {
-              this.feedbackOverlay.snackbar.show('Feedback mode — tap anything', { type: 'info' });
+              this.feedbackOverlay.snackbar.show('Feedback mode ON', {
+                type: 'error',
+                showExitButton: true,
+                onExit: () => this._exitFeedbackMode()
+              });
             }
           }
         };
@@ -441,6 +460,11 @@ import NetworkStatusManager from './managers/NetworkStatusManager.js';
       // Destroy disabled popup
       if (this.disabledPopup) {
         this.disabledPopup.destroy();
+      }
+
+      // Destroy feedback widget
+      if (this.feedbackWidget) {
+        this.feedbackWidget.destroy();
       }
 
       // Destroy analytics (NEW)
