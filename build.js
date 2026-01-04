@@ -76,6 +76,9 @@ const buildOptions = {
     'process.env.API_URL': process.env.API_URL
       ? JSON.stringify(process.env.API_URL)
       : 'undefined',
+    'process.env.FEEDBACK_URL': process.env.FEEDBACK_URL
+      ? JSON.stringify(process.env.FEEDBACK_URL)
+      : 'undefined',
     'process.env.NODE_ENV': JSON.stringify(
       isProduction ? 'production' : 'development'
     )

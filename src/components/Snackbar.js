@@ -16,6 +16,8 @@ class Snackbar {
   constructor() {
     this.container = null;
     this.currentTimeout = null;
+    this.exitButton = null;
+    this.onExitCallback = null;
   }
 
   /**
@@ -40,7 +42,9 @@ class Snackbar {
   show(message, options = {}) {
     const {
       duration = 0, // 0 means persistent (no auto-hide)
-      type = 'info' // 'info', 'success', 'error'
+      type = 'info', // 'info', 'success', 'error'
+      showExitButton = false, // Show integrated exit button
+      onExit = null // Exit button callback
     } = options;
 
     if (!this.container) {
@@ -53,11 +57,45 @@ class Snackbar {
       this.currentTimeout = null;
     }
 
-    // Update message
-    this.container.textContent = message;
+    // Clear container
+    this.container.innerHTML = '';
 
     // Update type class
     this.container.className = `${CONFIG.CLASS_PREFIX}snackbar ${CONFIG.CLASS_PREFIX}snackbar-${type}`;
+
+    // Create message text
+    const messageSpan = createElement('span', `${CONFIG.CLASS_PREFIX}snackbar-message`);
+    messageSpan.textContent = message;
+    this.container.appendChild(messageSpan);
+
+    // Add exit button if requested
+    if (showExitButton && onExit) {
+      this.onExitCallback = onExit;
+
+      // Remove old exit button if exists
+      if (this.exitButton && this.exitButton.parentNode) {
+        this.exitButton.remove();
+      }
+
+      this.exitButton = createElement('button', `${CONFIG.CLASS_PREFIX}snackbar-exit-btn`);
+      this.exitButton.setAttribute('type', 'button');
+      this.exitButton.setAttribute('aria-label', 'Exit feedback mode');
+      this.exitButton.innerHTML = `
+        <svg viewBox="0 0 24 24" class="${CONFIG.CLASS_PREFIX}snackbar-exit-icon">
+          <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+        </svg>
+      `;
+      this.exitButton.addEventListener('click', () => {
+        if (this.onExitCallback) {
+          this.onExitCallback();
+        }
+      });
+
+      this.container.appendChild(this.exitButton);
+      this.container.classList.add(`${CONFIG.CLASS_PREFIX}with-exit-btn`);
+    } else {
+      this.container.classList.remove(`${CONFIG.CLASS_PREFIX}with-exit-btn`);
+    }
 
     // Show with animation
     requestAnimationFrame(() => {
