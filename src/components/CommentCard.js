@@ -281,7 +281,7 @@ class CommentCard {
         }
 
         // Capture screenshot of current viewport
-        const screenshotData = await captureViewportScreenshot();
+        const screenshotData = await captureViewportScreenshot({ shadowRoot: this.shadowRoot });
 
         // Reset button
         if (drawBtn) {
@@ -874,7 +874,7 @@ class CommentCard {
     try {
       // Don't include widget elements in screenshot - they're in shadow DOM and just UI
       // The screenshot should capture the actual page content only
-      const screenshotData = await captureViewportScreenshot();
+      const screenshotData = await captureViewportScreenshot({ shadowRoot: this.shadowRoot });
 
       this.screenshot = screenshotData.dataURL;
       this.screenshotMetadata = screenshotData.metadata;

@@ -328,9 +328,9 @@ import { captureViewportScreenshot, importHtmlToImage } from './utils/screenshot
         // Capture screenshot immediately
         console.log('[Tapko] Entering feedback mode - capturing screenshot...');
 
-        // Use the snackbar from DrawingCanvas if we move it there, 
+        // Use the snackbar from DrawingCanvas if we move it there,
         // or just local logging for now while capture is fast.
-        const screenshotData = await captureViewportScreenshot();
+        const screenshotData = await captureViewportScreenshot({ shadowRoot: this.shadowRoot });
 
         // Enter integrated drawing/comment mode
         this._enterDrawingMode(

@@ -11,6 +11,8 @@
  * - WordPress and other CMS styling
  */
 
+import { ScreenshotPermissionOverlay } from '../components/ScreenshotPermissionOverlay.js';
+
 
 /**
  * Load html-to-image library dynamically
@@ -30,10 +32,15 @@ async function loadHtmlToImage() {
 /**
  * Capture viewport-only screenshot using Screen Capture API
  * This method bypasses CORS and gradient rendering issues
+ * @param {Object} options - Screenshot options
+ * @param {ShadowRoot} options.shadowRoot - Optional shadow root to show permission overlay in
  */
 async function captureViewportScreenshot(options = {}) {
   const timingStart = performance.now();
   console.log('[Tapko] Starting viewport capture with Screen Capture API...');
+
+  const { shadowRoot } = options;
+  let permissionOverlay = null;
 
   try {
     // Get current viewport and scroll position
@@ -43,12 +50,19 @@ async function captureViewportScreenshot(options = {}) {
     const viewportHeight = window.innerHeight;
     const devicePixelRatio = window.devicePixelRatio || 1;
 
-    // Temporarily hide shadow host
+    // Get shadow host reference (we'll hide it after permission is granted)
     const shadowHost = document.getElementById('tapko-widget-shadow-host');
     const originalDisplay = shadowHost ? shadowHost.style.display : null;
-    if (shadowHost) shadowHost.style.display = 'none';
 
     try {
+      // Show permission overlay if shadowRoot is provided (BEFORE hiding widget)
+      if (shadowRoot) {
+        permissionOverlay = new ScreenshotPermissionOverlay(shadowRoot);
+        permissionOverlay.show();
+        // Small delay to ensure overlay is visible before permission prompt
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
       // Request screen capture with specific constraints
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: {
@@ -59,6 +73,15 @@ async function captureViewportScreenshot(options = {}) {
         audio: false,
         preferCurrentTab: true
       });
+
+      // Permission granted! Now hide the overlay and shadow host
+      if (permissionOverlay) {
+        permissionOverlay.hide();
+        permissionOverlay = null;
+      }
+
+      // Hide shadow host for clean screenshot
+      if (shadowHost) shadowHost.style.display = 'none';
 
       // Create video element to capture the stream
       const video = document.createElement('video');
@@ -110,11 +133,23 @@ async function captureViewportScreenshot(options = {}) {
         }
       };
 
+    } catch (innerError) {
+      // Hide overlay on error
+      if (permissionOverlay) {
+        permissionOverlay.hide();
+        permissionOverlay = null;
+      }
+      throw innerError;
     } finally {
       if (shadowHost) shadowHost.style.display = originalDisplay;
     }
 
   } catch (error) {
+    // Ensure overlay is hidden in case of any error
+    if (permissionOverlay) {
+      permissionOverlay.hide();
+    }
+
     console.error('[Tapko] Screenshot capture failed:', error);
 
     // Provide helpful error messages
