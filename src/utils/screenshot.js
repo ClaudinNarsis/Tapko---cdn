@@ -14,6 +14,7 @@
 
 /**
  * Load html-to-image library dynamically
+ * Used only for internal widget content capture (drawing overlays)
  */
 async function loadHtmlToImage() {
   if (window.htmlToImage) return window.htmlToImage;
@@ -27,15 +28,14 @@ async function loadHtmlToImage() {
 }
 
 /**
- * Capture viewport-only screenshot at current scroll position
+ * Capture viewport-only screenshot using Screen Capture API
+ * This method bypasses CORS and gradient rendering issues
  */
 async function captureViewportScreenshot(options = {}) {
   const timingStart = performance.now();
-  console.log('[Tapko] Starting viewport capture with html-to-image...');
+  console.log('[Tapko] Starting viewport capture with Screen Capture API...');
 
   try {
-    const htmlToImage = await loadHtmlToImage();
-
     // Get current viewport and scroll position
     const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
     const scrollY = window.pageYOffset || document.documentElement.scrollTop;
@@ -49,43 +49,52 @@ async function captureViewportScreenshot(options = {}) {
     if (shadowHost) shadowHost.style.display = 'none';
 
     try {
-      // Direct viewport capture using html-to-image
-      const targetNode = document.documentElement;
-
-      const dataURL = await htmlToImage.toJpeg(targetNode, {
-        width: viewportWidth,
-        height: viewportHeight,
-        quality: 0.85,
-        pixelRatio: devicePixelRatio,
-        style: {
-          marginTop: `-${scrollY}px`,
-          marginLeft: `-${scrollX}px`,
-          width: `${targetNode.scrollWidth}px`,
-          height: `${targetNode.scrollHeight}px`,
-          backgroundColor: '#ffffff'
+      // Request screen capture with specific constraints
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          mediaSource: 'screen',
+          width: { ideal: viewportWidth * devicePixelRatio },
+          height: { ideal: viewportHeight * devicePixelRatio }
         },
-        filter: (node) => {
-          // Exclude widget elements
-          if (node.id === 'tapko-widget-shadow-host') return false;
-
-          // Check for className safely (SVGs have className as SVGAnimatedString)
-          let className = '';
-          if (node.className) {
-            if (typeof node.className === 'string') {
-              className = node.className;
-            } else if (typeof node.className === 'object' && node.className.baseVal) {
-              className = node.className.baseVal;
-            }
-          }
-
-          if (className && className.includes('dtc-')) return false;
-          return true;
-        }
+        audio: false,
+        preferCurrentTab: true
       });
+
+      // Create video element to capture the stream
+      const video = document.createElement('video');
+      video.srcObject = stream;
+      video.autoplay = true;
+      video.playsInline = true;
+
+      // Wait for video to be ready
+      await new Promise((resolve, reject) => {
+        video.onloadedmetadata = resolve;
+        video.onerror = reject;
+        setTimeout(() => reject(new Error('Video load timeout')), 5000);
+      });
+
+      // Small delay to ensure first frame is rendered
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Create canvas and capture frame
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0);
+
+      // Stop all tracks
+      stream.getTracks().forEach(track => track.stop());
+
+      // Convert to JPEG data URL
+      const dataURL = canvas.toDataURL('image/jpeg', 0.85);
 
       console.log(`[Tapko] Snapshot success. DataURL length: ${dataURL.length}`);
 
       const timingEnd = performance.now();
+      console.log(`[Tapko Timing] Screen capture: ${(timingEnd - timingStart).toFixed(2)}ms`);
+
       return {
         dataURL,
         metadata: {
@@ -97,7 +106,7 @@ async function captureViewportScreenshot(options = {}) {
           timestamp: new Date().toISOString(),
           url: window.location.href,
           userAgent: navigator.userAgent,
-          method: 'html-to-image-v1'
+          method: 'screen-capture-api'
         }
       };
 
@@ -107,7 +116,15 @@ async function captureViewportScreenshot(options = {}) {
 
   } catch (error) {
     console.error('[Tapko] Screenshot capture failed:', error);
-    throw new Error(`Failed to capture screenshot: ${error.message}`);
+
+    // Provide helpful error messages
+    if (error.name === 'NotAllowedError') {
+      throw new Error('Screenshot permission denied. Please allow screen capture when prompted.');
+    } else if (error.name === 'NotSupportedError') {
+      throw new Error('Screen capture not supported in this browser.');
+    } else {
+      throw new Error(`Failed to capture screenshot: ${error.message}`);
+    }
   }
 }
 
