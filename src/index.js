@@ -346,10 +346,32 @@ import { captureViewportScreenshot, importHtmlToImage } from './utils/screenshot
 
       } catch (error) {
         console.error('[Tapko] Failed to enter feedback mode:', error);
+
+        // Clean up feedback widget if it was created
+        if (this.feedbackWidget) {
+          this.feedbackWidget.destroy();
+          this.feedbackWidget = null;
+        }
+
+        // Reset state
         this.isInFeedbackMode = false;
         document.body.style.overflow = this._originalOverflow || '';
         this.floatingButton.show();
-        alert('Failed to start feedback mode. Please try again.');
+
+        // Notify user with a friendly error message
+        const userMessage = error.message.includes('permission denied')
+          ? 'Screenshot permission denied. Please allow screen capture to use feedback mode.'
+          : error.message.includes('not supported')
+          ? 'Your browser doesn\'t support screenshots. Please try a different browser.'
+          : 'Failed to start feedback mode. Please try again.';
+
+        alert(userMessage);
+
+        // Dispatch error event
+        dispatchCustomEvent(CONFIG.EVENTS.ERROR, {
+          message: error.message,
+          stack: error.stack
+        });
       }
     }
 
