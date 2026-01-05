@@ -22,8 +22,10 @@ class FloatingEntryButton {
 
   /**
    * Create and show the floating button
+   * @param {Function} onClickCallback - Callback when button is clicked
+   * @param {ShadowRoot} shadowRoot - Shadow root to append the button to (defaults to document.body for backward compatibility)
    */
-  create(onClickCallback) {
+  create(onClickCallback, shadowRoot = document.body) {
     if (this.button) {
       return; // Already created
     }
@@ -41,7 +43,8 @@ class FloatingEntryButton {
     // Attach click event
     this.button.addEventListener('click', () => this._handleClick());
 
-    document.body.appendChild(this.button);
+    // Append to shadow root instead of document.body
+    shadowRoot.appendChild(this.button);
 
     return this.button;
   }

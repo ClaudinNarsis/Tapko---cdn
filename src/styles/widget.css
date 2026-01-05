@@ -1,6 +1,23 @@
 /* Tapko Widget V2 Styles */
 
 /* ===========================================
+   SHADOW DOM FIX: Allow pointer events for all widget elements
+   =========================================== */
+[class^="dtc-"],
+[class*=" dtc-"] {
+  pointer-events: auto;
+}
+
+/* Reset pointer-events for non-interactive child elements */
+.dtc-button-icon,
+.dtc-widget-icon,
+.dtc-widget-label,
+.dtc-snackbar-message,
+.dtc-snackbar-exit-icon {
+  pointer-events: none;
+}
+
+/* ===========================================
    FLOATING ENTRY BUTTON
    =========================================== */
 .dtc-floating-entry-button {
@@ -22,6 +39,7 @@
   opacity: 0;
   transform: scale(0.8);
   color: #ffffff;
+  pointer-events: auto; /* Allow clicks through shadow host */
 }
 
 .dtc-floating-entry-button.dtc-visible {
@@ -675,6 +693,7 @@
 
 /* ===========================================
    DRAWING CANVAS
+   NEW: Shows screenshot with annotations, not transparent overlay
    =========================================== */
 .dtc-drawing-container {
   position: fixed;
@@ -683,6 +702,7 @@
   width: 100%;
   height: 100%;
   z-index: 2147483648;
+  background: #000; /* Dark background to frame screenshot */
   opacity: 0;
   transition: opacity 0.3s ease;
 }
@@ -699,6 +719,8 @@
   height: 100%;
   cursor: crosshair;
   touch-action: none;
+  background: #fff; /* White background if screenshot fails to load */
+  display: block;
 }
 
 /* Drawing toolbar */

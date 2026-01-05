@@ -24,8 +24,11 @@ class FeedbackModeOverlay {
 
   /**
    * Create and show the overlay
+   * @param {Function} onTapCallback - Callback when user taps an element
+   * @param {Function} onExitCallback - Callback when user exits feedback mode
+   * @param {ShadowRoot} shadowRoot - Shadow root to append the overlay to (defaults to document.body for backward compatibility)
    */
-  create(onTapCallback, onExitCallback) {
+  create(onTapCallback, onExitCallback, shadowRoot = document.body) {
     if (this.overlay) {
       return; // Already created
     }
@@ -36,14 +39,15 @@ class FeedbackModeOverlay {
     // Create overlay container
     this.overlay = createElement('div', `${CONFIG.CLASS_PREFIX}feedback-overlay`);
 
-    // Create snackbar for messages
+    // Create snackbar for messages (pass shadowRoot)
     this.snackbar = new Snackbar();
-    this.snackbar.create();
+    this.snackbar.create(shadowRoot);
 
     // Attach events
     this._attachEventListeners();
 
-    document.body.appendChild(this.overlay);
+    // Append to shadow root instead of document.body
+    shadowRoot.appendChild(this.overlay);
 
     // Show with animation
     requestAnimationFrame(() => {

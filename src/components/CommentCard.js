@@ -25,10 +25,11 @@ import {
 } from '../utils/dom.js';
 
 class CommentCard {
-  constructor(target, coordinates, apiClient) {
+  constructor(target, coordinates, apiClient, shadowRoot = document.body) {
     this.target = target;
     this.coordinates = coordinates;
     this.apiClient = apiClient;
+    this.shadowRoot = shadowRoot;
     this.card = null;
     this.pinMarker = null;
     this.recordingManager = new RecordingManager();
@@ -88,7 +89,8 @@ class CommentCard {
     this.pinMarker.style.top = `${this.coordinates.y + scrollY}px`;
     this.pinMarker.style.zIndex = CONFIG.UI.zIndex;
 
-    document.body.appendChild(this.pinMarker);
+    // Append to shadow root
+    this.shadowRoot.appendChild(this.pinMarker);
   }
 
   /**
@@ -153,7 +155,8 @@ class CommentCard {
       </div>
     `;
 
-    document.body.appendChild(card);
+    // Append to shadow root
+    this.shadowRoot.appendChild(card);
     return card;
   }
 
@@ -253,21 +256,91 @@ class CommentCard {
 
   /**
    * Handle draw button click
+   * NEW: Captures screenshot FIRST, then enters drawing mode
    */
-  _handleDrawClick() {
-    this.minimize();
+  async _handleDrawClick() {
+    // Get draw button for loading state
+    const drawBtn = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}btn-draw`);
 
-    if (this.onDrawRequested) {
-      this.onDrawRequested((completeData) => {
-        // Store all data from drawing completion
-        if (completeData) {
-          this.drawingData = completeData.dataURL ? completeData : null;
-          this.screenshot = completeData.screenshot || null;
-          this.thumbnail = completeData.thumbnail || null;
-          this.screenshotMetadata = completeData.screenshotMetadata || null;
+    // If we don't have a screenshot yet, capture it first
+    if (!this.screenshot && this.onDrawRequested) {
+      try {
+        // Show loading state on button
+        if (drawBtn) {
+          drawBtn.disabled = true;
+          drawBtn.innerHTML = `
+            <svg viewBox="0 0 24 24" class="${CONFIG.CLASS_PREFIX}spinner">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none" opacity="0.25"/>
+              <path d="M12 2 A10 10 0 0 1 22 12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>
+            </svg>
+            Capturing screenshot...
+          `;
+        }
+
+        // Capture screenshot of current viewport
+        const screenshotData = await captureViewportScreenshot();
+
+        // Reset button
+        if (drawBtn) {
+          drawBtn.disabled = false;
+          drawBtn.innerHTML = `
+            <svg viewBox="0 0 24 24" width="16" height="16">
+              <path d="M12 19l7-7 3 3-7 7-3-3z" fill="none" stroke="currentColor" stroke-width="2"/>
+              <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" fill="none" stroke="currentColor" stroke-width="2"/>
+              <path d="M2 2l7.586 7.586" stroke="currentColor" stroke-width="2"/>
+              <circle cx="11" cy="11" r="2" fill="currentColor"/>
+            </svg>
+            ${this.screenshot ? 'Edit drawing' : 'Draw on page'}
+          `;
+        }
+
+        // Minimize card
+        this.minimize();
+
+        // Pass screenshot to drawing mode
+        this.onDrawRequested((drawingData) => {
+          // Handle drawing completion
+          if (drawingData) {
+            this.screenshot = drawingData.finalScreenshot;  // Canvas with screenshot + annotations
+            this.thumbnail = drawingData.thumbnail;
+            this.screenshotMetadata = drawingData.metadata;
+            this.drawingData = drawingData.finalScreenshot;  // For compatibility
+          }
+          this.restore();
+        }, screenshotData);
+
+      } catch (error) {
+        console.error('[Tapko] Screenshot capture failed:', error);
+
+        // Reset button on error
+        if (drawBtn) {
+          drawBtn.disabled = false;
+          drawBtn.innerHTML = `
+            <svg viewBox="0 0 24 24" width="16" height="16">
+              <path d="M12 19l7-7 3 3-7 7-3-3z" fill="none" stroke="currentColor" stroke-width="2"/>
+              <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" fill="none" stroke="currentColor" stroke-width="2"/>
+              <path d="M2 2l7.586 7.586" stroke="currentColor" stroke-width="2"/>
+              <circle cx="11" cy="11" r="2" fill="currentColor"/>
+            </svg>
+            Draw on page
+          `;
+        }
+
+        // Show error to user
+        alert('Failed to capture screenshot. Please try again.');
+      }
+    } else if (this.onDrawRequested) {
+      // Edit existing drawing - pass existing screenshot
+      this.minimize();
+      this.onDrawRequested((drawingData) => {
+        if (drawingData) {
+          this.screenshot = drawingData.finalScreenshot;
+          this.thumbnail = drawingData.thumbnail;
+          this.screenshotMetadata = drawingData.metadata;
+          this.drawingData = drawingData.finalScreenshot;
         }
         this.restore();
-      });
+      }, { dataURL: this.screenshot, metadata: this.screenshotMetadata });
     }
 
     dispatchCustomEvent(CONFIG.EVENTS.DRAWING_STARTED);
@@ -399,8 +472,8 @@ class CommentCard {
       </div>
     `;
 
-    // Add to body
-    document.body.appendChild(overlay);
+    // Add to shadow root
+    this.shadowRoot.appendChild(overlay);
 
     // Show with animation
     requestAnimationFrame(() => {
@@ -760,9 +833,9 @@ class CommentCard {
     await new Promise(resolve => setTimeout(resolve, 50));
 
     try {
-      const screenshotData = await captureViewportScreenshot({
-        elementsToInclude: [this.card, this.pinMarker]
-      });
+      // Don't include widget elements in screenshot - they're in shadow DOM and just UI
+      // The screenshot should capture the actual page content only
+      const screenshotData = await captureViewportScreenshot();
 
       this.screenshot = screenshotData.dataURL;
       this.screenshotMetadata = screenshotData.metadata;

@@ -39,7 +39,7 @@ const isWatch = process.argv.includes('--watch');
 const cssPath = path.join(__dirname, 'src/styles/widget.css');
 const cssContent = fs.readFileSync(cssPath, 'utf8');
 
-// Plugin to inject CSS into JS
+// Plugin to inject CSS into JS for shadow DOM
 const injectCSSPlugin = {
   name: 'inject-css',
   setup(build) {
@@ -50,6 +50,12 @@ const injectCSSPlugin = {
       contents = contents.replace(
         'INJECTED_CSS',
         JSON.stringify(cssContent)
+      );
+
+      // Also add a SHADOW_DOM_STYLES constant for clarity (optional)
+      contents = contents.replace(
+        '// SHADOW_DOM_STYLES_PLACEHOLDER',
+        `const SHADOW_DOM_STYLES = ${JSON.stringify(cssContent)};`
       );
 
       return { contents, loader: 'js' };

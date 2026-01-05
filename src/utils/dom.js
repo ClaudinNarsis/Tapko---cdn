@@ -122,15 +122,31 @@ export function isInViewport(element) {
 
 /**
  * Dispatch custom event
+ * Events are dispatched on both window (for analytics/public API) and shadow root (if available)
  */
 export function dispatchCustomEvent(eventName, detail = {}) {
   const event = new CustomEvent(eventName, {
     detail,
     bubbles: true,
-    cancelable: true
+    cancelable: true,
+    composed: true  // Allow event to cross shadow boundary
   });
 
+  // Always dispatch on window for analytics and public API
   window.dispatchEvent(event);
+
+  // Also dispatch on shadow root if available
+  const shadowRoot = window.Tapko?._internal?.shadowRoot;
+  if (shadowRoot) {
+    shadowRoot.dispatchEvent(
+      new CustomEvent(eventName, {
+        detail,
+        bubbles: true,
+        composed: true
+      })
+    );
+  }
+
   return event;
 }
 

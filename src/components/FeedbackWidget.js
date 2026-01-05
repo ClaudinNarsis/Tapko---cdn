@@ -23,8 +23,11 @@ class FeedbackWidget {
 
   /**
    * Create and show the widget
+   * @param {string} projectId - Project ID
+   * @param {string} feedbackUrl - Feedback URL
+   * @param {ShadowRoot} shadowRoot - Shadow root to append the widget to (defaults to document.body for backward compatibility)
    */
-  create(projectId, feedbackUrl) {
+  create(projectId, feedbackUrl, shadowRoot = document.body) {
     if (this.widget) {
       return; // Already created
     }
@@ -47,7 +50,8 @@ class FeedbackWidget {
     `;
     this.viewAllButton.addEventListener('click', () => this._handleViewAllClick());
 
-    document.body.appendChild(this.viewAllButton);
+    // Append to shadow root
+    shadowRoot.appendChild(this.viewAllButton);
 
     // Show with animation
     requestAnimationFrame(() => {

@@ -1,19 +1,20 @@
 /**
  * Drawing Canvas Component
- * Full-page transparent canvas for drawing feedback annotations
+ * Canvas for drawing annotations on top of a captured screenshot
+ *
+ * NEW APPROACH: Screenshot is captured BEFORE drawing, user annotates on top
  *
  * Specifications:
- * - Transparent canvas overlay
- * - 2px stroke width
+ * - Screenshot displayed as canvas background
+ * - 2px stroke width for annotations
  * - Red or yellow default color (configurable)
- * - Smoothing algorithm enabled
  * - Undo, Clear, Done buttons
- * - Scroll allowed with wheel/two-finger gestures
+ * - Final output = screenshot + annotations in single canvas
  */
 
 import { CONFIG } from '../config.js';
 import { createElement, dispatchCustomEvent } from '../utils/dom.js';
-import { captureViewportScreenshot, generateThumbnail } from '../utils/screenshot.js';
+import { generateThumbnail } from '../utils/screenshot.js';
 
 class DrawingCanvas {
   constructor() {
@@ -31,18 +32,27 @@ class DrawingCanvas {
 
     this.onDone = null;
     this.onCancel = null;
+
+    // NEW: Store screenshot data
+    this.screenshotData = null;
+    this.screenshotImage = null;
   }
 
   /**
-   * Create and show the drawing canvas
+   * Create and show the drawing canvas with screenshot background
+   * @param {Function} onDoneCallback - Callback when done drawing
+   * @param {Function} onCancelCallback - Callback when cancelled
+   * @param {ShadowRoot} shadowRoot - Shadow root to append the canvas to
+   * @param {Object} screenshotData - Screenshot data (dataURL and metadata)
    */
-  create(onDoneCallback, onCancelCallback) {
+  async create(onDoneCallback, onCancelCallback, shadowRoot = document.body, screenshotData = null) {
     if (this.container) {
       return; // Already created
     }
 
     this.onDone = onDoneCallback;
     this.onCancel = onCancelCallback;
+    this.screenshotData = screenshotData;
 
     // Create container
     this.container = createElement('div', `${CONFIG.CLASS_PREFIX}drawing-container`);
@@ -61,7 +71,12 @@ class DrawingCanvas {
     this.ctx = this.canvas.getContext('2d');
     this.ctx.scale(dpr, dpr);
 
-    // Set drawing properties
+    // NEW: Draw screenshot as background if provided
+    if (screenshotData && screenshotData.dataURL) {
+      await this._drawScreenshotBackground(screenshotData.dataURL);
+    }
+
+    // Set drawing properties for annotations
     this.ctx.strokeStyle = this.strokeColor;
     this.ctx.lineWidth = this.strokeWidth;
     this.ctx.lineCap = 'round';
@@ -77,7 +92,8 @@ class DrawingCanvas {
     // Attach events
     this._attachEventListeners();
 
-    document.body.appendChild(this.container);
+    // Append to shadow root
+    shadowRoot.appendChild(this.container);
 
     // Show with animation
     requestAnimationFrame(() => {
@@ -86,6 +102,7 @@ class DrawingCanvas {
 
     return this.container;
   }
+
 
   /**
    * Create toolbar with drawing controls
@@ -236,23 +253,31 @@ class DrawingCanvas {
   }
 
   /**
-   * Clear all drawings
+   * Clear all drawings (keep screenshot background)
    */
   clear() {
     this.paths = [];
     this.currentPath = [];
-    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    this._redraw();
 
     dispatchCustomEvent(CONFIG.EVENTS.DRAWING_CLEARED);
   }
 
   /**
-   * Redraw all paths
+   * Redraw canvas (screenshot + all paths)
    */
   _redraw() {
     if (!this.ctx) return;
+
+    // Clear canvas
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
+    // Redraw screenshot background first
+    if (this.screenshotImage) {
+      this.ctx.drawImage(this.screenshotImage, 0, 0, window.innerWidth, window.innerHeight);
+    }
+
+    // Redraw all annotation paths
     this.paths.forEach(path => {
       if (path.length === 0) return;
 
@@ -299,16 +324,10 @@ class DrawingCanvas {
 
   /**
    * Handle done button click
+   * Returns the canvas directly (already contains screenshot + annotations)
    */
   async _handleDone() {
     const doneBtn = this.toolbar.querySelector(`.${CONFIG.CLASS_PREFIX}btn-done`);
-
-    // IMPORTANT: Capture current scroll position before doing anything
-    // This ensures the page doesn't scroll during screenshot capture
-    const currentScrollX = window.pageXOffset || document.documentElement.scrollLeft;
-    const currentScrollY = window.pageYOffset || document.documentElement.scrollTop;
-
-    console.log('[Tapko] Starting screenshot at scroll position:', currentScrollX, currentScrollY);
 
     try {
       // Show loading state
@@ -319,81 +338,87 @@ class DrawingCanvas {
             <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none" opacity="0.25"/>
             <path d="M12 2 A10 10 0 0 1 22 12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>
           </svg>
-          Capturing screenshot...
-        `;
-      }
-
-      // Ensure we're still at the same scroll position
-      window.scrollTo(currentScrollX, currentScrollY);
-
-      // Capture viewport screenshot
-      const screenshotData = await captureViewportScreenshot();
-
-      // Update loading text
-      if (doneBtn) {
-        doneBtn.innerHTML = `
-          <svg viewBox="0 0 24 24" class="${CONFIG.CLASS_PREFIX}spinner">
-            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none" opacity="0.25"/>
-            <path d="M12 2 A10 10 0 0 1 22 12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>
-          </svg>
           Generating thumbnail...
         `;
       }
 
+      // The canvas already contains screenshot + annotations!
+      // Just convert it to data URL
+      const finalScreenshot = this.canvas.toDataURL('image/jpeg', 0.85);
+
       // Generate thumbnail
-      const thumbnail = await generateThumbnail(screenshotData.dataURL);
+      const thumbnail = await generateThumbnail(finalScreenshot);
 
-      // Get drawing data
-      const drawingData = this.getDrawingData();
-
-      // Combine all data
-      const completeData = {
-        ...drawingData,
-        screenshot: screenshotData.dataURL,
-        thumbnail: thumbnail,
-        screenshotMetadata: screenshotData.metadata
-      };
-
-      // Call done callback with complete data
+      // Return everything via callback
       if (this.onDone) {
-        this.onDone(completeData);
+        this.onDone({
+          finalScreenshot: finalScreenshot,  // Canvas with screenshot + annotations
+          thumbnail: thumbnail,
+          metadata: {
+            ...this.screenshotData?.metadata,
+            hasAnnotations: this.paths.length > 0,
+            annotationCount: this.paths.length
+          }
+        });
       }
 
       dispatchCustomEvent(CONFIG.EVENTS.DRAWING_COMPLETED, {
-        drawingData: completeData
+        hasAnnotations: this.paths.length > 0,
+        annotationCount: this.paths.length
       });
-    } catch (error) {
-      console.error('[Tapko] Screenshot capture failed:', error);
 
-      // Show error state
+      console.log('[Tapko] Drawing complete, screenshot + annotations ready');
+
+    } catch (error) {
+      console.error('[Tapko] Failed to process drawing:', error);
+
+      // Reset button state
       if (doneBtn) {
+        doneBtn.disabled = false;
         doneBtn.innerHTML = `
           <svg viewBox="0 0 24 24">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" fill="currentColor"/>
+            <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
-          Screenshot failed
+          Done
         `;
       }
 
-      // Still call done callback with drawing data only (fallback)
-      const drawingData = this.getDrawingData();
-      if (this.onDone) {
-        this.onDone(drawingData);
-      }
-
-      // Re-enable button after 2 seconds
-      setTimeout(() => {
-        if (doneBtn) {
-          doneBtn.disabled = false;
-          doneBtn.innerHTML = `
-            <svg viewBox="0 0 24 24">
-              <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            Done
-          `;
-        }
-      }, 2000);
+      // Show error to user
+      alert('Failed to process drawing. Please try again.');
     }
+  }
+
+  /**
+   * Draw the screenshot as the background of the drawing canvas
+   */
+  async _drawScreenshotBackground(dataURL) {
+    if (!dataURL) return;
+
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        console.log('[Tapko] Drawing screenshot background:', img.width, 'x', img.height);
+
+        // Save current context state
+        this.ctx.save();
+
+        // Draw the high-res screenshot to fill the viewport
+        // The context is already scaled by DPR, so we draw at CSS dimensions
+        this.ctx.drawImage(img, 0, 0, window.innerWidth, window.innerHeight);
+
+        this.ctx.restore();
+
+        // Store image for redrawing on resize
+        this.screenshotImage = img;
+
+        resolve();
+      };
+      img.onerror = (err) => {
+        console.error('[Tapko] Failed to load screenshot image for background:', err);
+        resolve();
+      };
+      img.src = dataURL;
+    });
   }
 
   /**

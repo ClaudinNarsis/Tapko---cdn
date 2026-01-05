@@ -36,6 +36,8 @@ import SyncStatusIndicator from './components/SyncStatusIndicator.js';
 import QueueViewerModal from './components/QueueViewerModal.js';
 import SyncLifecycleManager from './managers/SyncLifecycleManager.js';
 import NetworkStatusManager from './managers/NetworkStatusManager.js';
+import { ShadowStyleManager } from './utils/ShadowStyleManager.js';
+import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
 
 (function (window, document) {
   'use strict';
@@ -60,6 +62,12 @@ import NetworkStatusManager from './managers/NetworkStatusManager.js';
       // Initialize log capture immediately
       logManager.init();
 
+      // Shadow DOM properties
+      this.shadowHost = null;
+      this.shadowRoot = null;
+      this.shadowStyleManager = null;
+      this.eventBridge = null;
+
       // V2 Components
       this.floatingButton = new FloatingEntryButton();
       this.feedbackOverlay = null;
@@ -79,6 +87,48 @@ import NetworkStatusManager from './managers/NetworkStatusManager.js';
       this.activeCard = null;
       this.escPressCount = 0;
       this.escTimeout = null;
+    }
+
+    /**
+     * Create shadow DOM container and initialize isolation
+     */
+    _createShadowDOM() {
+      // Create shadow host element
+      this.shadowHost = document.createElement('div');
+      this.shadowHost.id = 'tapko-widget-shadow-host';
+      this.shadowHost.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: ${CONFIG.UI.zIndex};
+      `;
+
+      // Attach shadow root (closed mode for encapsulation)
+      this.shadowRoot = this.shadowHost.attachShadow({
+        mode: 'closed',
+        delegatesFocus: true  // Automatically manage focus
+      });
+
+      // Create style manager
+      this.shadowStyleManager = new ShadowStyleManager(this.shadowRoot);
+
+      // Create event bridge
+      this.eventBridge = new ShadowEventBridge(this.shadowRoot, window);
+
+      // Expose internally for components (not on public API)
+      window.Tapko._internal = {
+        shadowRoot: this.shadowRoot,
+        shadowStyleManager: this.shadowStyleManager,
+        eventBridge: this.eventBridge
+      };
+
+      // Append to body
+      document.body.appendChild(this.shadowHost);
+
+      console.log('[Tapko] Shadow DOM initialized');
     }
 
     /**
@@ -141,7 +191,10 @@ import NetworkStatusManager from './managers/NetworkStatusManager.js';
         console.warn('[Tapko] Failed to validate project:', error.message);
       }
 
-      // Inject styles
+      // Create shadow DOM BEFORE injecting styles
+      this._createShadowDOM();
+
+      // Inject styles (now goes into shadow DOM)
       this._injectStyles();
 
       // Initialize analytics (NEW)
@@ -150,8 +203,8 @@ import NetworkStatusManager from './managers/NetworkStatusManager.js';
       // Initialize queue system (NEW)
       await this._initializeQueueSystem();
 
-      // Create floating entry button
-      this.floatingButton.create(() => this._toggleFeedbackMode());
+      // Create floating entry button (pass shadow root)
+      this.floatingButton.create(() => this._toggleFeedbackMode(), this.shadowRoot);
       if (this.isDisabled) {
         this.floatingButton.setDisabled(true);
       }
@@ -175,16 +228,19 @@ import NetworkStatusManager from './managers/NetworkStatusManager.js';
     }
 
     /**
-     * Inject widget styles into page
+     * Inject widget styles into shadow DOM
      */
     _injectStyles() {
-      if (document.getElementById('__tapko_widget_styles')) return;
+      if (!this.shadowStyleManager) {
+        console.error('[Tapko] Shadow style manager not initialized');
+        return;
+      }
 
-      const style = document.createElement('style');
-      style.id = '__tapko_widget_styles';
-      style.textContent = INJECTED_CSS; // Will be replaced by build process
-
-      document.head.appendChild(style);
+      // Inject main widget styles into shadow DOM
+      this.shadowStyleManager.injectStyles(
+        '__tapko_widget_styles',
+        INJECTED_CSS  // Will be replaced by build process
+      );
     }
 
     /**
@@ -259,17 +315,18 @@ import NetworkStatusManager from './managers/NetworkStatusManager.js';
       // Hide floating button when entering feedback mode
       this.floatingButton.hide();
 
-      // Create feedback widget (view all feedback button)
+      // Create feedback widget (view all feedback button, pass shadow root)
       this.feedbackWidget = new FeedbackWidget();
-      this.feedbackWidget.create(this.config.projectId, CONFIG.FEEDBACK_URL);
+      this.feedbackWidget.create(this.config.projectId, CONFIG.FEEDBACK_URL, this.shadowRoot);
 
-      // Create overlay with exit callback
+      // Create overlay with exit callback (pass shadow root)
       this.feedbackOverlay = new FeedbackModeOverlay();
       this.feedbackOverlay.create(
         (element, coordinates) => {
           this._createCommentCard(element, coordinates);
         },
-        () => this._exitFeedbackMode()
+        () => this._exitFeedbackMode(),
+        this.shadowRoot
       );
 
       // Dispatch event
@@ -332,11 +389,12 @@ import NetworkStatusManager from './managers/NetworkStatusManager.js';
       }
 
       try {
-        const card = new CommentCard(element, coordinates, this.apiClient);
+        // Create card with shadow root
+        const card = new CommentCard(element, coordinates, this.apiClient, this.shadowRoot);
 
         // Set draw callback
-        card.setDrawCallback((onComplete) => {
-          this._enterDrawingMode(onComplete);
+        card.setDrawCallback((onComplete, screenshotData) => {
+          this._enterDrawingMode(onComplete, screenshotData);
         });
 
         this.activeCard = card;
@@ -371,17 +429,19 @@ import NetworkStatusManager from './managers/NetworkStatusManager.js';
     }
 
     /**
-     * Enter drawing mode
+     * Enter drawing mode with screenshot
+     * @param {Function} onComplete - Callback when drawing is complete
+     * @param {Object} screenshotData - Screenshot data (dataURL and metadata)
      */
-    _enterDrawingMode(onComplete) {
+    _enterDrawingMode(onComplete, screenshotData) {
       if (this.drawingCanvas) return;
 
-      // Update overlay label
+      // Update overlay label (hide label since we're showing screenshot, not live page)
       if (this.feedbackOverlay) {
         this.feedbackOverlay.setDrawingMode(true);
       }
 
-      // Create drawing canvas
+      // Create drawing canvas with screenshot as background
       this.drawingCanvas = new DrawingCanvas();
       this.drawingCanvas.create(
         (drawingData) => {
@@ -394,7 +454,9 @@ import NetworkStatusManager from './managers/NetworkStatusManager.js';
         () => {
           // Cancel callback
           this._exitDrawingMode();
-        }
+        },
+        this.shadowRoot,
+        screenshotData  // NEW: Pass screenshot data to drawing canvas
       );
 
       dispatchCustomEvent(CONFIG.EVENTS.DRAWING_STARTED);
@@ -487,9 +549,20 @@ import NetworkStatusManager from './managers/NetworkStatusManager.js';
         this.networkManager.destroy();
       }
 
-      // Remove styles
-      const styleEl = document.getElementById('__tapko_widget_styles');
-      if (styleEl) styleEl.remove();
+      // Remove shadow host entirely (this removes all shadow DOM content)
+      if (this.shadowHost && this.shadowHost.parentNode) {
+        this.shadowHost.parentNode.removeChild(this.shadowHost);
+      }
+
+      // Clean up internal references
+      if (window.Tapko._internal) {
+        delete window.Tapko._internal;
+      }
+
+      this.shadowHost = null;
+      this.shadowRoot = null;
+      this.shadowStyleManager = null;
+      this.eventBridge = null;
 
       this.isInitialized = false;
       console.log('[Tapko] Widget destroyed');
