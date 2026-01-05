@@ -104,7 +104,7 @@ import { captureViewportScreenshot, importHtmlToImage } from './utils/screenshot
         width: 100%;
         height: 100%;
         pointer-events: none;
-        z-index: ${CONFIG.UI.zIndex};
+        z-index: ${CONFIG.UI.zIndex} !important;
       `;
 
       // Attach shadow root (closed mode for encapsulation)
