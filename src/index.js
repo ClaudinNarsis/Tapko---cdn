@@ -38,6 +38,7 @@ import SyncLifecycleManager from './managers/SyncLifecycleManager.js';
 import NetworkStatusManager from './managers/NetworkStatusManager.js';
 import { ShadowStyleManager } from './utils/ShadowStyleManager.js';
 import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
+import { captureViewportScreenshot } from './utils/screenshot.js';
 
 (function (window, document) {
   'use strict';
@@ -307,32 +308,49 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
     /**
      * Enter feedback mode
      */
-    _enterFeedbackMode() {
+    async _enterFeedbackMode() {
       if (this.isInFeedbackMode || this.isDisabled) return;
 
       this.isInFeedbackMode = true;
 
-      // Hide floating button when entering feedback mode
+      // Save original overflow and lock scroll
+      this._originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+
+      // Hide floating button
       this.floatingButton.hide();
 
-      // Create feedback widget (view all feedback button, pass shadow root)
-      this.feedbackWidget = new FeedbackWidget();
-      this.feedbackWidget.create(this.config.projectId, CONFIG.FEEDBACK_URL, this.shadowRoot);
+      try {
+        // Create feedback widget (view all feedback button)
+        this.feedbackWidget = new FeedbackWidget();
+        this.feedbackWidget.create(this.config.projectId, CONFIG.FEEDBACK_URL, this.shadowRoot);
 
-      // Create overlay with exit callback (pass shadow root)
-      this.feedbackOverlay = new FeedbackModeOverlay();
-      this.feedbackOverlay.create(
-        (element, coordinates) => {
-          this._createCommentCard(element, coordinates);
-        },
-        () => this._exitFeedbackMode(),
-        this.shadowRoot
-      );
+        // Capture screenshot immediately
+        console.log('[Tapko] Entering feedback mode - capturing screenshot...');
 
-      // Dispatch event
-      dispatchCustomEvent(CONFIG.EVENTS.FEEDBACK_MODE_ENTERED);
+        // Use the snackbar from DrawingCanvas if we move it there, 
+        // or just local logging for now while capture is fast.
+        const screenshotData = await captureViewportScreenshot();
 
-      console.log('[Tapko] Entered feedback mode');
+        // Enter integrated drawing/comment mode
+        this._enterDrawingMode(
+          (drawingData) => {
+            // This is called when the user finishes their submission flow
+            // or if we have a direct submit from the canvas
+          },
+          screenshotData
+        );
+
+        // Dispatch event
+        dispatchCustomEvent(CONFIG.EVENTS.FEEDBACK_MODE_ENTERED);
+
+      } catch (error) {
+        console.error('[Tapko] Failed to enter feedback mode:', error);
+        this.isInFeedbackMode = false;
+        document.body.style.overflow = this._originalOverflow || '';
+        this.floatingButton.show();
+        alert('Failed to start feedback mode. Please try again.');
+      }
     }
 
     /**
@@ -351,6 +369,9 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
 
       // Show floating button again
       this.floatingButton.show();
+
+      // Restore scroll
+      document.body.style.overflow = this._originalOverflow || '';
 
       // Close active card
       if (this.activeCard) {
@@ -392,10 +413,17 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
         // Create card with shadow root
         const card = new CommentCard(element, coordinates, this.apiClient, this.shadowRoot);
 
-        // Set draw callback
-        card.setDrawCallback((onComplete, screenshotData) => {
-          this._enterDrawingMode(onComplete, screenshotData);
-        });
+        // Integrated mode: provide screenshot from background canvas
+        if (this.drawingCanvas) {
+          card.setScreenshotProvider(() => {
+            return this.drawingCanvas ? this.drawingCanvas.getDrawingData() : null;
+          });
+        } else {
+          // Legacy/Fallback mode: use standard capture
+          card.setDrawCallback((onComplete, screenshotData) => {
+            this._enterDrawingMode(onComplete, screenshotData);
+          });
+        }
 
         this.activeCard = card;
 
@@ -405,14 +433,6 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
           originalClose();
           if (this.activeCard === card) {
             this.activeCard = null;
-            // Show snackbar again when card is closed
-            if (this.isInFeedbackMode && this.feedbackOverlay && this.feedbackOverlay.snackbar) {
-              this.feedbackOverlay.snackbar.show('Feedback mode ON', {
-                type: 'error',
-                showExitButton: true,
-                onExit: () => this._exitFeedbackMode()
-              });
-            }
           }
         };
 
@@ -436,11 +456,6 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
     _enterDrawingMode(onComplete, screenshotData) {
       if (this.drawingCanvas) return;
 
-      // Update overlay label (hide label since we're showing screenshot, not live page)
-      if (this.feedbackOverlay) {
-        this.feedbackOverlay.setDrawingMode(true);
-      }
-
       // Create drawing canvas with screenshot as background
       this.drawingCanvas = new DrawingCanvas();
       this.drawingCanvas.create(
@@ -452,11 +467,28 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
           this._exitDrawingMode();
         },
         () => {
-          // Cancel callback
-          this._exitDrawingMode();
+          // Cancel/Exit callback
+          this._exitFeedbackMode();
         },
         this.shadowRoot,
-        screenshotData  // NEW: Pass screenshot data to drawing canvas
+        screenshotData,
+        // NEW: onTap handler for placing comments on the screenshot
+        async (coordinates) => {
+          const { x, y } = coordinates;
+
+          // Discover element underneath the screenshot
+          // We must temporarily hide the shadow host to "see through" it
+          const originalDisplay = this.shadowHost.style.display;
+          this.shadowHost.style.display = 'none';
+
+          const targetElement = document.elementFromPoint(x, y);
+
+          this.shadowHost.style.display = originalDisplay;
+
+          if (targetElement) {
+            this._createCommentCard(targetElement, coordinates);
+          }
+        }
       );
 
       dispatchCustomEvent(CONFIG.EVENTS.DRAWING_STARTED);

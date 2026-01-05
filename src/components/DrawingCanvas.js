@@ -32,10 +32,17 @@ class DrawingCanvas {
 
     this.onDone = null;
     this.onCancel = null;
+    this.onTap = null; // NEW: Callback for placing comments
 
     // NEW: Store screenshot data
     this.screenshotData = null;
     this.screenshotImage = null;
+
+    // Tap detection properties
+    this.pressStartTime = 0;
+    this.pressStartX = 0;
+    this.pressStartY = 0;
+    this.isStroke = false; // Distinguish between tap and drawing stroke
   }
 
   /**
@@ -44,14 +51,16 @@ class DrawingCanvas {
    * @param {Function} onCancelCallback - Callback when cancelled
    * @param {ShadowRoot} shadowRoot - Shadow root to append the canvas to
    * @param {Object} screenshotData - Screenshot data (dataURL and metadata)
+   * @param {Function} onTapCallback - Callback when user taps to place a comment
    */
-  async create(onDoneCallback, onCancelCallback, shadowRoot = document.body, screenshotData = null) {
+  async create(onDoneCallback, onCancelCallback, shadowRoot = document.body, screenshotData = null, onTapCallback = null) {
     if (this.container) {
       return; // Already created
     }
 
     this.onDone = onDoneCallback;
     this.onCancel = onCancelCallback;
+    this.onTap = onTapCallback;
     this.screenshotData = screenshotData;
 
     // Create container
@@ -112,6 +121,13 @@ class DrawingCanvas {
 
     this.toolbar.innerHTML = `
       <div class="${CONFIG.CLASS_PREFIX}drawing-controls">
+        <button type="button" class="${CONFIG.CLASS_PREFIX}drawing-btn ${CONFIG.CLASS_PREFIX}btn-cancel" aria-label="Cancel">
+          <svg viewBox="0 0 24 24">
+            <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          Exit
+        </button>
+        <div class="${CONFIG.CLASS_PREFIX}drawing-divider"></div>
         <button type="button" class="${CONFIG.CLASS_PREFIX}drawing-btn ${CONFIG.CLASS_PREFIX}btn-undo" aria-label="Undo">
           <svg viewBox="0 0 24 24">
             <path d="M9 14L4 9l5-5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
@@ -126,20 +142,24 @@ class DrawingCanvas {
           </svg>
           Clear
         </button>
-        <button type="button" class="${CONFIG.CLASS_PREFIX}drawing-btn ${CONFIG.CLASS_PREFIX}btn-done" aria-label="Finish drawing">
+        <button type="button" class="${CONFIG.CLASS_PREFIX}drawing-btn ${CONFIG.CLASS_PREFIX}btn-done" aria-label="Finish and Submit">
           <svg viewBox="0 0 24 24">
             <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
-          Done
+          Finish
         </button>
       </div>
     `;
 
     // Attach toolbar events
+    const cancelBtn = this.toolbar.querySelector(`.${CONFIG.CLASS_PREFIX}btn-cancel`);
     const undoBtn = this.toolbar.querySelector(`.${CONFIG.CLASS_PREFIX}btn-undo`);
     const clearBtn = this.toolbar.querySelector(`.${CONFIG.CLASS_PREFIX}btn-clear`);
     const doneBtn = this.toolbar.querySelector(`.${CONFIG.CLASS_PREFIX}btn-done`);
 
+    cancelBtn.addEventListener('click', () => {
+      if (this.onCancel) this.onCancel();
+    });
     undoBtn.addEventListener('click', () => this.undo());
     clearBtn.addEventListener('click', () => this.clear());
     doneBtn.addEventListener('click', () => this._handleDone());
@@ -182,26 +202,16 @@ class DrawingCanvas {
     }
 
     this.isDrawing = true;
+    this.isStroke = false;
     this.currentPath = [];
+
+    this.pressStartTime = Date.now();
+    this.pressStartX = event.clientX;
+    this.pressStartY = event.clientY;
 
     const rect = this.canvas.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
-
-    // Debug: Log first drawing point
-    if (this.paths.length === 0) {
-      console.log('[Tapko Drawing] Canvas bounding rect:', {
-        left: rect.left,
-        top: rect.top,
-        width: rect.width,
-        height: rect.height
-      });
-      console.log('[Tapko Drawing] Event coords:', {
-        clientX: event.clientX,
-        clientY: event.clientY,
-        calculated: { x, y }
-      });
-    }
 
     this.currentPath.push({ x, y });
 
@@ -219,6 +229,14 @@ class DrawingCanvas {
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
 
+    // If moved significantly, consider it a stroke, not a tap
+    if (!this.isStroke) {
+      const dist = Math.sqrt(Math.pow(event.clientX - this.pressStartX, 2) + Math.pow(event.clientY - this.pressStartY, 2));
+      if (dist > 5) {
+        this.isStroke = true;
+      }
+    }
+
     this.currentPath.push({ x, y });
 
     this.ctx.lineTo(x, y);
@@ -232,6 +250,19 @@ class DrawingCanvas {
     if (!this.isDrawing) return;
 
     this.isDrawing = false;
+
+    const duration = Date.now() - this.pressStartTime;
+    const dist = Math.sqrt(Math.pow(event.clientX - this.pressStartX, 2) + Math.pow(event.clientY - this.pressStartY, 2));
+
+    // If it was a quick tap without much movement, trigger the onTap callback
+    if (!this.isStroke && duration < 300 && dist < 10) {
+      if (this.onTap) {
+        this.onTap({ x: event.clientX, y: event.clientY });
+      }
+      this.currentPath = [];
+      this._redraw(); // Clean up the point we started drawing
+      return;
+    }
 
     // Save current path to history
     if (this.currentPath.length > 0) {

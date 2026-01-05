@@ -39,7 +39,8 @@
   opacity: 0;
   transform: scale(0.8);
   color: #ffffff;
-  pointer-events: auto; /* Allow clicks through shadow host */
+  pointer-events: auto;
+  /* Allow clicks through shadow host */
 }
 
 .dtc-floating-entry-button.dtc-visible {
@@ -353,6 +354,7 @@
   opacity: 0;
   transform: translateY(-8px) scale(0.95);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: auto;
 }
 
 .dtc-comment-card-v2.dtc-visible {
@@ -701,10 +703,14 @@
   left: 0;
   width: 100%;
   height: 100%;
-  z-index: 2147483648;
-  background: #000; /* Dark background to frame screenshot */
+  z-index: 2147483645;
+  /* Base level for screenshot mode */
+  background: #000;
+  /* Dark background to frame screenshot */
   opacity: 0;
   transition: opacity 0.3s ease;
+  pointer-events: auto;
+  /* Intercept clicks on screenshot */
 }
 
 .dtc-drawing-container.dtc-visible {
@@ -719,7 +725,8 @@
   height: 100%;
   cursor: crosshair;
   touch-action: none;
-  background: #fff; /* White background if screenshot fails to load */
+  background: #fff;
+  /* White background if screenshot fails to load */
   display: block;
 }
 
@@ -733,7 +740,15 @@
   border-radius: 12px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
   padding: 12px 16px;
-  z-index: 2147483649;
+  z-index: 2147483646;
+  /* Below card and pin */
+}
+
+.dtc-drawing-divider {
+  width: 1px;
+  height: 24px;
+  background: #e5e7eb;
+  margin: 0 4px;
 }
 
 .dtc-drawing-controls {
@@ -782,14 +797,24 @@
   cursor: not-allowed;
 }
 
-.dtc-btn-clear {
+.dtc-drawing-btn.dtc-btn-cancel {
   background: #fee2e2;
   color: #ef4444;
 }
 
-.dtc-btn-clear:hover {
+.dtc-drawing-btn.dtc-btn-cancel:hover {
   background: #fecaca;
   color: #dc2626;
+}
+
+.dtc-btn-clear {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.dtc-btn-clear:hover {
+  background: #e5e7eb;
+  color: #4b5563;
 }
 
 /* ===========================================
@@ -939,4 +964,3 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
   border: 1px solid #e5e7eb !important;
 }
-

@@ -49,6 +49,7 @@ class CommentCard {
 
     // Callbacks
     this.onDrawRequested = null;
+    this.screenshotProvider = null; // NEW: Callback to get current screenshot from background
 
     // Scroll handler
     this.scrollHandler = null;
@@ -80,13 +81,9 @@ class CommentCard {
     this.pinMarker = createElement('div', `${CONFIG.CLASS_PREFIX}comment-pin`);
     this.pinMarker.style.position = 'absolute';
 
-    // Use the exact click coordinates, not the element's top-left
-    const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
-    const scrollY = window.pageYOffset || document.documentElement.scrollTop;
-
-    // Position at exact click location
-    this.pinMarker.style.left = `${this.coordinates.x + scrollX}px`;
-    this.pinMarker.style.top = `${this.coordinates.y + scrollY}px`;
+    // Position at exact client location (shadow host is fixed/full-screen)
+    this.pinMarker.style.left = `${this.coordinates.x}px`;
+    this.pinMarker.style.top = `${this.coordinates.y}px`;
     this.pinMarker.style.zIndex = CONFIG.UI.zIndex;
 
     // Append to shadow root
@@ -97,6 +94,8 @@ class CommentCard {
    * Setup scroll listener to update positions
    */
   _setupScrollListener() {
+    if (this.screenshotProvider) return; // Static background, no need to follow scroll
+
     this.scrollHandler = () => {
       this._updatePositions();
     };
@@ -112,12 +111,10 @@ class CommentCard {
     if (!this.target || !this.pinMarker) return;
 
     const targetRect = this.target.getBoundingClientRect();
-    const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
-    const scrollY = window.pageYOffset || document.documentElement.scrollTop;
 
-    // Update pin marker position using the original click offset
-    this.pinMarker.style.left = `${targetRect.left + scrollX + this.clickOffsetX}px`;
-    this.pinMarker.style.top = `${targetRect.top + scrollY + this.clickOffsetY}px`;
+    // Update pin marker position relative to viewport (shadow host is fixed)
+    this.pinMarker.style.left = `${targetRect.left + this.clickOffsetX}px`;
+    this.pinMarker.style.top = `${targetRect.top + this.clickOffsetY}px`;
 
     // Update card position if not minimized
     if (!this.isMinimized && this.card) {
@@ -168,33 +165,30 @@ class CommentCard {
       const cardWidth = this.card.offsetWidth || CONFIG.UI.cardMinWidth;
       const cardHeight = this.card.offsetHeight || 150;
 
-      // Get element's position relative to document
       const targetRect = this.target.getBoundingClientRect();
-      const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
-      const scrollY = window.pageYOffset || document.documentElement.scrollTop;
 
-      // Calculate position based on actual click location (using stored offset)
-      const clickAbsoluteX = targetRect.left + scrollX + this.clickOffsetX;
-      const clickAbsoluteY = targetRect.top + scrollY + this.clickOffsetY;
+      // Calculate position relative to viewport (shadow host is fixed)
+      const clickAbsoluteX = targetRect.left + this.clickOffsetX;
+      const clickAbsoluteY = targetRect.top + this.clickOffsetY;
 
       // Position card next to click location
       let left = clickAbsoluteX + 10;
       let top = clickAbsoluteY;
 
-      // Adjust if overflowing viewport (considering scroll)
-      const viewportRight = window.innerWidth + scrollX;
-      const viewportBottom = window.innerHeight + scrollY;
+      // Adjust if overflowing viewport
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
 
-      if (left + cardWidth > viewportRight) {
+      if (left + cardWidth > viewportWidth) {
         left = clickAbsoluteX - cardWidth - 10;
       }
 
-      if (top + cardHeight > viewportBottom) {
-        top = viewportBottom - cardHeight - 10;
+      if (top + cardHeight > viewportHeight) {
+        top = viewportHeight - cardHeight - 10;
       }
 
-      if (left < scrollX + 10) left = scrollX + 10;
-      if (top < scrollY + 10) top = scrollY + 10;
+      if (left < 10) left = 10;
+      if (top < 10) top = 10;
 
       this.card.style.position = 'absolute';
       this.card.style.left = `${left}px`;
@@ -411,6 +405,7 @@ class CommentCard {
       ${screenshotPreviewHTML}
       <div class="${CONFIG.CLASS_PREFIX}comment-actions">
         <button type="button" class="${CONFIG.CLASS_PREFIX}btn-cancel">Cancel</button>
+        ${!this.screenshotProvider ? `
         <button type="button" class="${CONFIG.CLASS_PREFIX}btn-draw">
           <svg viewBox="0 0 24 24" width="16" height="16">
             <path d="M12 19l7-7 3 3-7 7-3-3z" fill="none" stroke="currentColor" stroke-width="2"/>
@@ -420,6 +415,7 @@ class CommentCard {
           </svg>
           ${this.drawingData ? 'Edit drawing' : 'Draw on page'}
         </button>
+        ` : ''}
         <button type="button" class="${CONFIG.CLASS_PREFIX}btn-submit">Submit</button>
       </div>
     `;
@@ -519,8 +515,19 @@ class CommentCard {
   /**
    * Set draw request callback
    */
+  /**
+   * Set draw request callback
+   */
   setDrawCallback(callback) {
     this.onDrawRequested = callback;
+  }
+
+  /**
+   * Set screenshot provider callback
+   */
+  setScreenshotProvider(callback) {
+    this.screenshotProvider = callback;
+    this._renderBubbleContent();
   }
 
   /**
@@ -573,7 +580,18 @@ class CommentCard {
 
     // 1. Auto-capture screenshot if not already present
     if (!this.screenshot) {
-      await this._captureScreenshot(textarea);
+      if (this.screenshotProvider) {
+        // Use external provider (integrated flow)
+        const data = await this.screenshotProvider();
+        if (data) {
+          this.screenshot = data.finalScreenshot;
+          this.thumbnail = data.thumbnail;
+          this.screenshotMetadata = data.metadata;
+        }
+      } else {
+        // Normal flow capture
+        await this._captureScreenshot(textarea);
+      }
     }
 
     // 2. Prepare screenshot blob
