@@ -13,15 +13,15 @@
 
 
 /**
- * Load dom-to-image library dynamically
+ * Load html-to-image library dynamically
  */
-async function loadDomToImage() {
-  if (window.domtoimage) return window.domtoimage;
+async function loadHtmlToImage() {
+  if (window.htmlToImage) return window.htmlToImage;
   return new Promise((resolve, reject) => {
     const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/dom-to-image@2.6.0/dist/dom-to-image.min.js';
-    script.onload = () => resolve(window.domtoimage);
-    script.onerror = () => reject(new Error('Failed to load dom-to-image'));
+    script.src = 'https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js';
+    script.onload = () => resolve(window.htmlToImage);
+    script.onerror = () => reject(new Error('Failed to load html-to-image'));
     document.head.appendChild(script);
   });
 }
@@ -31,10 +31,10 @@ async function loadDomToImage() {
  */
 async function captureViewportScreenshot(options = {}) {
   const timingStart = performance.now();
-  console.log('[Tapko] Starting viewport capture with dom-to-image...');
+  console.log('[Tapko] Starting viewport capture with html-to-image...');
 
   try {
-    const domtoimage = await loadDomToImage();
+    const htmlToImage = await loadHtmlToImage();
 
     // Get current viewport and scroll position
     const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
@@ -49,33 +49,40 @@ async function captureViewportScreenshot(options = {}) {
     if (shadowHost) shadowHost.style.display = 'none';
 
     try {
-      // Direct viewport capture using dom-to-image
-      // We target the root element and use negative margins to "slide" the viewport into view
+      // Direct viewport capture using html-to-image
       const targetNode = document.documentElement;
 
-      const dataURL = await domtoimage.toJpeg(targetNode, {
-        width: viewportWidth * devicePixelRatio,
-        height: viewportHeight * devicePixelRatio,
+      const dataURL = await htmlToImage.toJpeg(targetNode, {
+        width: viewportWidth,
+        height: viewportHeight,
         quality: 0.85,
+        pixelRatio: devicePixelRatio,
         style: {
-          transform: `scale(${devicePixelRatio})`,
-          transformOrigin: 'top left',
           marginTop: `-${scrollY}px`,
           marginLeft: `-${scrollX}px`,
           width: `${targetNode.scrollWidth}px`,
           height: `${targetNode.scrollHeight}px`,
-          // Ensure background is captured
           backgroundColor: '#ffffff'
         },
         filter: (node) => {
-          // Exclude widget elements if any are outside shadow DOM
+          // Exclude widget elements
           if (node.id === 'tapko-widget-shadow-host') return false;
-          if (node.className && typeof node.className === 'string' && node.className.includes('dtc-')) return false;
+
+          // Check for className safely (SVGs have className as SVGAnimatedString)
+          let className = '';
+          if (node.className) {
+            if (typeof node.className === 'string') {
+              className = node.className;
+            } else if (typeof node.className === 'object' && node.className.baseVal) {
+              className = node.className.baseVal;
+            }
+          }
+
+          if (className && className.includes('dtc-')) return false;
           return true;
         }
       });
 
-      // DIAGNOSTIC
       console.log(`[Tapko] Snapshot success. DataURL length: ${dataURL.length}`);
 
       const timingEnd = performance.now();
@@ -90,7 +97,7 @@ async function captureViewportScreenshot(options = {}) {
           timestamp: new Date().toISOString(),
           url: window.location.href,
           userAgent: navigator.userAgent,
-          method: 'dom-to-image-v10'
+          method: 'html-to-image-v1'
         }
       };
 
@@ -184,5 +191,5 @@ export {
   captureViewportScreenshot,
   generateThumbnail,
   dataURLToBlob,
-  loadDomToImage as importDomToImage
+  loadHtmlToImage as importHtmlToImage
 };

@@ -38,7 +38,7 @@ import SyncLifecycleManager from './managers/SyncLifecycleManager.js';
 import NetworkStatusManager from './managers/NetworkStatusManager.js';
 import { ShadowStyleManager } from './utils/ShadowStyleManager.js';
 import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
-import { captureViewportScreenshot, importDomToImage } from './utils/screenshot.js';
+import { captureViewportScreenshot, importHtmlToImage } from './utils/screenshot.js';
 
 (function (window, document) {
   'use strict';
@@ -427,18 +427,12 @@ import { captureViewportScreenshot, importDomToImage } from './utils/screenshot.
 
             try {
               // 2. Capture the entire drawing container (Background + Drawings + CommentCard + Pin)
-              const domtoimage = await importDomToImage(); // Ensure library is loaded
+              const htmlToImage = await importHtmlToImage(); // Ensure library is loaded
 
               // Use toPng to capture the container
-              const dataURL = await domtoimage.toPng(this.drawingCanvas.container, {
+              const dataURL = await htmlToImage.toPng(this.drawingCanvas.container, {
                 width: window.innerWidth,
                 height: window.innerHeight,
-                style: {
-                  transform: 'none',
-                  left: '0',
-                  top: '0',
-                  margin: '0'
-                }
               });
 
               return {
