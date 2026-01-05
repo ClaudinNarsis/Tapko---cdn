@@ -743,6 +743,11 @@
   }
 }
 
+/* Hide glow during capture */
+.dtc-drawing-container.dtc-capture-mode::after {
+  display: none;
+}
+
 /* Instructional notification bubble */
 .dtc-drawing-instructions {
   position: fixed;

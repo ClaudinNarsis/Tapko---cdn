@@ -537,6 +537,33 @@ class DrawingCanvas {
       Click to comment or click and drag to annotate
     `;
   }
+
+  /**
+   * Prepare UI for screenshot capture
+   * Hides toolbar, instructions, and glowing border
+   */
+  prepareForCapture() {
+    if (this.toolbar) this.toolbar.style.opacity = '0';
+    if (this.instructions) this.instructions.style.display = 'none';
+
+    // Disable glowing border by removing visible class temporarily or adding a capture class
+    // Cleaner to add a 'capture-mode' class that overrides the ::after
+    if (this.container) {
+      this.container.classList.add(`${CONFIG.CLASS_PREFIX}capture-mode`);
+    }
+  }
+
+  /**
+   * Restore UI after screenshot capture
+   */
+  restoreAfterCapture() {
+    if (this.toolbar) this.toolbar.style.opacity = '';
+    if (this.instructions) this.instructions.style.display = '';
+
+    if (this.container) {
+      this.container.classList.remove(`${CONFIG.CLASS_PREFIX}capture-mode`);
+    }
+  }
 }
 
 export { DrawingCanvas };

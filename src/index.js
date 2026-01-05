@@ -38,7 +38,7 @@ import SyncLifecycleManager from './managers/SyncLifecycleManager.js';
 import NetworkStatusManager from './managers/NetworkStatusManager.js';
 import { ShadowStyleManager } from './utils/ShadowStyleManager.js';
 import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
-import { captureViewportScreenshot } from './utils/screenshot.js';
+import { captureViewportScreenshot, importDomToImage } from './utils/screenshot.js';
 
 (function (window, document) {
   'use strict';
@@ -410,13 +410,58 @@ import { captureViewportScreenshot } from './utils/screenshot.js';
       }
 
       try {
-        // Create card with shadow root
-        const card = new CommentCard(element, coordinates, this.apiClient, this.shadowRoot);
+        // Integrated mode: append card deeply into drawing container so we can capture it
+        const parentRoot = this.drawingCanvas ? this.drawingCanvas.container : this.shadowRoot;
 
-        // Integrated mode: provide screenshot from background canvas
+        // Create card
+        const card = new CommentCard(element, coordinates, this.apiClient, parentRoot);
+
+        // Integrated mode: provide screenshot from background canvas + UI
         if (this.drawingCanvas) {
-          card.setScreenshotProvider(() => {
-            return this.drawingCanvas ? this.drawingCanvas.getDrawingData() : null;
+          card.setScreenshotProvider(async () => {
+            if (!this.drawingCanvas) return null;
+
+            // 1. Prepare UI for clean capture
+            this.drawingCanvas.prepareForCapture();
+            card.prepareForCapture();
+
+            try {
+              // 2. Capture the entire drawing container (Background + Drawings + CommentCard + Pin)
+              const domtoimage = await importDomToImage(); // Ensure library is loaded
+
+              // Use toPng to capture the container
+              const dataURL = await domtoimage.toPng(this.drawingCanvas.container, {
+                width: window.innerWidth,
+                height: window.innerHeight,
+                style: {
+                  transform: 'none',
+                  left: '0',
+                  top: '0',
+                  margin: '0'
+                }
+              });
+
+              return {
+                finalScreenshot: dataURL,
+                thumbnail: dataURL, // Can resize if needed
+                metadata: {
+                  viewportWidth: window.innerWidth,
+                  viewportHeight: window.innerHeight,
+                  scrollX: window.scrollX,
+                  scrollY: window.scrollY,
+                  dpr: window.devicePixelRatio
+                }
+              };
+
+            } catch (error) {
+              console.error('[Tapko] Screenshot composition failed:', error);
+              // Fallback to minimal data
+              return this.drawingCanvas.getDrawingData();
+            } finally {
+              // 3. Restore UI
+              this.drawingCanvas.restoreAfterCapture();
+              card.restoreAfterCapture();
+            }
           });
 
           // Auto-exit after successful submit in integrated flow

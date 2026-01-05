@@ -1033,6 +1033,34 @@ class CommentCard {
     if (this.pinMarker && this.pinMarker.parentNode) {
       this.pinMarker.parentNode.removeChild(this.pinMarker);
     }
+    this.card = null;
+    this.pinMarker = null;
+    this.target = null;
+  }
+
+  /**
+   * Prepare UI for screenshot capture
+   */
+  prepareForCapture() {
+    if (this.card) {
+      const actions = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}comment-actions`);
+      if (actions) actions.style.display = 'none';
+      this.card.classList.add(`${CONFIG.CLASS_PREFIX}capture-mode`);
+    }
+    if (this.pinMarker) {
+      // Pin should stay visible!
+    }
+  }
+
+  /**
+   * Restore UI after screenshot capture
+   */
+  restoreAfterCapture() {
+    if (this.card) {
+      const actions = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}comment-actions`);
+      if (actions) actions.style.display = '';
+      this.card.classList.remove(`${CONFIG.CLASS_PREFIX}capture-mode`);
+    }
   }
 }
 

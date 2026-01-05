@@ -180,4 +180,9 @@ function dataURLToBlob(dataURL) {
   return new Blob([u8arr], { type: mime });
 }
 
-export { captureViewportScreenshot, generateThumbnail, dataURLToBlob };
+export {
+  captureViewportScreenshot,
+  generateThumbnail,
+  dataURLToBlob,
+  loadDomToImage as importDomToImage
+};
