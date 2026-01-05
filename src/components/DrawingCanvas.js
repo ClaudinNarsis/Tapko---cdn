@@ -94,9 +94,13 @@ class DrawingCanvas {
     // Create toolbar
     this._createToolbar();
 
+    // Create instructions bubble
+    this._createInstructions();
+
     // Append to container
     this.container.appendChild(this.canvas);
     this.container.appendChild(this.toolbar);
+    this.container.appendChild(this.instructions);
 
     // Attach events
     this._attachEventListeners();
@@ -107,15 +111,26 @@ class DrawingCanvas {
     // Show with animation
     requestAnimationFrame(() => {
       this.container.classList.add(`${CONFIG.CLASS_PREFIX}visible`);
+
+      // Show instructions with a delay
+      setTimeout(() => {
+        if (this.instructions) {
+          this.instructions.classList.add(`${CONFIG.CLASS_PREFIX}visible`);
+
+          // Auto-hide after 5 seconds
+          setTimeout(() => {
+            if (this.instructions) {
+              this.instructions.classList.remove(`${CONFIG.CLASS_PREFIX}visible`);
+            }
+          }, 5000);
+        }
+      }, 500);
     });
 
     return this.container;
   }
 
 
-  /**
-   * Create toolbar with drawing controls
-   */
   _createToolbar() {
     this.toolbar = createElement('div', `${CONFIG.CLASS_PREFIX}drawing-toolbar`);
 
@@ -142,12 +157,6 @@ class DrawingCanvas {
           </svg>
           Clear
         </button>
-        <button type="button" class="${CONFIG.CLASS_PREFIX}drawing-btn ${CONFIG.CLASS_PREFIX}btn-done" aria-label="Finish and Submit">
-          <svg viewBox="0 0 24 24">
-            <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          Finish
-        </button>
       </div>
     `;
 
@@ -155,14 +164,12 @@ class DrawingCanvas {
     const cancelBtn = this.toolbar.querySelector(`.${CONFIG.CLASS_PREFIX}btn-cancel`);
     const undoBtn = this.toolbar.querySelector(`.${CONFIG.CLASS_PREFIX}btn-undo`);
     const clearBtn = this.toolbar.querySelector(`.${CONFIG.CLASS_PREFIX}btn-clear`);
-    const doneBtn = this.toolbar.querySelector(`.${CONFIG.CLASS_PREFIX}btn-done`);
 
     cancelBtn.addEventListener('click', () => {
       if (this.onCancel) this.onCancel();
     });
     undoBtn.addEventListener('click', () => this.undo());
     clearBtn.addEventListener('click', () => this.clear());
-    doneBtn.addEventListener('click', () => this._handleDone());
   }
 
   /**
@@ -337,8 +344,8 @@ class DrawingCanvas {
       const dpr = window.devicePixelRatio || 1;
       this.canvas.width = window.innerWidth * dpr;
       this.canvas.height = window.innerHeight * dpr;
-      this.canvas.style.width = `${window.innerWidth}px`;
-      this.canvas.style.height = `${window.innerHeight}px`;
+      this.canvas.style.width = `${window.innerWidth} px`;
+      this.canvas.style.height = `${window.innerHeight} px`;
 
       this.ctx.scale(dpr, dpr);
       this.ctx.strokeStyle = this.strokeColor;
@@ -358,19 +365,19 @@ class DrawingCanvas {
    * Returns the canvas directly (already contains screenshot + annotations)
    */
   async _handleDone() {
-    const doneBtn = this.toolbar.querySelector(`.${CONFIG.CLASS_PREFIX}btn-done`);
+    const doneBtn = this.toolbar.querySelector(`.${CONFIG.CLASS_PREFIX} btn - done`);
 
     try {
       // Show loading state
       if (doneBtn) {
         doneBtn.disabled = true;
         doneBtn.innerHTML = `
-          <svg viewBox="0 0 24 24" class="${CONFIG.CLASS_PREFIX}spinner">
+      < svg viewBox = "0 0 24 24" class="${CONFIG.CLASS_PREFIX}spinner" >
             <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none" opacity="0.25"/>
             <path d="M12 2 A10 10 0 0 1 22 12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>
-          </svg>
-          Generating thumbnail...
-        `;
+          </svg >
+      Generating thumbnail...
+    `;
       }
 
       // The canvas already contains screenshot + annotations!
@@ -407,10 +414,10 @@ class DrawingCanvas {
       if (doneBtn) {
         doneBtn.disabled = false;
         doneBtn.innerHTML = `
-          <svg viewBox="0 0 24 24">
-            <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          Done
+      < svg viewBox = "0 0 24 24" >
+        <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+          </svg >
+      Done
         `;
       }
 
@@ -518,6 +525,17 @@ class DrawingCanvas {
         this.currentPath = [];
       }, CONFIG.UI.animationDuration);
     }
+  }
+
+  /**
+   * Create instructional notification
+   */
+  _createInstructions() {
+    this.instructions = createElement('div', `${CONFIG.CLASS_PREFIX}drawing-instructions`);
+    this.instructions.innerHTML = `
+      <div class="${CONFIG.CLASS_PREFIX}instruction-dot"></div>
+      Click to comment or click and drag to annotate
+    `;
   }
 }
 

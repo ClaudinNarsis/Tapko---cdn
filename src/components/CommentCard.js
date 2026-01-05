@@ -50,6 +50,7 @@ class CommentCard {
     // Callbacks
     this.onDrawRequested = null;
     this.screenshotProvider = null; // NEW: Callback to get current screenshot from background
+    this.onSuccess = null; // NEW: Callback for successful submission
 
     // Scroll handler
     this.scrollHandler = null;
@@ -226,26 +227,34 @@ class CommentCard {
   _attachEventListeners() {
     // Cancel button
     const cancelBtn = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}btn-cancel`);
-    cancelBtn.addEventListener('click', () => this.close());
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', () => this.close());
+    }
 
     // Submit button
     const submitBtn = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}btn-submit`);
-    submitBtn.addEventListener('click', () => this.submit());
+    if (submitBtn) {
+      submitBtn.addEventListener('click', () => this.submit());
+    }
 
     // Draw button
     const drawBtn = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}btn-draw`);
-    drawBtn.addEventListener('click', () => this._handleDrawClick());
+    if (drawBtn) {
+      drawBtn.addEventListener('click', () => this._handleDrawClick());
+    }
 
     // Keyboard shortcuts
     const textarea = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}comment-textarea`);
-    textarea.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        this.close();
-      } else if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        this.submit();
-      }
-    });
+    if (textarea) {
+      textarea.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          this.close();
+        } else if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          this.submit();
+        }
+      });
+    }
   }
 
   /**
@@ -523,6 +532,13 @@ class CommentCard {
   }
 
   /**
+   * Set success callback
+   */
+  setOnSuccess(callback) {
+    this.onSuccess = callback;
+  }
+
+  /**
    * Set screenshot provider callback
    */
   setScreenshotProvider(callback) {
@@ -645,10 +661,15 @@ class CommentCard {
     const queueId = await window.Tapko.queueManager.enqueue(feedbackData);
     console.log('[Tapko Queue] Feedback queued successfully:', queueId);
 
-    // 6. Show "queued" success state
+    // 6. Show success state
     this._showQueued();
 
-    // 7. Dispatch events
+    // 8. Trigger success callback
+    if (this.onSuccess) {
+      setTimeout(() => this.onSuccess(), 1000); // Small delay to show success UI
+    }
+
+    // 9. Dispatch events
     dispatchCustomEvent('tapko:comment:queued', { queueId });
     dispatchCustomEvent(CONFIG.EVENTS.COMMENT_SUBMITTED, {
       queueId,

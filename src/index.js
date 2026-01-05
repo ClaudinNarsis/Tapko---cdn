@@ -418,6 +418,11 @@ import { captureViewportScreenshot } from './utils/screenshot.js';
           card.setScreenshotProvider(() => {
             return this.drawingCanvas ? this.drawingCanvas.getDrawingData() : null;
           });
+
+          // Auto-exit after successful submit in integrated flow
+          card.setOnSuccess(() => {
+            this._exitFeedbackMode();
+          });
         } else {
           // Legacy/Fallback mode: use standard capture
           card.setDrawCallback((onComplete, screenshotData) => {
