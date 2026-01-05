@@ -1,55 +1,48 @@
 /**
  * Screenshot Utilities
- * Captures viewport-only screenshots and generates thumbnails
- * 
+ * Captures viewport-only screenshots and generates thumbnails using dom-to-image
+ *
  * IMPORTANT: This captures ONLY the visible viewport at the current scroll position,
  * NOT the entire page from top to bottom.
+ *
+ * Uses dom-to-image library for better CSS compatibility, especially with:
+ * - External stylesheets (CORS-enabled)
+ * - Modern CSS features (gradients, custom properties, etc.)
+ * - WordPress and other CMS styling
  */
+
+import { ScreenshotPermissionOverlay } from '../components/ScreenshotPermissionOverlay.js';
+
 
 /**
- * Load html2canvas library dynamically from CDN
- * @returns {Promise<Function>} html2canvas function
+ * Load html-to-image library dynamically
+ * Used only for internal widget content capture (drawing overlays)
  */
-async function loadHtml2Canvas() {
-  // Check if already loaded
-  if (window.html2canvas) {
-    return window.html2canvas;
-  }
-
+async function loadHtmlToImage() {
+  if (window.htmlToImage) return window.htmlToImage;
   return new Promise((resolve, reject) => {
     const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
-    script.onload = () => {
-      if (window.html2canvas) {
-        resolve(window.html2canvas);
-      } else {
-        reject(new Error('html2canvas failed to load'));
-      }
-    };
-    script.onerror = () => reject(new Error('Failed to load html2canvas from CDN'));
+    script.src = 'https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js';
+    script.onload = () => resolve(window.htmlToImage);
+    script.onerror = () => reject(new Error('Failed to load html-to-image'));
     document.head.appendChild(script);
   });
 }
 
 /**
- * Capture viewport-only screenshot at current scroll position
- * 
- * This captures ONLY what the user is currently viewing in their viewport,
- * at their exact scroll position and zoom level.
- * 
- * @returns {Promise<Object>} Object containing screenshot dataURL and metadata
+ * Capture viewport-only screenshot using Screen Capture API
+ * This method bypasses CORS and gradient rendering issues
+ * @param {Object} options - Screenshot options
+ * @param {ShadowRoot} options.shadowRoot - Optional shadow root to show permission overlay in
  */
 async function captureViewportScreenshot(options = {}) {
   const timingStart = performance.now();
-  console.log('[Tapko Timing] Starting screenshot capture');
+  console.log('[Tapko] Starting viewport capture with Screen Capture API...');
+
+  const { shadowRoot } = options;
+  let permissionOverlay = null;
 
   try {
-    // Load html2canvas library
-    const loadLibStart = performance.now();
-    const html2canvas = await loadHtml2Canvas();
-    const loadLibEnd = performance.now();
-    console.log(`[Tapko Timing] html2canvas library load: ${(loadLibEnd - loadLibStart).toFixed(2)}ms`);
-
     // Get current viewport and scroll position
     const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
     const scrollY = window.pageYOffset || document.documentElement.scrollTop;
@@ -57,133 +50,119 @@ async function captureViewportScreenshot(options = {}) {
     const viewportHeight = window.innerHeight;
     const devicePixelRatio = window.devicePixelRatio || 1;
 
-    // Capture viewport-only screenshot
-    // CRITICAL: These options ensure we capture ONLY the visible viewport
-    const captureStart = performance.now();
-    const canvas = await html2canvas(document.body, {
-      // Viewport dimensions - this is what limits the capture to viewport only
-      windowWidth: viewportWidth,
-      windowHeight: viewportHeight,
+    // Get shadow host reference (we'll hide it after permission is granted)
+    const shadowHost = document.getElementById('tapko-widget-shadow-host');
+    const originalDisplay = shadowHost ? shadowHost.style.display : null;
 
-      // Current scroll position - this tells html2canvas where the viewport is
-      x: scrollX,
-      y: scrollY,
-
-      // Set internal scroll to 0 to prevent double-scrolling
-      scrollX: 0,
-      scrollY: 0,
-
-      // Width and height of the capture (same as viewport)
-      width: viewportWidth,
-      height: viewportHeight,
-
-      // Quality settings
-      useCORS: true,
-      allowTaint: false,
-      backgroundColor: '#ffffff',
-
-      // Ignore Tapko widget elements EXCEPT the drawing canvas and explicitly included elements
-      ignoreElements: (element) => {
-        // Check if element should be explicitly included
-        if (options.elementsToInclude && options.elementsToInclude.length > 0) {
-          for (const includedEl of options.elementsToInclude) {
-            if (includedEl === element || includedEl.contains(element)) {
-              return false;
-            }
-          }
-        }
-
-        const className = element.className || '';
-        if (typeof className !== 'string') return false;
-
-        // Allow drawing canvas to be captured
-        if (className.includes('dtc-drawing-canvas')) {
-          return false;
-        }
-
-        // Ignore all other Tapko widget UI elements
-        return className.includes('dtc-');
-      }
-    });
-    const captureEnd = performance.now();
-    console.log(`[Tapko Timing] html2canvas render: ${(captureEnd - captureStart).toFixed(2)}ms`);
-
-    // Create a new canvas to composite everything
-    // This ensures we have a clean 2D context and avoids any potential issues with the html2canvas object
-    const finalCanvas = document.createElement('canvas');
-    finalCanvas.width = canvas.width;
-    finalCanvas.height = canvas.height;
-    const finalCtx = finalCanvas.getContext('2d');
-
-    // 1. Draw the screenshot onto the new canvas
-    finalCtx.drawImage(canvas, 0, 0);
-
-    // 2. Manual composite of drawing canvas onto screenshot
-    const compositeStart = performance.now();
-    const drawingCanvas = document.querySelector('.dtc-drawing-canvas');
-    if (drawingCanvas) {
-      // Convert drawing canvas to data URL (this renders the scale transform)
-      const drawingDataURL = drawingCanvas.toDataURL('image/png');
-
-      if (drawingDataURL.length > 1000) {
-        // Load as image and draw onto final canvas
-        await new Promise((resolve) => {
-          const img = new Image();
-          img.onload = () => {
-            // Draw the image onto the final canvas
-            finalCtx.drawImage(img, 0, 0);
-            resolve();
-          };
-          img.onerror = (error) => {
-            console.error('[Tapko] Failed to load drawing as image:', error);
-            resolve();
-          };
-          img.src = drawingDataURL;
-        });
-      }
-    }
-    const compositeEnd = performance.now();
-    console.log(`[Tapko Timing] Drawing canvas composite: ${(compositeEnd - compositeStart).toFixed(2)}ms`);
-
-    // Convert final canvas to data URL with compression
-    // Use JPEG with 0.85 quality for better compression (much smaller file size)
-    const toDataURLStart = performance.now();
-    const dataURL = finalCanvas.toDataURL('image/jpeg', 0.85);
-    const toDataURLEnd = performance.now();
-    const sizeKB = Math.round((dataURL.length * 0.75) / 1024); // Approximate size in KB
-    console.log(`[Tapko Timing] Canvas to DataURL conversion (JPEG 85%): ${(toDataURLEnd - toDataURLStart).toFixed(2)}ms, size: ~${sizeKB}KB`);
-
-    // Get zoom level (if detectable)
-    let zoomLevel = 1;
     try {
-      zoomLevel = Math.round((window.outerWidth / window.innerWidth) * 100) / 100;
-    } catch (e) {
-      // Zoom detection not available in all browsers
+      // Show permission overlay if shadowRoot is provided (BEFORE hiding widget)
+      if (shadowRoot) {
+        permissionOverlay = new ScreenshotPermissionOverlay(shadowRoot);
+        permissionOverlay.show();
+        // Small delay to ensure overlay is visible before permission prompt
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
+      // Request screen capture with specific constraints
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          mediaSource: 'screen',
+          width: { ideal: viewportWidth * devicePixelRatio },
+          height: { ideal: viewportHeight * devicePixelRatio }
+        },
+        audio: false,
+        preferCurrentTab: true
+      });
+
+      // Permission granted! Now hide the overlay and shadow host
+      if (permissionOverlay) {
+        permissionOverlay.hide();
+        permissionOverlay = null;
+      }
+
+      // Hide shadow host for clean screenshot
+      if (shadowHost) shadowHost.style.display = 'none';
+
+      // Create video element to capture the stream
+      const video = document.createElement('video');
+      video.srcObject = stream;
+      video.autoplay = true;
+      video.playsInline = true;
+
+      // Wait for video to be ready
+      await new Promise((resolve, reject) => {
+        video.onloadedmetadata = resolve;
+        video.onerror = reject;
+        setTimeout(() => reject(new Error('Video load timeout')), 5000);
+      });
+
+      // Small delay to ensure first frame is rendered
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Create canvas and capture frame
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0);
+
+      // Stop all tracks
+      stream.getTracks().forEach(track => track.stop());
+
+      // Convert to JPEG data URL
+      const dataURL = canvas.toDataURL('image/jpeg', 0.85);
+
+      console.log(`[Tapko] Snapshot success. DataURL length: ${dataURL.length}`);
+
+      const timingEnd = performance.now();
+      console.log(`[Tapko Timing] Screen capture: ${(timingEnd - timingStart).toFixed(2)}ms`);
+
+      return {
+        dataURL,
+        metadata: {
+          scrollX,
+          scrollY,
+          viewportWidth,
+          viewportHeight,
+          devicePixelRatio,
+          timestamp: new Date().toISOString(),
+          url: window.location.href,
+          userAgent: navigator.userAgent,
+          method: 'screen-capture-api'
+        }
+      };
+
+    } catch (innerError) {
+      // Hide overlay on error
+      if (permissionOverlay) {
+        permissionOverlay.hide();
+        permissionOverlay = null;
+      }
+      throw innerError;
+    } finally {
+      if (shadowHost) shadowHost.style.display = originalDisplay;
     }
 
-    // Return screenshot with complete metadata
-    const timingEnd = performance.now();
-    console.log(`[Tapko Timing] Total screenshot capture: ${(timingEnd - timingStart).toFixed(2)}ms`);
-
-    return {
-      dataURL,
-      metadata: {
-        scrollX,
-        scrollY,
-        viewportWidth,
-        viewportHeight,
-        devicePixelRatio,
-        zoomLevel,
-        timestamp: new Date().toISOString(),
-        url: window.location.href,
-        userAgent: navigator.userAgent
-      }
-    };
   } catch (error) {
+    // Ensure overlay is hidden in case of any error
+    if (permissionOverlay) {
+      permissionOverlay.hide();
+    }
+
     console.error('[Tapko] Screenshot capture failed:', error);
-    throw new Error(`Failed to capture screenshot: ${error.message}`);
+
+    // Provide helpful error messages
+    if (error.name === 'NotAllowedError') {
+      throw new Error('Screenshot permission denied. Please allow screen capture when prompted.');
+    } else if (error.name === 'NotSupportedError') {
+      throw new Error('Screen capture not supported in this browser.');
+    } else {
+      throw new Error(`Failed to capture screenshot: ${error.message}`);
+    }
   }
 }
+
 
 /**
  * Generate thumbnail from screenshot
@@ -260,4 +239,9 @@ function dataURLToBlob(dataURL) {
   return new Blob([u8arr], { type: mime });
 }
 
-export { captureViewportScreenshot, generateThumbnail, dataURLToBlob };
+export {
+  captureViewportScreenshot,
+  generateThumbnail,
+  dataURLToBlob,
+  loadHtmlToImage as importHtmlToImage
+};

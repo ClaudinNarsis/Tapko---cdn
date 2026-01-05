@@ -22,14 +22,15 @@ class Snackbar {
 
   /**
    * Create the snackbar container
+   * @param {ShadowRoot} shadowRoot - Shadow root to append the snackbar to (defaults to document.body for backward compatibility)
    */
-  create() {
+  create(shadowRoot = document.body) {
     if (this.container) {
       return this.container;
     }
 
     this.container = createElement('div', `${CONFIG.CLASS_PREFIX}snackbar`);
-    document.body.appendChild(this.container);
+    shadowRoot.appendChild(this.container);
 
     return this.container;
   }

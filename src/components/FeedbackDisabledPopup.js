@@ -38,14 +38,25 @@ class FeedbackDisabledPopup {
         const closeBtn = this.popup.querySelector(`.${CONFIG.CLASS_PREFIX}popup-close`);
         closeBtn.addEventListener('click', () => this.hide());
 
-        document.body.appendChild(this.popup);
+        // Use shadow root if available, otherwise document.body
+        const shadowRoot = window.Tapko._internal?.shadowRoot || document.body;
+        shadowRoot.appendChild(this.popup);
     }
 
     /**
      * Show the popup
+     * @param {ShadowRoot} shadowRoot - Shadow root to append the popup to (defaults to internal shadow root or document.body)
      */
-    show() {
+    show(shadowRoot) {
         if (!this.popup) this.create();
+
+        // If shadowRoot is explicitly passed, move popup there
+        if (shadowRoot && this.popup && this.popup.parentNode !== shadowRoot) {
+            if (this.popup.parentNode) {
+                this.popup.parentNode.removeChild(this.popup);
+            }
+            shadowRoot.appendChild(this.popup);
+        }
 
         // Clear existing timer
         if (this.timer) {
