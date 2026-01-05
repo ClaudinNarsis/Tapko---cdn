@@ -246,13 +246,26 @@ class CommentCard {
     // Keyboard shortcuts
     const textarea = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}comment-textarea`);
     if (textarea) {
+      // Prevent all keyboard events from bubbling to the document
+      // This stops website keyboard shortcuts from interfering with typing
       textarea.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+
         if (e.key === 'Escape') {
           this.close();
         } else if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
           this.submit();
         }
+      });
+
+      // Also stop propagation for keyup and keypress to be thorough
+      textarea.addEventListener('keyup', (e) => {
+        e.stopPropagation();
+      });
+
+      textarea.addEventListener('keypress', (e) => {
+        e.stopPropagation();
       });
     }
   }
