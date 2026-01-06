@@ -34,12 +34,13 @@ async function loadHtmlToImage() {
  * This method bypasses CORS and gradient rendering issues
  * @param {Object} options - Screenshot options
  * @param {ShadowRoot} options.shadowRoot - Optional shadow root to show permission overlay in
+ * @param {boolean} options.keepWidgetVisible - If true, keeps the widget visible in screenshot (for showing pin markers)
  */
 async function captureViewportScreenshot(options = {}) {
   const timingStart = performance.now();
   console.log('[Tapko] Starting viewport capture with Screen Capture API...');
 
-  const { shadowRoot } = options;
+  const { shadowRoot, keepWidgetVisible = false } = options;
   let permissionOverlay = null;
 
   try {
@@ -80,8 +81,8 @@ async function captureViewportScreenshot(options = {}) {
         permissionOverlay = null;
       }
 
-      // Hide shadow host for clean screenshot
-      if (shadowHost) shadowHost.style.display = 'none';
+      // Hide shadow host for clean screenshot (unless we want to keep widget visible)
+      if (shadowHost && !keepWidgetVisible) shadowHost.style.display = 'none';
 
       // Create video element to capture the stream
       const video = document.createElement('video');
