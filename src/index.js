@@ -38,7 +38,6 @@ import SyncLifecycleManager from './managers/SyncLifecycleManager.js';
 import NetworkStatusManager from './managers/NetworkStatusManager.js';
 import { ShadowStyleManager } from './utils/ShadowStyleManager.js';
 import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
-import { captureViewportScreenshot, importHtmlToImage } from './utils/screenshot.js';
 
 (function (window, document) {
   'use strict';
@@ -313,9 +312,8 @@ import { captureViewportScreenshot, importHtmlToImage } from './utils/screenshot
 
       this.isInFeedbackMode = true;
 
-      // Save original overflow and lock scroll
+      // Save original overflow but DON'T lock scroll - allow normal scrolling
       this._originalOverflow = document.body.style.overflow;
-      document.body.style.overflow = 'hidden';
 
       // Hide floating button
       this.floatingButton.hide();
@@ -325,24 +323,24 @@ import { captureViewportScreenshot, importHtmlToImage } from './utils/screenshot
         this.feedbackWidget = new FeedbackWidget();
         this.feedbackWidget.create(this.config.projectId, CONFIG.FEEDBACK_URL, this.shadowRoot);
 
-        // Capture screenshot immediately
-        console.log('[Tapko] Entering feedback mode - capturing screenshot...');
-
-        // Use the snackbar from DrawingCanvas if we move it there,
-        // or just local logging for now while capture is fast.
-        const screenshotData = await captureViewportScreenshot({ shadowRoot: this.shadowRoot });
-
-        // Enter integrated drawing/comment mode
-        this._enterDrawingMode(
-          (drawingData) => {
-            // This is called when the user finishes their submission flow
-            // or if we have a direct submit from the canvas
+        // Create feedback overlay (shows glowing border and handles clicks)
+        this.feedbackOverlay = new FeedbackModeOverlay();
+        this.feedbackOverlay.create(
+          (targetElement, coordinates) => {
+            // User clicked on the page - create comment card
+            this._createCommentCard(targetElement, coordinates);
           },
-          screenshotData
+          () => {
+            // User clicked exit - exit feedback mode
+            this._exitFeedbackMode();
+          },
+          this.shadowRoot
         );
 
         // Dispatch event
         dispatchCustomEvent(CONFIG.EVENTS.FEEDBACK_MODE_ENTERED);
+
+        console.log('[Tapko] Entered feedback mode - click anywhere to add feedback');
 
       } catch (error) {
         console.error('[Tapko] Failed to enter feedback mode:', error);
@@ -353,19 +351,19 @@ import { captureViewportScreenshot, importHtmlToImage } from './utils/screenshot
           this.feedbackWidget = null;
         }
 
+        // Clean up feedback overlay if it was created
+        if (this.feedbackOverlay) {
+          this.feedbackOverlay.destroy();
+          this.feedbackOverlay = null;
+        }
+
         // Reset state
         this.isInFeedbackMode = false;
         document.body.style.overflow = this._originalOverflow || '';
         this.floatingButton.show();
 
         // Notify user with a friendly error message
-        const userMessage = error.message.includes('permission denied')
-          ? 'Screenshot permission denied. Please allow screen capture to use feedback mode.'
-          : error.message.includes('not supported')
-          ? 'Your browser doesn\'t support screenshots. Please try a different browser.'
-          : 'Failed to start feedback mode. Please try again.';
-
-        alert(userMessage);
+        alert('Failed to start feedback mode. Please try again.');
 
         // Dispatch error event
         dispatchCustomEvent(CONFIG.EVENTS.ERROR, {
@@ -432,64 +430,18 @@ import { captureViewportScreenshot, importHtmlToImage } from './utils/screenshot
       }
 
       try {
-        // Integrated mode: append card deeply into drawing container so we can capture it
-        const parentRoot = this.drawingCanvas ? this.drawingCanvas.container : this.shadowRoot;
+        // Create card in shadow root
+        const card = new CommentCard(element, coordinates, this.apiClient, this.shadowRoot);
 
-        // Create card
-        const card = new CommentCard(element, coordinates, this.apiClient, parentRoot);
+        // Set draw callback to enter drawing mode with screenshot
+        card.setDrawCallback((onComplete, screenshotData) => {
+          this._enterDrawingMode(onComplete, screenshotData);
+        });
 
-        // Integrated mode: provide screenshot from background canvas + UI
-        if (this.drawingCanvas) {
-          card.setScreenshotProvider(async () => {
-            if (!this.drawingCanvas) return null;
-
-            // 1. Prepare UI for clean capture
-            this.drawingCanvas.prepareForCapture();
-            card.prepareForCapture();
-
-            try {
-              // 2. Capture the entire drawing container (Background + Drawings + CommentCard + Pin)
-              const htmlToImage = await importHtmlToImage(); // Ensure library is loaded
-
-              // Use toPng to capture the container
-              const dataURL = await htmlToImage.toPng(this.drawingCanvas.container, {
-                width: window.innerWidth,
-                height: window.innerHeight,
-              });
-
-              return {
-                finalScreenshot: dataURL,
-                thumbnail: dataURL, // Can resize if needed
-                metadata: {
-                  viewportWidth: window.innerWidth,
-                  viewportHeight: window.innerHeight,
-                  scrollX: window.scrollX,
-                  scrollY: window.scrollY,
-                  dpr: window.devicePixelRatio
-                }
-              };
-
-            } catch (error) {
-              console.error('[Tapko] Screenshot composition failed:', error);
-              // Fallback to minimal data
-              return this.drawingCanvas.getDrawingData();
-            } finally {
-              // 3. Restore UI
-              this.drawingCanvas.restoreAfterCapture();
-              card.restoreAfterCapture();
-            }
-          });
-
-          // Auto-exit after successful submit in integrated flow
-          card.setOnSuccess(() => {
-            this._exitFeedbackMode();
-          });
-        } else {
-          // Legacy/Fallback mode: use standard capture
-          card.setDrawCallback((onComplete, screenshotData) => {
-            this._enterDrawingMode(onComplete, screenshotData);
-          });
-        }
+        // Auto-exit feedback mode after successful submit
+        card.setOnSuccess(() => {
+          this._exitFeedbackMode();
+        });
 
         this.activeCard = card;
 
@@ -499,6 +451,14 @@ import { captureViewportScreenshot, importHtmlToImage } from './utils/screenshot
           originalClose();
           if (this.activeCard === card) {
             this.activeCard = null;
+          }
+          // Restore snackbar when comment card is closed
+          if (this.feedbackOverlay && this.feedbackOverlay.snackbar) {
+            this.feedbackOverlay.snackbar.show('Feedback mode ON', {
+              type: 'error',
+              showExitButton: true,
+              onExit: () => this._exitFeedbackMode()
+            });
           }
         };
 
@@ -522,6 +482,16 @@ import { captureViewportScreenshot, importHtmlToImage } from './utils/screenshot
     _enterDrawingMode(onComplete, screenshotData) {
       if (this.drawingCanvas) return;
 
+      // Hide overlay and its snackbar while drawing
+      if (this.feedbackOverlay) {
+        this.feedbackOverlay.hide();
+      }
+
+      // Hide feedback widget while drawing
+      if (this.feedbackWidget) {
+        this.feedbackWidget.hide();
+      }
+
       // Create drawing canvas with screenshot as background
       this.drawingCanvas = new DrawingCanvas();
       this.drawingCanvas.create(
@@ -533,28 +503,15 @@ import { captureViewportScreenshot, importHtmlToImage } from './utils/screenshot
           this._exitDrawingMode();
         },
         () => {
-          // Cancel/Exit callback
-          this._exitFeedbackMode();
+          // Cancel/Exit callback - just exit drawing mode and restore comment card
+          this._exitDrawingMode();
+          if (this.activeCard) {
+            this.activeCard.restore();
+          }
         },
         this.shadowRoot,
         screenshotData,
-        // NEW: onTap handler for placing comments on the screenshot
-        async (coordinates) => {
-          const { x, y } = coordinates;
-
-          // Discover element underneath the screenshot
-          // We must temporarily hide the shadow host to "see through" it
-          const originalDisplay = this.shadowHost.style.display;
-          this.shadowHost.style.display = 'none';
-
-          const targetElement = document.elementFromPoint(x, y);
-
-          this.shadowHost.style.display = originalDisplay;
-
-          if (targetElement) {
-            this._createCommentCard(targetElement, coordinates);
-          }
-        }
+        null  // No onTap handler - user is annotating existing comment
       );
 
       dispatchCustomEvent(CONFIG.EVENTS.DRAWING_STARTED);
@@ -566,9 +523,13 @@ import { captureViewportScreenshot, importHtmlToImage } from './utils/screenshot
     _exitDrawingMode() {
       if (!this.drawingCanvas) return;
 
-      // Update overlay label
+      // Restore overlay and feedback widget
       if (this.feedbackOverlay) {
-        this.feedbackOverlay.setDrawingMode(false);
+        this.feedbackOverlay.show();
+      }
+
+      if (this.feedbackWidget) {
+        this.feedbackWidget.show();
       }
 
       // Destroy canvas
