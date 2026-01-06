@@ -146,7 +146,7 @@ class CommentCard {
               <path d="M2 2l7.586 7.586" stroke="currentColor" stroke-width="2"/>
               <circle cx="11" cy="11" r="2" fill="currentColor"/>
             </svg>
-            Draw on page
+            Attach annotations
           </button>
           <button type="button" class="${CONFIG.CLASS_PREFIX}btn-submit">Submit</button>
         </div>
@@ -293,37 +293,71 @@ class CommentCard {
           `;
         }
 
-        // Capture screenshot of current viewport
-        const screenshotData = await captureViewportScreenshot({ shadowRoot: this.shadowRoot });
+        // First, scroll pin to center if it's not visible
+        await this._scrollPinToCenter();
 
-        // Reset button
-        if (drawBtn) {
-          drawBtn.disabled = false;
-          drawBtn.innerHTML = `
-            <svg viewBox="0 0 24 24" width="16" height="16">
-              <path d="M12 19l7-7 3 3-7 7-3-3z" fill="none" stroke="currentColor" stroke-width="2"/>
-              <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" fill="none" stroke="currentColor" stroke-width="2"/>
-              <path d="M2 2l7.586 7.586" stroke="currentColor" stroke-width="2"/>
-              <circle cx="11" cy="11" r="2" fill="currentColor"/>
-            </svg>
-            ${this.screenshot ? 'Edit drawing' : 'Draw on page'}
-          `;
-        }
+        // Hide card and pin marker temporarily for clean screenshot
+        this.card.style.display = 'none';
+        this.pinMarker.style.display = 'none';
+        await new Promise(resolve => setTimeout(resolve, 50));
 
-        // Minimize card
-        this.minimize();
+        try {
+          // Capture screenshot of current viewport
+          const screenshotData = await captureViewportScreenshot({ shadowRoot: this.shadowRoot });
 
-        // Pass screenshot to drawing mode
-        this.onDrawRequested((drawingData) => {
-          // Handle drawing completion
-          if (drawingData) {
-            this.screenshot = drawingData.finalScreenshot;  // Canvas with screenshot + annotations
-            this.thumbnail = drawingData.thumbnail;
-            this.screenshotMetadata = drawingData.metadata;
-            this.drawingData = drawingData.finalScreenshot;  // For compatibility
+          // Restore card and pin marker visibility
+          this.card.style.display = '';
+          this.pinMarker.style.display = '';
+
+          // Show processing message
+          if (drawBtn) {
+            drawBtn.disabled = true;
+            drawBtn.innerHTML = `
+              <svg viewBox="0 0 24 24" class="${CONFIG.CLASS_PREFIX}spinner">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none" opacity="0.25"/>
+                <path d="M12 2 A10 10 0 0 1 22 12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>
+              </svg>
+              Processing screenshot...
+            `;
           }
-          this.restore();
-        }, screenshotData);
+
+          // Resize screenshot to safe dimensions BEFORE passing to drawing canvas
+          const resizedScreenshot = await this._resizeScreenshotForAnnotation(screenshotData.dataURL);
+
+          // Reset button
+          if (drawBtn) {
+            drawBtn.disabled = false;
+            drawBtn.innerHTML = `
+              <svg viewBox="0 0 24 24" width="16" height="16">
+                <path d="M12 19l7-7 3 3-7 7-3-3z" fill="none" stroke="currentColor" stroke-width="2"/>
+                <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" fill="none" stroke="currentColor" stroke-width="2"/>
+                <path d="M2 2l7.586 7.586" stroke="currentColor" stroke-width="2"/>
+                <circle cx="11" cy="11" r="2" fill="currentColor"/>
+              </svg>
+              ${this.screenshot ? 'Edit annotations' : 'Attach annotations'}
+            `;
+          }
+
+          // Minimize card
+          this.minimize();
+
+          // Pass resized screenshot to drawing mode
+          this.onDrawRequested((drawingData) => {
+            // Handle drawing completion
+            if (drawingData) {
+              this.screenshot = drawingData.finalScreenshot;  // Canvas with screenshot + annotations
+              this.thumbnail = drawingData.thumbnail;
+              this.screenshotMetadata = drawingData.metadata;
+              this.drawingData = drawingData.finalScreenshot;  // For compatibility
+            }
+            this.restore();
+          }, { dataURL: resizedScreenshot, metadata: screenshotData.metadata });
+        } catch (screenshotError) {
+          // Restore visibility even on error
+          this.card.style.display = '';
+          this.pinMarker.style.display = '';
+          throw screenshotError;
+        }
 
       } catch (error) {
         console.error('[Tapko] Screenshot capture failed:', error);
@@ -338,7 +372,7 @@ class CommentCard {
               <path d="M2 2l7.586 7.586" stroke="currentColor" stroke-width="2"/>
               <circle cx="11" cy="11" r="2" fill="currentColor"/>
             </svg>
-            Draw on page
+            Attach annotations
           `;
         }
 
@@ -435,7 +469,7 @@ class CommentCard {
             <path d="M2 2l7.586 7.586" stroke="currentColor" stroke-width="2"/>
             <circle cx="11" cy="11" r="2" fill="currentColor"/>
           </svg>
-          ${this.drawingData ? 'Edit drawing' : 'Draw on page'}
+          ${this.drawingData ? 'Edit annotations' : 'Attach annotations'}
         </button>
         ` : ''}
         <button type="button" class="${CONFIG.CLASS_PREFIX}btn-submit">Submit</button>
@@ -853,10 +887,69 @@ class CommentCard {
   }
 
   /**
+   * Check if pin marker is visible in the viewport
+   */
+  _isPinVisible() {
+    if (!this.pinMarker) return true; // If no pin, consider it visible
+
+    const pinRect = this.pinMarker.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    // Check if pin is within viewport bounds
+    const isVisible = (
+      pinRect.top >= 0 &&
+      pinRect.left >= 0 &&
+      pinRect.bottom <= viewportHeight &&
+      pinRect.right <= viewportWidth
+    );
+
+    return isVisible;
+  }
+
+  /**
+   * Scroll the pin marker to the center of the viewport
+   * Only scrolls if pin is completely out of view
+   */
+  async _scrollPinToCenter() {
+    if (!this.target || !this.pinMarker) return;
+
+    // Check if pin is visible
+    if (this._isPinVisible()) {
+      console.log('[Tapko] Pin is visible, no scrolling needed');
+      return;
+    }
+
+    console.log('[Tapko] Pin not visible, scrolling to center...');
+
+    // Get the pin's absolute position on the page
+    const targetRect = this.target.getBoundingClientRect();
+    const pinAbsoluteX = targetRect.left + this.clickOffsetX + (window.pageXOffset || document.documentElement.scrollLeft);
+    const pinAbsoluteY = targetRect.top + this.clickOffsetY + (window.pageYOffset || document.documentElement.scrollTop);
+
+    // Calculate scroll position to center the pin
+    const scrollX = pinAbsoluteX - (window.innerWidth / 2);
+    const scrollY = pinAbsoluteY - (window.innerHeight / 2);
+
+    // Smooth scroll to position
+    window.scrollTo({
+      left: scrollX,
+      top: scrollY,
+      behavior: 'smooth'
+    });
+
+    // Wait for scroll to complete (smooth scroll animation)
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+
+  /**
    * Capture screenshot helper
    */
   async _captureScreenshot(textarea) {
     this._showLoading('Capturing screenshot...');
+
+    // First, scroll pin to center if it's not visible
+    await this._scrollPinToCenter();
 
     // Set screenshot mode to clean up UI
     this.card.classList.add(`${CONFIG.CLASS_PREFIX}screenshot-mode`);
@@ -885,9 +978,11 @@ class CommentCard {
     await new Promise(resolve => setTimeout(resolve, 50));
 
     try {
-      // Don't include widget elements in screenshot - they're in shadow DOM and just UI
-      // The screenshot should capture the actual page content only
-      const screenshotData = await captureViewportScreenshot({ shadowRoot: this.shadowRoot });
+      // Capture screenshot with pin marker visible so user can see where they commented
+      const screenshotData = await captureViewportScreenshot({
+        shadowRoot: this.shadowRoot,
+        keepWidgetVisible: true  // Keep pin marker visible in screenshot
+      });
 
       this.screenshot = screenshotData.dataURL;
       this.screenshotMetadata = screenshotData.metadata;
@@ -902,6 +997,57 @@ class CommentCard {
         textarea.style.display = '';
       }
     }
+  }
+
+  /**
+   * Resize screenshot to safe dimensions for annotation
+   * This prevents browser crashes from overly large images
+   */
+  async _resizeScreenshotForAnnotation(dataURL) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+
+      img.onload = () => {
+        const maxDimension = 2048; // Conservative max to prevent crashes
+        let width = img.width;
+        let height = img.height;
+
+        console.log('[Tapko] Original screenshot size:', width, 'x', height);
+
+        // Check if resizing is needed
+        if (width > maxDimension || height > maxDimension) {
+          // Calculate scale to fit within max dimension
+          const scale = Math.min(maxDimension / width, maxDimension / height);
+          width = Math.floor(width * scale);
+          height = Math.floor(height * scale);
+
+          console.log('[Tapko] Resizing screenshot to:', width, 'x', height);
+
+          // Create canvas to resize
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // Convert to JPEG with good quality
+          const resizedDataURL = canvas.toDataURL('image/jpeg', 0.9);
+          console.log('[Tapko] Screenshot resized successfully');
+          resolve(resizedDataURL);
+        } else {
+          console.log('[Tapko] Screenshot size is safe, no resizing needed');
+          resolve(dataURL);
+        }
+      };
+
+      img.onerror = (err) => {
+        console.error('[Tapko] Failed to load screenshot for resizing:', err);
+        reject(new Error('Failed to load screenshot'));
+      };
+
+      img.src = dataURL;
+    });
   }
 
   /**
