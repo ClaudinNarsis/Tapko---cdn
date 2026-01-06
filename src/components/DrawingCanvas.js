@@ -70,19 +70,31 @@ class DrawingCanvas {
     this.canvas = document.createElement('canvas');
     this.canvas.className = `${CONFIG.CLASS_PREFIX}drawing-canvas`;
 
-    // Set canvas size to full viewport with device pixel ratio support
-    const dpr = window.devicePixelRatio || 1;
-    this.canvas.width = window.innerWidth * dpr;
-    this.canvas.height = window.innerHeight * dpr;
-    this.canvas.style.width = `${window.innerWidth}px`;
-    this.canvas.style.height = `${window.innerHeight}px`;
+    // Set canvas size to 90% of viewport to match CSS
+    // Use DPR of 1 to minimize memory usage and prevent crashes
+    const dpr = 1; // Force DPR to 1 for memory efficiency
+    const canvasWidth = window.innerWidth * 0.9;
+    const canvasHeight = window.innerHeight * 0.9;
+
+    this.canvas.width = canvasWidth * dpr;
+    this.canvas.height = canvasHeight * dpr;
+    this.canvas.style.width = `${canvasWidth}px`;
+    this.canvas.style.height = `${canvasHeight}px`;
+
+    console.log('[Tapko] Canvas created:', this.canvas.width, 'x', this.canvas.height, 'Memory-safe mode (DPR=1)');
 
     this.ctx = this.canvas.getContext('2d');
     this.ctx.scale(dpr, dpr);
 
     // NEW: Draw screenshot as background if provided
     if (screenshotData && screenshotData.dataURL) {
-      await this._drawScreenshotBackground(screenshotData.dataURL);
+      try {
+        await this._drawScreenshotBackground(screenshotData.dataURL);
+      } catch (error) {
+        console.error('[Tapko] Failed to load screenshot background:', error);
+        // Continue anyway - user can still draw without background
+        alert('Failed to load screenshot. You can still annotate, but the background may be missing.');
+      }
     }
 
     // Set drawing properties for annotations
@@ -157,6 +169,13 @@ class DrawingCanvas {
           </svg>
           Clear
         </button>
+        <div class="${CONFIG.CLASS_PREFIX}drawing-divider"></div>
+        <button type="button" class="${CONFIG.CLASS_PREFIX}drawing-btn ${CONFIG.CLASS_PREFIX}btn-done" aria-label="Done">
+          <svg viewBox="0 0 24 24">
+            <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Done
+        </button>
       </div>
     `;
 
@@ -164,12 +183,14 @@ class DrawingCanvas {
     const cancelBtn = this.toolbar.querySelector(`.${CONFIG.CLASS_PREFIX}btn-cancel`);
     const undoBtn = this.toolbar.querySelector(`.${CONFIG.CLASS_PREFIX}btn-undo`);
     const clearBtn = this.toolbar.querySelector(`.${CONFIG.CLASS_PREFIX}btn-clear`);
+    const doneBtn = this.toolbar.querySelector(`.${CONFIG.CLASS_PREFIX}btn-done`);
 
     cancelBtn.addEventListener('click', () => {
       if (this.onCancel) this.onCancel();
     });
     undoBtn.addEventListener('click', () => this.undo());
     clearBtn.addEventListener('click', () => this.clear());
+    doneBtn.addEventListener('click', () => this._handleDone());
   }
 
   /**
@@ -312,7 +333,9 @@ class DrawingCanvas {
 
     // Redraw screenshot background first
     if (this.screenshotImage) {
-      this.ctx.drawImage(this.screenshotImage, 0, 0, window.innerWidth, window.innerHeight);
+      const canvasWidth = window.innerWidth * 0.9;
+      const canvasHeight = window.innerHeight * 0.9;
+      this.ctx.drawImage(this.screenshotImage, 0, 0, canvasWidth, canvasHeight);
     }
 
     // Redraw all annotation paths
@@ -341,11 +364,15 @@ class DrawingCanvas {
     try {
       const oldImageData = this.ctx.getImageData(0, 0, oldCanvas.width, oldCanvas.height);
 
-      const dpr = window.devicePixelRatio || 1;
-      this.canvas.width = window.innerWidth * dpr;
-      this.canvas.height = window.innerHeight * dpr;
-      this.canvas.style.width = `${window.innerWidth} px`;
-      this.canvas.style.height = `${window.innerHeight} px`;
+      // Use DPR of 1 to minimize memory usage
+      const dpr = 1;
+      const canvasWidth = window.innerWidth * 0.9;
+      const canvasHeight = window.innerHeight * 0.9;
+
+      this.canvas.width = canvasWidth * dpr;
+      this.canvas.height = canvasHeight * dpr;
+      this.canvas.style.width = `${canvasWidth}px`;
+      this.canvas.style.height = `${canvasHeight}px`;
 
       this.ctx.scale(dpr, dpr);
       this.ctx.strokeStyle = this.strokeColor;
@@ -365,19 +392,19 @@ class DrawingCanvas {
    * Returns the canvas directly (already contains screenshot + annotations)
    */
   async _handleDone() {
-    const doneBtn = this.toolbar.querySelector(`.${CONFIG.CLASS_PREFIX} btn - done`);
+    const doneBtn = this.toolbar.querySelector(`.${CONFIG.CLASS_PREFIX}btn-done`);
 
     try {
       // Show loading state
       if (doneBtn) {
         doneBtn.disabled = true;
         doneBtn.innerHTML = `
-      < svg viewBox = "0 0 24 24" class="${CONFIG.CLASS_PREFIX}spinner" >
+          <svg viewBox="0 0 24 24" class="${CONFIG.CLASS_PREFIX}spinner">
             <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none" opacity="0.25"/>
             <path d="M12 2 A10 10 0 0 1 22 12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>
-          </svg >
-      Generating thumbnail...
-    `;
+          </svg>
+          Generating thumbnail...
+        `;
       }
 
       // The canvas already contains screenshot + annotations!
@@ -414,10 +441,10 @@ class DrawingCanvas {
       if (doneBtn) {
         doneBtn.disabled = false;
         doneBtn.innerHTML = `
-      < svg viewBox = "0 0 24 24" >
-        <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" />
-          </svg >
-      Done
+          <svg viewBox="0 0 24 24">
+            <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Done
         `;
       }
 
@@ -432,31 +459,50 @@ class DrawingCanvas {
   async _drawScreenshotBackground(dataURL) {
     if (!dataURL) return;
 
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const img = new Image();
       img.onload = () => {
-        console.log('[Tapko] Drawing screenshot background:', img.width, 'x', img.height);
+        console.log('[Tapko] Screenshot loaded for canvas:', img.width, 'x', img.height);
 
-        // Save current context state
-        this.ctx.save();
-
-        // Draw the high-res screenshot to fill the viewport
-        // The context is already scaled by DPR, so we draw at CSS dimensions
-        this.ctx.drawImage(img, 0, 0, window.innerWidth, window.innerHeight);
-
-        this.ctx.restore();
-
-        // Store image for redrawing on resize
-        this.screenshotImage = img;
-
-        resolve();
+        try {
+          this._drawImageToCanvas(img);
+          this.screenshotImage = img;
+          resolve();
+        } catch (error) {
+          console.error('[Tapko] Failed to draw screenshot to canvas:', error);
+          reject(error);
+        }
       };
       img.onerror = (err) => {
         console.error('[Tapko] Failed to load screenshot image for background:', err);
-        resolve();
+        reject(new Error('Failed to load screenshot image'));
       };
       img.src = dataURL;
     });
+  }
+
+  /**
+   * Helper to draw image to canvas
+   */
+  _drawImageToCanvas(img) {
+    try {
+      console.log('[Tapko] Drawing screenshot to canvas:', img.width, 'x', img.height);
+
+      // Save current context state
+      this.ctx.save();
+
+      // Draw the screenshot to fill the canvas (90% of viewport)
+      // The context is already scaled by DPR, so we draw at CSS dimensions
+      const canvasWidth = window.innerWidth * 0.9;
+      const canvasHeight = window.innerHeight * 0.9;
+      this.ctx.drawImage(img, 0, 0, canvasWidth, canvasHeight);
+
+      this.ctx.restore();
+    } catch (error) {
+      console.error('[Tapko] Error drawing image to canvas:', error);
+      this.ctx.restore(); // Make sure to restore even on error
+      throw error;
+    }
   }
 
   /**
@@ -534,7 +580,7 @@ class DrawingCanvas {
     this.instructions = createElement('div', `${CONFIG.CLASS_PREFIX}drawing-instructions`);
     this.instructions.innerHTML = `
       <div class="${CONFIG.CLASS_PREFIX}instruction-dot"></div>
-      Click to comment or click and drag to annotate
+      Click and drag to annotate
     `;
   }
 
