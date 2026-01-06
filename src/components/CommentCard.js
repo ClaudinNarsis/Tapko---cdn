@@ -293,6 +293,9 @@ class CommentCard {
           `;
         }
 
+        // First, scroll pin to center if it's not visible
+        await this._scrollPinToCenter();
+
         // Hide card and pin marker temporarily for clean screenshot
         this.card.style.display = 'none';
         this.pinMarker.style.display = 'none';
@@ -884,10 +887,69 @@ class CommentCard {
   }
 
   /**
+   * Check if pin marker is visible in the viewport
+   */
+  _isPinVisible() {
+    if (!this.pinMarker) return true; // If no pin, consider it visible
+
+    const pinRect = this.pinMarker.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    // Check if pin is within viewport bounds
+    const isVisible = (
+      pinRect.top >= 0 &&
+      pinRect.left >= 0 &&
+      pinRect.bottom <= viewportHeight &&
+      pinRect.right <= viewportWidth
+    );
+
+    return isVisible;
+  }
+
+  /**
+   * Scroll the pin marker to the center of the viewport
+   * Only scrolls if pin is completely out of view
+   */
+  async _scrollPinToCenter() {
+    if (!this.target || !this.pinMarker) return;
+
+    // Check if pin is visible
+    if (this._isPinVisible()) {
+      console.log('[Tapko] Pin is visible, no scrolling needed');
+      return;
+    }
+
+    console.log('[Tapko] Pin not visible, scrolling to center...');
+
+    // Get the pin's absolute position on the page
+    const targetRect = this.target.getBoundingClientRect();
+    const pinAbsoluteX = targetRect.left + this.clickOffsetX + (window.pageXOffset || document.documentElement.scrollLeft);
+    const pinAbsoluteY = targetRect.top + this.clickOffsetY + (window.pageYOffset || document.documentElement.scrollTop);
+
+    // Calculate scroll position to center the pin
+    const scrollX = pinAbsoluteX - (window.innerWidth / 2);
+    const scrollY = pinAbsoluteY - (window.innerHeight / 2);
+
+    // Smooth scroll to position
+    window.scrollTo({
+      left: scrollX,
+      top: scrollY,
+      behavior: 'smooth'
+    });
+
+    // Wait for scroll to complete (smooth scroll animation)
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+
+  /**
    * Capture screenshot helper
    */
   async _captureScreenshot(textarea) {
     this._showLoading('Capturing screenshot...');
+
+    // First, scroll pin to center if it's not visible
+    await this._scrollPinToCenter();
 
     // Set screenshot mode to clean up UI
     this.card.classList.add(`${CONFIG.CLASS_PREFIX}screenshot-mode`);
