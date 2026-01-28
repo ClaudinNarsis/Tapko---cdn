@@ -1,6 +1,13 @@
 import PinStorage from './PinStorage.js';
 import { createElement } from '../utils/dom.js';
 import { CONFIG } from '../config.js';
+import {
+  getCurrentDeviceInfo,
+  extractFeedbackDeviceInfo,
+  calculateDeviceSimilarity,
+  getHiddenFeedbackStats,
+  formatHiddenFeedbackMessage
+} from '../utils/deviceMatcher.js';
 
 /**
  * PinManager - Manages pin lifecycle (fetch, render, position, click)
@@ -13,6 +20,8 @@ class PinManager {
     this.pinStorage = new PinStorage();
     this.pins = new Map(); // In-memory registry: id -> { data, element }
     this.initialized = false;
+    this.hiddenFeedbackStats = null; // Stats about hidden feedbacks
+    this.currentDeviceInfo = null; // Current device info
   }
 
   /**
@@ -32,6 +41,10 @@ class PinManager {
     try {
       const normalizedUrl = this._normalizeUrl(pageUrl);
 
+      // Get current device info for filtering
+      this.currentDeviceInfo = getCurrentDeviceInfo();
+      console.log('[PinManager] Current device:', this.currentDeviceInfo);
+
       // 1. Fetch all feedbacks from backend
       let backendFeedbacks = [];
 
@@ -47,7 +60,7 @@ class PinManager {
         return;
       }
 
-      // 2. Filter feedbacks for current page and extract comment position
+      // 2. Filter feedbacks for current page
       const feedbacksForPage = backendFeedbacks.filter(feedback => {
         const feedbackUrl = this._normalizeUrl(feedback.context?.pageUrl || '');
         return feedbackUrl === normalizedUrl;
@@ -55,16 +68,56 @@ class PinManager {
 
       console.log(`[PinManager] Found ${feedbacksForPage.length} feedbacks for current page`);
 
-      // Log first feedback structure for debugging
-      if (feedbacksForPage.length > 0) {
-        console.log('[PinManager] Sample feedback structure:', JSON.stringify(feedbacksForPage[0], null, 2));
-      }
+      
 
-      // 3. Create pins from feedbacks with position data
+      // 3. Filter feedbacks based on device compatibility
+      const threshold = 80;
+      const compatibleFeedbacks = feedbacksForPage.filter(feedback => {
+        const feedbackDeviceInfo = extractFeedbackDeviceInfo(feedback);
+        const feedbackId = feedback.feedbackId || feedback.id;
+        const comment = feedback.feedbackTitle || feedback.description || feedback.title || feedback.comment || feedback.message || 'No comment';
+
+        // If no device info available, show the feedback (backward compatibility)
+        if (!feedbackDeviceInfo) {
+          console.log(`[PinManager] DEBUG - Feedback ${feedbackId}:`, {
+            comment: comment.substring(0, 50) + (comment.length > 50 ? '...' : ''),
+            score: 'N/A (no device info)',
+            threshold: threshold,
+            result: 'SHOWN (backward compatibility)'
+          });
+          return true;
+        }
+
+        // Calculate similarity score
+        const score = calculateDeviceSimilarity(this.currentDeviceInfo, feedbackDeviceInfo);
+
+        // Check if feedback should be shown on current device
+        const shouldShow = score >= threshold;
+
+        // Debug log for every feedback
+        console.log(`[PinManager] DEBUG - Feedback ${feedbackId}:`, {
+          comment: comment.substring(0, 50) + (comment.length > 50 ? '...' : ''),
+          score: score,
+          threshold: threshold,
+          result: shouldShow ? 'SHOWN' : 'HIDDEN',
+          feedbackDevice: feedbackDeviceInfo,
+          currentDevice: this.currentDeviceInfo
+        });
+
+        return shouldShow;
+      });
+
+      console.log(`[PinManager] ${compatibleFeedbacks.length} feedbacks compatible with current device`);
+
+      // Calculate stats for hidden feedbacks
+      this.hiddenFeedbackStats = getHiddenFeedbackStats(feedbacksForPage, compatibleFeedbacks);
+      console.log('[PinManager] Hidden feedback stats:', this.hiddenFeedbackStats);
+
+      // 4. Create pins from compatible feedbacks with position data
       let pinsCreated = 0;
       let skippedNoPosition = 0;
 
-      for (const feedback of feedbacksForPage) {
+      for (const feedback of compatibleFeedbacks) {
         // Validate feedback has required data (backend returns 'feedbackId', not 'id')
         const feedbackId = feedback.feedbackId || feedback.id;
         if (!feedbackId) {
@@ -458,6 +511,33 @@ class PinManager {
       element.style.display = 'none';
     });
     console.log('[PinManager] Pins hidden');
+  }
+
+  /**
+   * Get hidden feedback statistics
+   * @returns {Object|null} - Hidden feedback stats or null if not initialized
+   */
+  getHiddenFeedbackStats() {
+    return this.hiddenFeedbackStats;
+  }
+
+  /**
+   * Get formatted message about hidden feedbacks
+   * @returns {string} - Formatted message
+   */
+  getHiddenFeedbackMessage() {
+    if (!this.hiddenFeedbackStats || this.hiddenFeedbackStats.total === 0) {
+      return '';
+    }
+    return formatHiddenFeedbackMessage(this.hiddenFeedbackStats);
+  }
+
+  /**
+   * Get current device info
+   * @returns {Object|null} - Current device info
+   */
+  getCurrentDeviceInfo() {
+    return this.currentDeviceInfo;
   }
 
   /**

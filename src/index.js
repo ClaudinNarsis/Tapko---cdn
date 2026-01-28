@@ -392,7 +392,7 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
       try {
         // Create feedback widget (view all feedback button)
         this.feedbackWidget = new FeedbackWidget();
-        this.feedbackWidget.create(this.config.projectId, CONFIG.FEEDBACK_URL, this.shadowRoot);
+        this.feedbackWidget.create(this.config.projectId, CONFIG.FEEDBACK_URL, this.shadowRoot, this.pinManager);
 
         // Create feedback overlay (shows glowing border and handles clicks)
         this.feedbackOverlay = new FeedbackModeOverlay();
@@ -778,22 +778,20 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
         await this.pinManager.init(this.config.projectId, window.location.href);
 
         // Setup scroll/resize handlers for pin position updates
-        const throttle = (func, delay) => {
-          let lastCall = 0;
-          return function (...args) {
-            const now = Date.now();
-            if (now - lastCall >= delay) {
-              lastCall = now;
-              func(...args);
-            }
-          };
-        };
-
-        const updatePins = throttle(() => {
-          if (this.pinManager) {
-            this.pinManager.updateAllPinPositions();
+        // Use requestAnimationFrame for smooth, synchronized updates
+        let rafId = null;
+        const updatePins = () => {
+          if (rafId) {
+            return; // Already scheduled
           }
-        }, 100);
+
+          rafId = requestAnimationFrame(() => {
+            if (this.pinManager) {
+              this.pinManager.updateAllPinPositions();
+            }
+            rafId = null;
+          });
+        };
 
         window.addEventListener('scroll', updatePins, { passive: true });
         window.addEventListener('resize', updatePins, { passive: true });
