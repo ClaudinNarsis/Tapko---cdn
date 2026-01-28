@@ -28,7 +28,7 @@ import { CommentCard } from './components/CommentCard.js';
 import { DrawingCanvas } from './components/DrawingCanvas.js';
 import { FeedbackDisabledPopup } from './components/FeedbackDisabledPopup.js';
 import { FeedbackWidget } from './components/FeedbackWidget.js';
-import { dispatchCustomEvent } from './utils/dom.js';
+import { dispatchCustomEvent, getUrlParam } from './utils/dom.js';
 import { logManager } from './managers/LogManager.js';
 import { analyticsManager } from './managers/AnalyticsManager.js';
 import FeedbackQueueManager from './managers/FeedbackQueueManager.js';
@@ -181,11 +181,70 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
           // Don't return, allow initialization in disabled state
         }
 
-
-
         this.projectData = validation.data;
+
+        // Verify URL secret key if security is enabled
+        console.log('[Tapko Security] Starting URL secret key verification...');
+        console.log('[Tapko Security] Project data security object:', validation.data?.security);
+
+        const security = validation.data?.security;
+
+        if (!security) {
+          console.log('[Tapko Security] ✓ No security object found in API response - initialization allowed');
+        } else {
+          console.log('[Tapko Security] Security object found:', {
+            is_url_secret_enabled: security.is_url_secret_enabled,
+            url_secret_key_length: security.url_secret_key ? security.url_secret_key.length : 0,
+            url_secret_key_preview: security.url_secret_key ? `${security.url_secret_key.substring(0, 4)}...` : 'not set'
+          });
+
+          if (security.is_url_secret_enabled === true) {
+            console.log('[Tapko Security] URL secret key protection is ENABLED');
+
+            const urlSecretKey = getUrlParam('tapko_url_secret_key');
+            console.log('[Tapko Security] URL parameter "tapko_url_secret_key":', urlSecretKey || 'NOT PROVIDED');
+
+            if (!urlSecretKey) {
+              console.error('[Tapko Security] ✗ FAILED: URL secret key is required but missing from URL parameters');
+              console.error('[Tapko Security] Expected URL format: ?tapko_url_secret_key=YOUR_SECRET_KEY');
+              const error = new Error('[Tapko] URL secret key is required but not provided in URL parameters.');
+              dispatchCustomEvent(CONFIG.EVENTS.ERROR, {
+                message: error.message,
+                type: 'URL_SECRET_KEY_MISSING',
+                validation
+              });
+              throw error;
+            }
+
+            console.log('[Tapko Security] Comparing keys...');
+            console.log('[Tapko Security] - Provided key:', urlSecretKey);
+            console.log('[Tapko Security] - Expected key:', security.url_secret_key);
+            console.log('[Tapko Security] - Keys match:', urlSecretKey === security.url_secret_key);
+
+            if (urlSecretKey !== security.url_secret_key) {
+              console.error('[Tapko Security] ✗ FAILED: URL secret key does not match expected value');
+              console.error('[Tapko Security] Provided:', urlSecretKey);
+              console.error('[Tapko Security] Expected:', security.url_secret_key);
+              const error = new Error('[Tapko] Invalid URL secret key.');
+              dispatchCustomEvent(CONFIG.EVENTS.ERROR, {
+                message: error.message,
+                type: 'URL_SECRET_KEY_INVALID',
+                validation
+              });
+              throw error;
+            }
+
+            console.log('[Tapko Security] ✓ SUCCESS: URL secret key verified successfully');
+          } else {
+            console.log('[Tapko Security] ✓ URL secret key protection is DISABLED - initialization allowed');
+          }
+        }
+
+        console.log('[Tapko Security] Security verification complete - proceeding with initialization');
       } catch (error) {
-        if (error.message.includes('Project not found')) {
+        // Re-throw critical errors that should stop initialization
+        if (error.message.includes('Project not found') ||
+            error.message.includes('URL secret key')) {
           throw error;
         }
         console.warn('[Tapko] Failed to validate project:', error.message);
@@ -436,11 +495,6 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
         // Set draw callback to enter drawing mode with screenshot
         card.setDrawCallback((onComplete, screenshotData) => {
           this._enterDrawingMode(onComplete, screenshotData);
-        });
-
-        // Auto-exit feedback mode after successful submit
-        card.setOnSuccess(() => {
-          this._exitFeedbackMode();
         });
 
         this.activeCard = card;
