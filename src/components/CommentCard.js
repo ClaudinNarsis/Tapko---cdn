@@ -25,13 +25,15 @@ import {
 } from '../utils/dom.js';
 
 class CommentCard {
-  constructor(target, coordinates, apiClient, shadowRoot = document.body) {
+  constructor(target, coordinates, apiClient, shadowRoot = document.body, pinManager = null) {
     this.target = target;
     this.coordinates = coordinates;
     this.apiClient = apiClient;
     this.shadowRoot = shadowRoot;
+    this.pinManager = pinManager; // NEW: Pin manager for persistent pins
     this.card = null;
     this.pinMarker = null;
+    this.draftPinId = null; // NEW: Track draft pin ID
     this.recordingManager = new RecordingManager();
     this.selectedEmoji = null;
     this.isSubmitting = false;
@@ -76,16 +78,20 @@ class CommentCard {
   }
 
   /**
-   * Create pin marker at tap location
+   * Create pin marker at tap location (draft pin - temporary)
    */
   _createPinMarker() {
-    this.pinMarker = createElement('div', `${CONFIG.CLASS_PREFIX}comment-pin`);
+    // Create draft pin with special styling
+    this.pinMarker = createElement('div', `${CONFIG.CLASS_PREFIX}comment-pin ${CONFIG.CLASS_PREFIX}draft`);
     this.pinMarker.style.position = 'absolute';
 
     // Position at exact client location (shadow host is fixed/full-screen)
     this.pinMarker.style.left = `${this.coordinates.x}px`;
     this.pinMarker.style.top = `${this.coordinates.y}px`;
     this.pinMarker.style.zIndex = CONFIG.UI.zIndex;
+
+    // Generate draft pin ID
+    this.draftPinId = `draft-${Date.now()}`;
 
     // Append to shadow root
     this.shadowRoot.appendChild(this.pinMarker);
