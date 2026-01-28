@@ -497,11 +497,6 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
           this._enterDrawingMode(onComplete, screenshotData);
         });
 
-        // Auto-exit feedback mode after successful submit
-        card.setOnSuccess(() => {
-          this._exitFeedbackMode();
-        });
-
         this.activeCard = card;
 
         // Remove from active when closed
