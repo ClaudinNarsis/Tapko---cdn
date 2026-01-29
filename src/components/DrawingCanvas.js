@@ -256,7 +256,7 @@ class DrawingCanvas {
     const doneBtn = this.toolbar.querySelector(`.${CONFIG.CLASS_PREFIX}btn-done`);
 
     cancelBtn.addEventListener('click', () => {
-      if (this.onCancel) this.onCancel();
+      this._handleCancel();
     });
     undoBtn.addEventListener('click', () => this.undo());
     clearBtn.addEventListener('click', () => this.clear());
@@ -895,6 +895,97 @@ class DrawingCanvas {
       // Show error to user
       alert('Failed to save annotations. Please try again.');
     }
+  }
+
+  /**
+   * Handle Cancel button click - Exit annotation mode with warning if there are unsaved changes
+   */
+  _handleCancel() {
+    // Check if there are any annotations
+    const hasAnnotations = this.paths.length > 0;
+
+    if (!hasAnnotations) {
+      // No annotations, exit immediately
+      if (this.onCancel) this.onCancel();
+      return;
+    }
+
+    // Show warning dialog with custom styling
+    this._showExitWarningDialog();
+  }
+
+  /**
+   * Show exit warning dialog with options to Save or Exit without saving
+   * Returns true if user wants to exit, false otherwise
+   */
+  _showExitWarningDialog() {
+    // Create custom dialog overlay
+    const dialogOverlay = createElement('div', `${CONFIG.CLASS_PREFIX}exit-dialog-overlay`);
+
+    const dialog = createElement('div', `${CONFIG.CLASS_PREFIX}exit-dialog`);
+    dialog.innerHTML = `
+      <div class="${CONFIG.CLASS_PREFIX}exit-dialog-header">
+        <svg viewBox="0 0 24 24" class="${CONFIG.CLASS_PREFIX}exit-dialog-icon">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" fill="currentColor"/>
+        </svg>
+        <h3>Unsaved Annotations</h3>
+      </div>
+      <div class="${CONFIG.CLASS_PREFIX}exit-dialog-content">
+        <p>You have unsaved annotations. What would you like to do?</p>
+      </div>
+      <div class="${CONFIG.CLASS_PREFIX}exit-dialog-actions">
+        <button type="button" class="${CONFIG.CLASS_PREFIX}exit-dialog-btn ${CONFIG.CLASS_PREFIX}btn-exit" aria-label="Exit without saving">
+          Exit Without Saving
+        </button>
+        <button type="button" class="${CONFIG.CLASS_PREFIX}exit-dialog-btn ${CONFIG.CLASS_PREFIX}btn-save" aria-label="Save annotations">
+          Save Annotations
+        </button>
+      </div>
+    `;
+
+    dialogOverlay.appendChild(dialog);
+
+    // Append to container
+    if (this.container) {
+      this.container.appendChild(dialogOverlay);
+    }
+
+    // Show dialog with animation
+    requestAnimationFrame(() => {
+      dialogOverlay.classList.add(`${CONFIG.CLASS_PREFIX}visible`);
+    });
+
+    // Handle button clicks
+    const exitBtn = dialog.querySelector(`.${CONFIG.CLASS_PREFIX}btn-exit`);
+    const saveBtn = dialog.querySelector(`.${CONFIG.CLASS_PREFIX}btn-save`);
+
+    exitBtn.addEventListener('click', () => {
+      // Exit without saving
+      dialogOverlay.classList.remove(`${CONFIG.CLASS_PREFIX}visible`);
+      setTimeout(() => {
+        dialogOverlay.remove();
+        if (this.onCancel) this.onCancel();
+      }, 200);
+    });
+
+    saveBtn.addEventListener('click', () => {
+      // Save annotations
+      dialogOverlay.classList.remove(`${CONFIG.CLASS_PREFIX}visible`);
+      setTimeout(() => {
+        dialogOverlay.remove();
+        this._handleDone();
+      }, 200);
+    });
+
+    // Close on overlay click (outside dialog)
+    dialogOverlay.addEventListener('click', (e) => {
+      if (e.target === dialogOverlay) {
+        dialogOverlay.classList.remove(`${CONFIG.CLASS_PREFIX}visible`);
+        setTimeout(() => {
+          dialogOverlay.remove();
+        }, 200);
+      }
+    });
   }
 
   /**
