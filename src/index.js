@@ -519,6 +519,11 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
           this._enterDrawingMode(onComplete, screenshotData, existingAnnotations);
         });
 
+        // Set feedback widget reference so it can be hidden during screenshot capture
+        if (this.feedbackWidget) {
+          card.setFeedbackWidget(this.feedbackWidget);
+        }
+
         this.activeCard = card;
 
         // Remove from active when closed

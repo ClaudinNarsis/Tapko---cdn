@@ -31,6 +31,7 @@ class CommentCard {
     this.apiClient = apiClient;
     this.shadowRoot = shadowRoot;
     this.pinManager = pinManager; // NEW: Pin manager for persistent pins
+    this.feedbackWidget = null; // NEW: Feedback widget reference for hiding during screenshot
     this.card = null;
     this.pinMarker = null;
     this.draftPinId = null; // NEW: Track draft pin ID
@@ -308,6 +309,15 @@ class CommentCard {
         // Hide card and pin marker temporarily for clean screenshot
         this.card.style.display = 'none';
         this.pinMarker.style.display = 'none';
+
+        // Hide old history pins and view all feedbacks button during screenshot
+        if (this.pinManager) {
+          this.pinManager.hide();
+        }
+        if (this.feedbackWidget) {
+          this.feedbackWidget.hide();
+        }
+
         await new Promise(resolve => setTimeout(resolve, 50));
 
         try {
@@ -317,6 +327,14 @@ class CommentCard {
           // Restore card and pin marker visibility
           this.card.style.display = '';
           this.pinMarker.style.display = '';
+
+          // Restore old history pins and view all feedbacks button
+          if (this.pinManager) {
+            this.pinManager.show();
+          }
+          if (this.feedbackWidget) {
+            this.feedbackWidget.show();
+          }
 
           // Show processing message
           if (drawBtn) {
@@ -375,6 +393,15 @@ class CommentCard {
           // Restore visibility even on error
           this.card.style.display = '';
           this.pinMarker.style.display = '';
+
+          // Restore old history pins and view all feedbacks button even on error
+          if (this.pinManager) {
+            this.pinManager.show();
+          }
+          if (this.feedbackWidget) {
+            this.feedbackWidget.show();
+          }
+
           throw screenshotError;
         }
 
@@ -626,6 +653,13 @@ class CommentCard {
   setScreenshotProvider(callback) {
     this.screenshotProvider = callback;
     this._renderBubbleContent();
+  }
+
+  /**
+   * Set feedback widget reference for hiding during screenshots
+   */
+  setFeedbackWidget(feedbackWidget) {
+    this.feedbackWidget = feedbackWidget;
   }
 
   /**
@@ -999,6 +1033,14 @@ class CommentCard {
     // Set screenshot mode to clean up UI
     this.card.classList.add(`${CONFIG.CLASS_PREFIX}screenshot-mode`);
 
+    // Hide old history pins and view all feedbacks button during screenshot
+    if (this.pinManager) {
+      this.pinManager.hide();
+    }
+    if (this.feedbackWidget) {
+      this.feedbackWidget.hide();
+    }
+
     // Handle text rendering for screenshot
     let textDiv = null;
     if (textarea) {
@@ -1036,6 +1078,14 @@ class CommentCard {
       console.warn('[Tapko] Auto-screenshot failed:', e);
     } finally {
       this.card.classList.remove(`${CONFIG.CLASS_PREFIX}screenshot-mode`);
+
+      // Restore old history pins and view all feedbacks button
+      if (this.pinManager) {
+        this.pinManager.show();
+      }
+      if (this.feedbackWidget) {
+        this.feedbackWidget.show();
+      }
 
       if (textDiv) {
         textDiv.remove();
