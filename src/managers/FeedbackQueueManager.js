@@ -104,7 +104,8 @@ class FeedbackQueueManager {
         feedbackData: {
           title: feedbackData.title,
           description: feedbackData.description,
-          screenshot: feedbackData.screenshot, // Blob
+          screenshot: feedbackData.screenshot, // Blob (unmerged)
+          annotationData: feedbackData.annotationData, // NEW: Annotation data {paths, strokeColor, strokeWidth}
           logs: feedbackData.logs, // Blob
           context: feedbackData.context,
           idempotencyKey: feedbackData.idempotencyKey,
@@ -309,12 +310,22 @@ class FeedbackQueueManager {
     this.emit('queue:item-processing', { id: item.id });
 
     try {
-      // Step 1: Upload screenshot to S3
+      // Step 1: Upload screenshot to S3 (merge annotations if needed)
       if (item.uploadProgress.screenshot.status !== 'completed' && item.feedbackData.screenshot) {
         console.log(`[FeedbackQueue] Uploading screenshot for item ${item.id}...`);
 
+        // Merge annotations if they exist
+        let screenshotToUpload = item.feedbackData.screenshot;
+        if (item.feedbackData.annotationData && item.feedbackData.annotationData.paths && item.feedbackData.annotationData.paths.length > 0) {
+          console.log(`[FeedbackQueue] Merging ${item.feedbackData.annotationData.paths.length} annotations before upload...`);
+          screenshotToUpload = await this._mergeAnnotationsToScreenshot(
+            item.feedbackData.screenshot,
+            item.feedbackData.annotationData
+          );
+        }
+
         const screenshotResult = await this.uploadAsset(
-          item.feedbackData.screenshot,
+          screenshotToUpload,  // Upload merged screenshot
           'image/jpeg',
           'screenshot'
         );
@@ -395,7 +406,16 @@ class FeedbackQueueManager {
           logsKey: assets.logs?.key
         });
 
-        await this.apiClient.submitFeedback(payload);
+        const response = await this.apiClient.submitFeedback(payload);
+
+        // Capture feedbackId from backend response
+        const feedbackId = response?.data?.feedbackId || response?.data?.id || null;
+        if (feedbackId) {
+          item.feedbackId = feedbackId;
+          console.log('[FeedbackQueue] Captured feedbackId from backend:', feedbackId);
+        } else {
+          console.warn('[FeedbackQueue] No feedbackId in backend response:', response);
+        }
 
         item.uploadProgress.feedback.status = 'completed';
         await this.updateItem(item.id, item);
@@ -404,7 +424,11 @@ class FeedbackQueueManager {
 
       // Mark as completed
       await this.updateStatus(item.id, 'completed');
-      this.emit('queue:item-completed', { id: item.id });
+      this.emit('queue:item-completed', {
+        id: item.id,
+        feedbackId: item.feedbackId,
+        feedbackData: item.feedbackData
+      });
 
       console.log(`[FeedbackQueue] Item ${item.id} completed successfully`);
 
@@ -590,6 +614,116 @@ class FeedbackQueueManager {
       } catch (error) {
         console.error('[FeedbackQueue] Error in event listener:', error);
       }
+    });
+  }
+
+  /**
+   * Merge annotations into screenshot blob
+   * Returns a new blob with annotations drawn on the screenshot
+   */
+  async _mergeAnnotationsToScreenshot(screenshotBlob, annotationData) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          canvas.width = img.width;
+          canvas.height = img.height;
+
+          // Draw screenshot background
+          ctx.drawImage(img, 0, 0);
+
+          // Apply annotation settings
+          ctx.strokeStyle = annotationData.strokeColor || '#ff0000';
+          ctx.lineWidth = annotationData.strokeWidth || 2;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+
+          // Draw each annotation
+          annotationData.paths.forEach(item => {
+            if (item.type === 'path' || Array.isArray(item)) {
+              // Freehand path
+              const path = item.type === 'path' ? item.data : item;
+              if (path.length === 0) return;
+              ctx.beginPath();
+              ctx.moveTo(path[0].x, path[0].y);
+              for (let i = 1; i < path.length; i++) {
+                ctx.lineTo(path[i].x, path[i].y);
+              }
+              ctx.stroke();
+
+            } else if (item.type === 'ellipse') {
+              // Ellipse
+              const centerX = (item.startX + item.endX) / 2;
+              const centerY = (item.startY + item.endY) / 2;
+              const radiusX = Math.abs(item.endX - item.startX) / 2;
+              const radiusY = Math.abs(item.endY - item.startY) / 2;
+              ctx.beginPath();
+              ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI);
+              ctx.stroke();
+
+            } else if (item.type === 'rectangle') {
+              // Rectangle
+              const width = item.endX - item.startX;
+              const height = item.endY - item.startY;
+              ctx.beginPath();
+              ctx.rect(item.startX, item.startY, width, height);
+              ctx.stroke();
+
+            } else if (item.type === 'arrow') {
+              // Arrow
+              ctx.beginPath();
+              ctx.moveTo(item.startX, item.startY);
+              ctx.lineTo(item.endX, item.endY);
+              ctx.stroke();
+
+              // Draw arrowhead
+              const angle = Math.atan2(item.endY - item.startY, item.endX - item.startX);
+              const arrowLength = 15;
+              const arrowAngle = Math.PI / 6;
+
+              ctx.beginPath();
+              ctx.moveTo(item.endX, item.endY);
+              ctx.lineTo(
+                item.endX - arrowLength * Math.cos(angle - arrowAngle),
+                item.endY - arrowLength * Math.sin(angle - arrowAngle)
+              );
+              ctx.moveTo(item.endX, item.endY);
+              ctx.lineTo(
+                item.endX - arrowLength * Math.cos(angle + arrowAngle),
+                item.endY - arrowLength * Math.sin(angle + arrowAngle)
+              );
+              ctx.stroke();
+
+            } else if (item.type === 'text') {
+              // Text
+              ctx.font = '16px sans-serif';
+              ctx.fillStyle = annotationData.strokeColor || '#ff0000';
+              ctx.fillText(item.text, item.x, item.y);
+            }
+          });
+
+          // Convert to blob
+          canvas.toBlob((blob) => {
+            if (blob) {
+              console.log('[FeedbackQueue] Annotations merged successfully. Size:', blob.size, 'bytes');
+              resolve(blob);
+            } else {
+              reject(new Error('Failed to create merged screenshot blob'));
+            }
+          }, 'image/jpeg', 0.85);
+        };
+        img.onerror = (err) => {
+          reject(new Error('Failed to load screenshot image: ' + err));
+        };
+        img.src = e.target.result;
+      };
+      reader.onerror = (err) => {
+        reject(new Error('Failed to read screenshot blob: ' + err));
+      };
+      reader.readAsDataURL(screenshotBlob);
     });
   }
 
