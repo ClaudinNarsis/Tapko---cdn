@@ -1037,6 +1037,59 @@
   color: #4b5563;
 }
 
+/* Tool buttons (pen, ellipse, rectangle) */
+.dtc-btn-tool {
+  background: #f3f4f6;
+  color: #6b7280;
+  padding: 8px 12px;
+  min-width: 40px;
+  transition: all 0.2s ease;
+}
+
+.dtc-btn-tool:hover {
+  background: #e5e7eb;
+  color: #4b5563;
+}
+
+.dtc-btn-tool.dtc-active {
+  background: #4f46e5;
+  color: #ffffff;
+  box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);
+}
+
+.dtc-btn-tool.dtc-active:hover {
+  background: #4338ca;
+  color: #ffffff;
+}
+
+.dtc-btn-tool svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Text input for text annotation tool */
+.dtc-text-input {
+  position: absolute;
+  display: none;
+  padding: 6px 10px;
+  border: 2px solid #4f46e5;
+  border-radius: 4px;
+  font-size: 16px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: rgba(255, 255, 255, 0.95);
+  color: #1f2937;
+  outline: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  z-index: 10;
+  min-width: 200px;
+  transform: translate(-50%, -50%);
+}
+
+.dtc-text-input:focus {
+  border-color: #4338ca;
+  box-shadow: 0 2px 12px rgba(79, 70, 229, 0.3);
+}
+
 /* ===========================================
    ANIMATIONS
    =========================================== */
