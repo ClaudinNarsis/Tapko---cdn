@@ -222,7 +222,7 @@ export function formatHiddenFeedbackMessage(stats) {
 
   const deviceBreakdown = parts.length > 0 ? ` (${parts.join(', ')})` : '';
 
-  return `${stats.total} comment${stats.total === 1 ? '' : 's'} not shown made on other screen sizes${deviceBreakdown}`;
+  return `${stats.total} hidden comment${stats.total === 1 ? '' : 's'} from other screen sizes`;
 }
 
 export default {
