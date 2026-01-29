@@ -514,10 +514,15 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
         // Create card in shadow root (pass pinManager for Phase 1)
         const card = new CommentCard(element, coordinates, this.apiClient, this.shadowRoot, this.pinManager);
 
-        // Set draw callback to enter drawing mode with screenshot
-        card.setDrawCallback((onComplete, screenshotData) => {
-          this._enterDrawingMode(onComplete, screenshotData);
+        // Set draw callback to enter drawing mode with screenshot and annotations
+        card.setDrawCallback((onComplete, screenshotData, existingAnnotations) => {
+          this._enterDrawingMode(onComplete, screenshotData, existingAnnotations);
         });
+
+        // Set feedback widget reference so it can be hidden during screenshot capture
+        if (this.feedbackWidget) {
+          card.setFeedbackWidget(this.feedbackWidget);
+        }
 
         this.activeCard = card;
 
@@ -555,7 +560,7 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
      * @param {Function} onComplete - Callback when drawing is complete
      * @param {Object} screenshotData - Screenshot data (dataURL and metadata)
      */
-    _enterDrawingMode(onComplete, screenshotData) {
+    _enterDrawingMode(onComplete, screenshotData, existingAnnotations = null) {
       if (this.drawingCanvas) return;
 
       // Hide overlay and its snackbar while drawing
@@ -568,11 +573,11 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
         this.feedbackWidget.hide();
       }
 
-      // Create drawing canvas with screenshot as background
+      // Create drawing canvas with screenshot as background and existing annotations
       this.drawingCanvas = new DrawingCanvas();
       this.drawingCanvas.create(
         (drawingData) => {
-          // Done callback
+          // Done callback (triggers when user clicks Done button)
           if (onComplete) {
             onComplete(drawingData);
           }
@@ -587,7 +592,8 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
         },
         this.shadowRoot,
         screenshotData,
-        null  // No onTap handler - user is annotating existing comment
+        null,  // No onTap handler - user is annotating existing comment
+        existingAnnotations  // NEW: Pass existing annotations for reopening
       );
 
       dispatchCustomEvent(CONFIG.EVENTS.DRAWING_STARTED);
@@ -796,14 +802,11 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
         window.addEventListener('scroll', updatePins, { passive: true });
         window.addEventListener('resize', updatePins, { passive: true });
 
-        // Listen for successful feedback submissions to create persistent pins
-        this.queueManager.on('queue:item-completed', async ({ id, feedbackId, feedbackData }) => {
-          console.log('[Tapko] Queue item completed, creating persistent pin:', { id, feedbackId });
+        // Listen for feedback queued event to create pins immediately
+        this.queueManager.on('queue:added', async ({ id, item }) => {
+          console.log('[Tapko] Feedback queued, creating pin immediately:', id);
 
-          if (!feedbackId) {
-            console.warn('[Tapko] No feedbackId provided, cannot create persistent pin');
-            return;
-          }
+          const feedbackData = item.feedbackData;
 
           if (!feedbackData || !feedbackData.context || !feedbackData.context.commentPosition) {
             console.warn('[Tapko] No comment position in feedback data, cannot create pin');
@@ -811,8 +814,10 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
           }
 
           try {
+            // Create pin with queue ID immediately (will be updated with feedbackId later)
             const pinData = {
-              id: feedbackId,
+              id: id, // Use queue ID initially
+              queueId: id, // Store queue ID for later updates
               projectId: feedbackData.projectId,
               pageUrl: feedbackData.context.pageUrl,
               position: {
@@ -830,9 +835,55 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
             };
 
             await this.pinManager.createPin(pinData);
-            console.log('[Tapko] Persistent pin created successfully:', feedbackId);
+            console.log('[Tapko] Pin created immediately after queueing:', id);
           } catch (error) {
-            console.error('[Tapko] Failed to create persistent pin:', error);
+            console.error('[Tapko] Failed to create immediate pin:', error);
+          }
+        });
+
+        // Listen for successful feedback submissions to update pins with backend feedbackId
+        this.queueManager.on('queue:item-completed', async ({ id, feedbackId, feedbackData }) => {
+          console.log('[Tapko] Queue item completed, updating pin with feedbackId:', { id, feedbackId });
+
+          if (!feedbackId) {
+            console.warn('[Tapko] No feedbackId provided, pin will keep queue ID');
+            return;
+          }
+
+          try {
+            // Update the existing pin with the real feedbackId from backend
+            const existingPin = this.pinManager.getPins().get(id);
+            if (existingPin) {
+              // Remove old pin with queue ID
+              await this.pinManager.removePin(id);
+
+              // Create new pin with backend feedbackId
+              const pinData = {
+                id: feedbackId,
+                queueId: id,
+                projectId: feedbackData.projectId,
+                pageUrl: feedbackData.context.pageUrl,
+                position: {
+                  documentX: feedbackData.context.commentPosition.x,
+                  documentY: feedbackData.context.commentPosition.y,
+                  viewportX: feedbackData.context.commentPosition.x,
+                  viewportY: feedbackData.context.commentPosition.y
+                },
+                comment: {
+                  text: feedbackData.description || feedbackData.title || 'No comment text',
+                  createdAt: feedbackData.context.timestamp || new Date().toISOString()
+                },
+                createdAt: feedbackData.context.timestamp || new Date().toISOString(),
+                createdInThisBrowser: true
+              };
+
+              await this.pinManager.createPin(pinData);
+              console.log('[Tapko] Pin updated with backend feedbackId:', feedbackId);
+            } else {
+              console.warn('[Tapko] No existing pin found for queue ID:', id);
+            }
+          } catch (error) {
+            console.error('[Tapko] Failed to update pin with feedbackId:', error);
           }
         });
 

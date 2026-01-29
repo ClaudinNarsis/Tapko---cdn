@@ -64,11 +64,19 @@ class DrawingCanvas {
    * @param {ShadowRoot} shadowRoot - Shadow root to append the canvas to
    * @param {Object} screenshotData - Screenshot data (dataURL and metadata)
    * @param {Function} onTapCallback - Callback when user taps to place a comment
+   * @param {Object} existingAnnotations - Existing annotation data to restore (optional)
    */
-  async create(onDoneCallback, onCancelCallback, shadowRoot = document.body, screenshotData = null, onTapCallback = null) {
+  async create(onDoneCallback, onCancelCallback, shadowRoot = document.body, screenshotData = null, onTapCallback = null, existingAnnotations = null) {
     if (this.container) {
       return; // Already created
     }
+
+    console.log('[Tapko DrawingCanvas] create() called with:', {
+      hasScreenshotData: !!screenshotData,
+      hasExistingAnnotations: !!existingAnnotations,
+      existingAnnotationsPathCount: existingAnnotations?.paths?.length,
+      existingAnnotations: existingAnnotations
+    });
 
     this.onDone = onDoneCallback;
     this.onCancel = onCancelCallback;
@@ -109,11 +117,28 @@ class DrawingCanvas {
       }
     }
 
+    // NEW: Restore existing annotations if provided (reopening scenario)
+    if (existingAnnotations && existingAnnotations.paths) {
+      console.log('[Tapko] Restoring', existingAnnotations.paths.length, 'existing annotations');
+      this.paths = JSON.parse(JSON.stringify(existingAnnotations.paths)); // Deep copy to prevent mutations
+      if (existingAnnotations.strokeColor) {
+        this.strokeColor = existingAnnotations.strokeColor;
+      }
+      if (existingAnnotations.strokeWidth) {
+        this.strokeWidth = existingAnnotations.strokeWidth;
+      }
+    }
+
     // Set drawing properties for annotations
     this.ctx.strokeStyle = this.strokeColor;
     this.ctx.lineWidth = this.strokeWidth;
     this.ctx.lineCap = 'round';
     this.ctx.lineJoin = 'round';
+
+    // NEW: Redraw existing annotations if any were restored
+    if (existingAnnotations && existingAnnotations.paths && existingAnnotations.paths.length > 0) {
+      this._redraw();
+    }
 
     // Create toolbar
     this._createToolbar();
@@ -226,10 +251,14 @@ class DrawingCanvas {
     const doneBtn = this.toolbar.querySelector(`.${CONFIG.CLASS_PREFIX}btn-done`);
 
     cancelBtn.addEventListener('click', () => {
-      if (this.onCancel) this.onCancel();
+      this._handleCancel();
     });
     undoBtn.addEventListener('click', () => this.undo());
-    clearBtn.addEventListener('click', () => this.clear());
+    clearBtn.addEventListener('click', () => {
+      if (this.paths.length > 0 && confirm('Clear all annotations? This cannot be undone.')) {
+        this.clear();
+      }
+    });
     doneBtn.addEventListener('click', () => this._handleDone());
 
     // Attach tool selection events
@@ -260,6 +289,7 @@ class DrawingCanvas {
 
     console.log('[Tapko] Tool selected:', tool);
   }
+
 
   /**
    * Attach event listeners for drawing
@@ -736,7 +766,16 @@ class DrawingCanvas {
    * Handle done button click
    * Returns the canvas directly (already contains screenshot + annotations)
    */
+  /**
+   * Handle Done button click - Save annotations and exit
+   * Returns unmerged screenshot + annotation data
+   */
   async _handleDone() {
+    // Finalize any active text input before proceeding
+    if (this.textInputActive) {
+      this._finalizeTextInput();
+    }
+
     const doneBtn = this.toolbar.querySelector(`.${CONFIG.CLASS_PREFIX}btn-done`);
 
     try {
@@ -748,16 +787,21 @@ class DrawingCanvas {
             <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none" opacity="0.25"/>
             <path d="M12 2 A10 10 0 0 1 22 12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>
           </svg>
-          Generating thumbnail...
+          Saving...
         `;
       }
 
-      // The canvas already contains screenshot + annotations!
-      // Just convert it to data URL
-      const finalScreenshot = this.canvas.toDataURL('image/jpeg', 0.85);
+      // Create annotation data
+      const annotationData = {
+        paths: JSON.parse(JSON.stringify(this.paths)), // Deep copy
+        strokeColor: this.strokeColor,
+        strokeWidth: this.strokeWidth,
+        hasAnnotations: this.paths.length > 0
+      };
 
-      // Generate thumbnail
-      const thumbnail = await generateThumbnail(finalScreenshot);
+      // Generate merged thumbnail for preview
+      const mergedCanvas = this._createMergedCanvas();
+      const thumbnail = mergedCanvas.toDataURL('image/jpeg', 0.85);
 
       // Count annotations
       const annotationCount = this.paths.length;
@@ -765,20 +809,30 @@ class DrawingCanvas {
       const shapeCount = this.paths.filter(item => item.type === 'ellipse' || item.type === 'rectangle' || item.type === 'arrow').length;
       const textCount = this.paths.filter(item => item.type === 'text').length;
 
-      // Return everything via callback
+      const resultData = {
+        screenshotDataURL: this.screenshotData?.dataURL,  // UNMERGED original
+        annotationData: annotationData,                    // Separate annotation data
+        thumbnail: thumbnail,                              // Merged preview
+        metadata: {
+          ...this.screenshotData?.metadata,
+          hasAnnotations: annotationCount > 0,
+          annotationCount: annotationCount,
+          pathCount: pathCount,
+          shapeCount: shapeCount,
+          textCount: textCount
+        }
+      };
+
+      console.log('[Tapko DrawingCanvas] Done clicked, returning data:', {
+        hasScreenshotDataURL: !!resultData.screenshotDataURL,
+        hasAnnotationData: !!resultData.annotationData,
+        pathCount: resultData.annotationData?.paths?.length,
+        annotationData: resultData.annotationData
+      });
+
+      // Return unmerged data via callback
       if (this.onDone) {
-        this.onDone({
-          finalScreenshot: finalScreenshot,  // Canvas with screenshot + annotations
-          thumbnail: thumbnail,
-          metadata: {
-            ...this.screenshotData?.metadata,
-            hasAnnotations: annotationCount > 0,
-            annotationCount: annotationCount,
-            pathCount: pathCount,
-            shapeCount: shapeCount,
-            textCount: textCount
-          }
-        });
+        this.onDone(resultData);
       }
 
       dispatchCustomEvent(CONFIG.EVENTS.DRAWING_COMPLETED, {
@@ -786,10 +840,10 @@ class DrawingCanvas {
         annotationCount: annotationCount
       });
 
-      console.log('[Tapko] Drawing complete, screenshot + annotations ready');
+      console.log('[Tapko] Drawing saved:', annotationCount, 'annotations');
 
     } catch (error) {
-      console.error('[Tapko] Failed to process drawing:', error);
+      console.error('[Tapko] Failed to save annotations:', error);
 
       // Reset button state
       if (doneBtn) {
@@ -803,8 +857,195 @@ class DrawingCanvas {
       }
 
       // Show error to user
-      alert('Failed to process drawing. Please try again.');
+      alert('Failed to save annotations. Please try again.');
     }
+  }
+
+  /**
+   * Handle Cancel button click - Exit annotation mode with warning if there are unsaved changes
+   */
+  _handleCancel() {
+    // Check if there are any annotations
+    const hasAnnotations = this.paths.length > 0;
+
+    if (!hasAnnotations) {
+      // No annotations, exit immediately
+      if (this.onCancel) this.onCancel();
+      return;
+    }
+
+    // Show warning dialog with custom styling
+    this._showExitWarningDialog();
+  }
+
+  /**
+   * Show exit warning dialog with options to Save or Exit without saving
+   * Returns true if user wants to exit, false otherwise
+   */
+  _showExitWarningDialog() {
+    // Create custom dialog overlay
+    const dialogOverlay = createElement('div', `${CONFIG.CLASS_PREFIX}exit-dialog-overlay`);
+
+    const dialog = createElement('div', `${CONFIG.CLASS_PREFIX}exit-dialog`);
+    dialog.innerHTML = `
+      <div class="${CONFIG.CLASS_PREFIX}exit-dialog-header">
+        <svg viewBox="0 0 24 24" class="${CONFIG.CLASS_PREFIX}exit-dialog-icon">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" fill="currentColor"/>
+        </svg>
+        <h3>Unsaved Annotations</h3>
+      </div>
+      <div class="${CONFIG.CLASS_PREFIX}exit-dialog-content">
+        <p>You have unsaved annotations. What would you like to do?</p>
+      </div>
+      <div class="${CONFIG.CLASS_PREFIX}exit-dialog-actions">
+        <button type="button" class="${CONFIG.CLASS_PREFIX}exit-dialog-btn ${CONFIG.CLASS_PREFIX}btn-exit" aria-label="Exit without saving">
+          Exit Without Saving
+        </button>
+        <button type="button" class="${CONFIG.CLASS_PREFIX}exit-dialog-btn ${CONFIG.CLASS_PREFIX}btn-save" aria-label="Save annotations">
+          Save Annotations
+        </button>
+      </div>
+    `;
+
+    dialogOverlay.appendChild(dialog);
+
+    // Append to container
+    if (this.container) {
+      this.container.appendChild(dialogOverlay);
+    }
+
+    // Show dialog with animation
+    requestAnimationFrame(() => {
+      dialogOverlay.classList.add(`${CONFIG.CLASS_PREFIX}visible`);
+    });
+
+    // Handle button clicks
+    const exitBtn = dialog.querySelector(`.${CONFIG.CLASS_PREFIX}btn-exit`);
+    const saveBtn = dialog.querySelector(`.${CONFIG.CLASS_PREFIX}btn-save`);
+
+    exitBtn.addEventListener('click', () => {
+      // Exit without saving
+      dialogOverlay.classList.remove(`${CONFIG.CLASS_PREFIX}visible`);
+      setTimeout(() => {
+        dialogOverlay.remove();
+        if (this.onCancel) this.onCancel();
+      }, 200);
+    });
+
+    saveBtn.addEventListener('click', () => {
+      // Save annotations
+      dialogOverlay.classList.remove(`${CONFIG.CLASS_PREFIX}visible`);
+      setTimeout(() => {
+        dialogOverlay.remove();
+        this._handleDone();
+      }, 200);
+    });
+
+    // Close on overlay click (outside dialog)
+    dialogOverlay.addEventListener('click', (e) => {
+      if (e.target === dialogOverlay) {
+        dialogOverlay.classList.remove(`${CONFIG.CLASS_PREFIX}visible`);
+        setTimeout(() => {
+          dialogOverlay.remove();
+        }, 200);
+      }
+    });
+  }
+
+  /**
+   * Create a merged canvas with screenshot + annotations for thumbnail generation
+   * Returns a temporary canvas element (not displayed)
+   */
+  _createMergedCanvas() {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = this.canvas.width;
+    canvas.height = this.canvas.height;
+
+    // Draw screenshot background
+    if (this.screenshotImage) {
+      ctx.drawImage(this.screenshotImage, 0, 0, canvas.width, canvas.height);
+    }
+
+    // Apply annotation settings
+    ctx.strokeStyle = this.strokeColor;
+    ctx.lineWidth = this.strokeWidth;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    // Draw all annotations (reuse logic from _redraw)
+    this.paths.forEach(item => {
+      if (item.type === 'path' || Array.isArray(item)) {
+        // Freehand path
+        const path = item.type === 'path' ? item.data : item;
+        if (path.length === 0) return;
+        ctx.beginPath();
+        ctx.moveTo(path[0].x, path[0].y);
+        for (let i = 1; i < path.length; i++) {
+          ctx.lineTo(path[i].x, path[i].y);
+        }
+        ctx.stroke();
+
+      } else if (item.type === 'ellipse') {
+        // Ellipse
+        const centerX = (item.startX + item.endX) / 2;
+        const centerY = (item.startY + item.endY) / 2;
+        const radiusX = Math.abs(item.endX - item.startX) / 2;
+        const radiusY = Math.abs(item.endY - item.startY) / 2;
+        ctx.beginPath();
+        ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI);
+        ctx.stroke();
+
+      } else if (item.type === 'rectangle') {
+        // Rectangle
+        const width = item.endX - item.startX;
+        const height = item.endY - item.startY;
+        ctx.beginPath();
+        ctx.rect(item.startX, item.startY, width, height);
+        ctx.stroke();
+
+      } else if (item.type === 'arrow') {
+        // Arrow
+        this._drawArrowOnContext(ctx, item.startX, item.startY, item.endX, item.endY);
+
+      } else if (item.type === 'text') {
+        // Text
+        ctx.font = '16px sans-serif';
+        ctx.fillStyle = this.strokeColor;
+        ctx.fillText(item.text, item.x, item.y);
+      }
+    });
+
+    return canvas;
+  }
+
+  /**
+   * Helper to draw arrow on a given context
+   */
+  _drawArrowOnContext(ctx, startX, startY, endX, endY) {
+    // Draw line
+    ctx.beginPath();
+    ctx.moveTo(startX, startY);
+    ctx.lineTo(endX, endY);
+    ctx.stroke();
+
+    // Draw arrowhead
+    const angle = Math.atan2(endY - startY, endX - startX);
+    const arrowLength = 15;
+    const arrowAngle = Math.PI / 6;
+
+    ctx.beginPath();
+    ctx.moveTo(endX, endY);
+    ctx.lineTo(
+      endX - arrowLength * Math.cos(angle - arrowAngle),
+      endY - arrowLength * Math.sin(angle - arrowAngle)
+    );
+    ctx.moveTo(endX, endY);
+    ctx.lineTo(
+      endX - arrowLength * Math.cos(angle + arrowAngle),
+      endY - arrowLength * Math.sin(angle + arrowAngle)
+    );
+    ctx.stroke();
   }
 
   /**
