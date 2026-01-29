@@ -143,11 +143,6 @@ class DrawingCanvas {
     // Create toolbar
     this._createToolbar();
 
-    // NEW: Add "Clear All" button if reopening with existing annotations
-    if (existingAnnotations && existingAnnotations.paths && existingAnnotations.paths.length > 0) {
-      this._addClearAllButton();
-    }
-
     // Create instructions bubble
     this._createInstructions();
 
@@ -259,7 +254,11 @@ class DrawingCanvas {
       this._handleCancel();
     });
     undoBtn.addEventListener('click', () => this.undo());
-    clearBtn.addEventListener('click', () => this.clear());
+    clearBtn.addEventListener('click', () => {
+      if (this.paths.length > 0 && confirm('Clear all annotations? This cannot be undone.')) {
+        this.clear();
+      }
+    });
     doneBtn.addEventListener('click', () => this._handleDone());
 
     // Attach tool selection events
@@ -291,46 +290,6 @@ class DrawingCanvas {
     console.log('[Tapko] Tool selected:', tool);
   }
 
-  /**
-   * Add "Clear All" button when reopening with existing annotations
-   */
-  _addClearAllButton() {
-    const toolbar = this.toolbar;
-    if (!toolbar || toolbar.querySelector(`.${CONFIG.CLASS_PREFIX}btn-clear-all`)) {
-      return; // Already exists
-    }
-
-    // Create clear all button
-    const clearAllBtn = document.createElement('button');
-    clearAllBtn.type = 'button';
-    clearAllBtn.className = `${CONFIG.CLASS_PREFIX}drawing-btn ${CONFIG.CLASS_PREFIX}btn-clear-all`;
-    clearAllBtn.setAttribute('aria-label', 'Clear all annotations');
-    clearAllBtn.innerHTML = `
-      <svg viewBox="0 0 24 24">
-        <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M5 6v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6M10 11v6M14 11v6"
-              stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-      Clear All
-    `;
-
-    // Add event listener
-    clearAllBtn.addEventListener('click', () => {
-      if (confirm('Clear all annotations? This cannot be undone.')) {
-        this.paths = [];
-        this.currentPath = [];
-        this._redraw();
-        // Remove the button after clearing
-        clearAllBtn.remove();
-        console.log('[Tapko] All annotations cleared');
-      }
-    });
-
-    // Insert before the last divider (after Clear button)
-    const controls = toolbar.querySelector(`.${CONFIG.CLASS_PREFIX}drawing-controls`);
-    if (controls) {
-      controls.appendChild(clearAllBtn);
-    }
-  }
 
   /**
    * Attach event listeners for drawing
@@ -812,6 +771,11 @@ class DrawingCanvas {
    * Returns unmerged screenshot + annotation data
    */
   async _handleDone() {
+    // Finalize any active text input before proceeding
+    if (this.textInputActive) {
+      this._finalizeTextInput();
+    }
+
     const doneBtn = this.toolbar.querySelector(`.${CONFIG.CLASS_PREFIX}btn-done`);
 
     try {
