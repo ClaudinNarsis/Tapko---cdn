@@ -73,11 +73,6 @@ export const CONFIG = {
   NAMESPACE: 'Tapko'
 };
 
-// Log the API URL being used
-console.log('🔍 [Tapko Config] API Configuration:');
-console.log('  - API baseUrl:', CONFIG.API.baseUrl);
-console.log('---');
-
 // Freeze config to prevent modifications
 Object.freeze(CONFIG);
 Object.freeze(CONFIG.API);

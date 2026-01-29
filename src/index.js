@@ -188,29 +188,13 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
         this.projectData = validation.data;
 
         // Verify URL secret key if security is enabled
-        console.log('[Tapko Security] Starting URL secret key verification...');
-        console.log('[Tapko Security] Project data security object:', validation.data?.security);
-
         const security = validation.data?.security;
 
-        if (!security) {
-          console.log('[Tapko Security] ✓ No security object found in API response - initialization allowed');
-        } else {
-          console.log('[Tapko Security] Security object found:', {
-            is_url_secret_enabled: security.is_url_secret_enabled,
-            url_secret_key_length: security.url_secret_key ? security.url_secret_key.length : 0,
-            url_secret_key_preview: security.url_secret_key ? `${security.url_secret_key.substring(0, 4)}...` : 'not set'
-          });
-
-          if (security.is_url_secret_enabled === true) {
-            console.log('[Tapko Security] URL secret key protection is ENABLED');
-
+        if (security && security.is_url_secret_enabled === true) {
             const urlSecretKey = getUrlParam('tapko_url_secret_key');
-            console.log('[Tapko Security] URL parameter "tapko_url_secret_key":', urlSecretKey || 'NOT PROVIDED');
 
             if (!urlSecretKey) {
-              console.error('[Tapko Security] ✗ FAILED: URL secret key is required but missing from URL parameters');
-              console.error('[Tapko Security] Expected URL format: ?tapko_url_secret_key=YOUR_SECRET_KEY');
+              console.error('[Tapko Security] URL secret key is required but missing from URL parameters');
               const error = new Error('[Tapko] URL secret key is required but not provided in URL parameters.');
               dispatchCustomEvent(CONFIG.EVENTS.ERROR, {
                 message: error.message,
@@ -220,15 +204,8 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
               throw error;
             }
 
-            console.log('[Tapko Security] Comparing keys...');
-            console.log('[Tapko Security] - Provided key:', urlSecretKey);
-            console.log('[Tapko Security] - Expected key:', security.url_secret_key);
-            console.log('[Tapko Security] - Keys match:', urlSecretKey === security.url_secret_key);
-
             if (urlSecretKey !== security.url_secret_key) {
-              console.error('[Tapko Security] ✗ FAILED: URL secret key does not match expected value');
-              console.error('[Tapko Security] Provided:', urlSecretKey);
-              console.error('[Tapko Security] Expected:', security.url_secret_key);
+              console.error('[Tapko Security] Invalid URL secret key provided');
               const error = new Error('[Tapko] Invalid URL secret key.');
               dispatchCustomEvent(CONFIG.EVENTS.ERROR, {
                 message: error.message,
@@ -237,14 +214,7 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
               });
               throw error;
             }
-
-            console.log('[Tapko Security] ✓ SUCCESS: URL secret key verified successfully');
-          } else {
-            console.log('[Tapko Security] ✓ URL secret key protection is DISABLED - initialization allowed');
-          }
         }
-
-        console.log('[Tapko Security] Security verification complete - proceeding with initialization');
       } catch (error) {
         // Re-throw critical errors that should stop initialization
         if (error.message.includes('Project not found') ||

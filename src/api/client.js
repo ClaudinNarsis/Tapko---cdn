@@ -278,8 +278,6 @@ class APIClient {
     const signedHeadersParam = urlObj.searchParams.get('X-Amz-SignedHeaders');
     const signedHeaders = signedHeadersParam ? signedHeadersParam.split(';') : [];
 
-    console.log('[Tapko S3] Signed headers:', signedHeaders);
-
     // 1. Content-Type
     // Only send if it is in the signed headers list
     if (signedHeaders.includes('content-type')) {
