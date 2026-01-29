@@ -375,6 +375,34 @@ class APIClient {
     return this.post(endpoint, payload);
   }
 
+  /**
+   * Get all feedbacks for the project
+   * Used by PinManager to validate local pins against backend
+   * @param {Object} params - Query parameters
+   * @param {number} params.limit - Max number of feedbacks to fetch (default: 100)
+   * @param {number} params.page - Page number (default: 1)
+   * @returns {Promise<Object>} - Response with feedbacks array
+   */
+  async getFeedbacks(params = {}) {
+    const endpoint = '/feedbacks';
+    const queryParams = {
+      projectId: this.projectId,
+      limit: params.limit || 100,
+      page: params.page || 1
+    };
+
+    console.log('[Tapko API] Fetching feedbacks:', queryParams);
+
+    try {
+      const result = await this.get(endpoint, queryParams);
+      console.log(`[Tapko API] Fetched ${result?.data?.feedbacks?.length || 0} feedbacks`);
+      return result;
+    } catch (error) {
+      console.error('[Tapko API] Failed to fetch feedbacks:', error);
+      throw error;
+    }
+  }
+
 }
 
 export { APIClient };

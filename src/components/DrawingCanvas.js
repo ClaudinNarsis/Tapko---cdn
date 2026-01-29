@@ -24,7 +24,7 @@ class DrawingCanvas {
     this.toolbar = null;
 
     this.isDrawing = false;
-    this.paths = []; // Store paths for undo
+    this.paths = []; // Store paths for undo (now includes shapes)
     this.currentPath = [];
 
     this.strokeColor = CONFIG.DRAWING.defaultColor;
@@ -43,6 +43,18 @@ class DrawingCanvas {
     this.pressStartX = 0;
     this.pressStartY = 0;
     this.isStroke = false; // Distinguish between tap and drawing stroke
+
+    // NEW: Tool selection (pen, ellipse, rectangle, arrow, text)
+    this.currentTool = 'pen'; // Default to pen tool
+    this.shapeStartX = 0;
+    this.shapeStartY = 0;
+    this.previewShape = null; // Store preview shape while dragging
+
+    // Text tool properties
+    this.textInput = null;
+    this.textInputActive = false;
+    this.textX = 0;
+    this.textY = 0;
   }
 
   /**
@@ -155,6 +167,34 @@ class DrawingCanvas {
           Exit
         </button>
         <div class="${CONFIG.CLASS_PREFIX}drawing-divider"></div>
+        <button type="button" class="${CONFIG.CLASS_PREFIX}drawing-btn ${CONFIG.CLASS_PREFIX}btn-tool ${CONFIG.CLASS_PREFIX}btn-tool-pen ${CONFIG.CLASS_PREFIX}active" data-tool="pen" aria-label="Pen tool">
+          <svg viewBox="0 0 24 24">
+            <path d="M12 19l7-7 3 3-7 7-3-3z" stroke="currentColor" stroke-width="2" fill="none"/>
+            <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" stroke="currentColor" stroke-width="2" fill="none"/>
+            <path d="M2 2l7.586 7.586" stroke="currentColor" stroke-width="2"/>
+          </svg>
+        </button>
+        <button type="button" class="${CONFIG.CLASS_PREFIX}drawing-btn ${CONFIG.CLASS_PREFIX}btn-tool ${CONFIG.CLASS_PREFIX}btn-tool-ellipse" data-tool="ellipse" aria-label="Ellipse tool">
+          <svg viewBox="0 0 24 24">
+            <ellipse cx="12" cy="12" rx="9" ry="6" stroke="currentColor" stroke-width="2" fill="none"/>
+          </svg>
+        </button>
+        <button type="button" class="${CONFIG.CLASS_PREFIX}drawing-btn ${CONFIG.CLASS_PREFIX}btn-tool ${CONFIG.CLASS_PREFIX}btn-tool-rectangle" data-tool="rectangle" aria-label="Rectangle tool">
+          <svg viewBox="0 0 24 24">
+            <rect x="4" y="6" width="16" height="12" stroke="currentColor" stroke-width="2" fill="none" rx="1"/>
+          </svg>
+        </button>
+        <button type="button" class="${CONFIG.CLASS_PREFIX}drawing-btn ${CONFIG.CLASS_PREFIX}btn-tool ${CONFIG.CLASS_PREFIX}btn-tool-arrow" data-tool="arrow" aria-label="Arrow tool">
+          <svg viewBox="0 0 24 24">
+            <path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <button type="button" class="${CONFIG.CLASS_PREFIX}drawing-btn ${CONFIG.CLASS_PREFIX}btn-tool ${CONFIG.CLASS_PREFIX}btn-tool-text" data-tool="text" aria-label="Text tool">
+          <svg viewBox="0 0 24 24">
+            <path d="M4 7V4h16v3M9 20h6M12 4v16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <div class="${CONFIG.CLASS_PREFIX}drawing-divider"></div>
         <button type="button" class="${CONFIG.CLASS_PREFIX}drawing-btn ${CONFIG.CLASS_PREFIX}btn-undo" aria-label="Undo">
           <svg viewBox="0 0 24 24">
             <path d="M9 14L4 9l5-5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
@@ -191,6 +231,34 @@ class DrawingCanvas {
     undoBtn.addEventListener('click', () => this.undo());
     clearBtn.addEventListener('click', () => this.clear());
     doneBtn.addEventListener('click', () => this._handleDone());
+
+    // Attach tool selection events
+    const toolButtons = this.toolbar.querySelectorAll(`.${CONFIG.CLASS_PREFIX}btn-tool`);
+    toolButtons.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const tool = btn.getAttribute('data-tool');
+        this._selectTool(tool);
+      });
+    });
+  }
+
+  /**
+   * Select drawing tool
+   */
+  _selectTool(tool) {
+    this.currentTool = tool;
+
+    // Update button states
+    const toolButtons = this.toolbar.querySelectorAll(`.${CONFIG.CLASS_PREFIX}btn-tool`);
+    toolButtons.forEach(btn => {
+      if (btn.getAttribute('data-tool') === tool) {
+        btn.classList.add(`${CONFIG.CLASS_PREFIX}active`);
+      } else {
+        btn.classList.remove(`${CONFIG.CLASS_PREFIX}active`);
+      }
+    });
+
+    console.log('[Tapko] Tool selected:', tool);
   }
 
   /**
@@ -229,6 +297,17 @@ class DrawingCanvas {
       return;
     }
 
+    const rect = this.canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+
+    // Text tool: show text input on click
+    if (this.currentTool === 'text') {
+      this.isDrawing = false; // Don't enter drawing mode for text
+      this._showTextInput(x, y);
+      return;
+    }
+
     this.isDrawing = true;
     this.isStroke = false;
     this.currentPath = [];
@@ -237,14 +316,17 @@ class DrawingCanvas {
     this.pressStartX = event.clientX;
     this.pressStartY = event.clientY;
 
-    const rect = this.canvas.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
-
-    this.currentPath.push({ x, y });
-
-    this.ctx.beginPath();
-    this.ctx.moveTo(x, y);
+    if (this.currentTool === 'pen') {
+      // Pen tool: start path
+      this.currentPath.push({ x, y });
+      this.ctx.beginPath();
+      this.ctx.moveTo(x, y);
+    } else {
+      // Shape tools: store start position
+      this.shapeStartX = x;
+      this.shapeStartY = y;
+      this.previewShape = { type: this.currentTool, startX: x, startY: y, endX: x, endY: y };
+    }
   }
 
   /**
@@ -265,10 +347,19 @@ class DrawingCanvas {
       }
     }
 
-    this.currentPath.push({ x, y });
+    if (this.currentTool === 'pen') {
+      // Pen tool: continue drawing path
+      this.currentPath.push({ x, y });
+      this.ctx.lineTo(x, y);
+      this.ctx.stroke();
+    } else {
+      // Shape tools: update preview
+      this.previewShape.endX = x;
+      this.previewShape.endY = y;
 
-    this.ctx.lineTo(x, y);
-    this.ctx.stroke();
+      // Redraw canvas with preview
+      this._redrawWithPreview();
+    }
   }
 
   /**
@@ -288,14 +379,35 @@ class DrawingCanvas {
         this.onTap({ x: event.clientX, y: event.clientY });
       }
       this.currentPath = [];
+      this.previewShape = null;
       this._redraw(); // Clean up the point we started drawing
       return;
     }
 
-    // Save current path to history
-    if (this.currentPath.length > 0) {
-      this.paths.push([...this.currentPath]);
-      this.currentPath = [];
+    if (this.currentTool === 'pen') {
+      // Save current path to history
+      if (this.currentPath.length > 0) {
+        this.paths.push({ type: 'path', data: [...this.currentPath] });
+        this.currentPath = [];
+      }
+    } else {
+      // Save shape to history
+      if (this.previewShape) {
+        const rect = this.canvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+
+        this.paths.push({
+          type: this.currentTool,
+          startX: this.shapeStartX,
+          startY: this.shapeStartY,
+          endX: x,
+          endY: y
+        });
+
+        this.previewShape = null;
+        this._redraw();
+      }
     }
   }
 
@@ -323,7 +435,7 @@ class DrawingCanvas {
   }
 
   /**
-   * Redraw canvas (screenshot + all paths)
+   * Redraw canvas (screenshot + all paths and shapes)
    */
   _redraw() {
     if (!this.ctx) return;
@@ -338,19 +450,252 @@ class DrawingCanvas {
       this.ctx.drawImage(this.screenshotImage, 0, 0, canvasWidth, canvasHeight);
     }
 
-    // Redraw all annotation paths
-    this.paths.forEach(path => {
-      if (path.length === 0) return;
+    // Redraw all annotation paths and shapes
+    this.paths.forEach(item => {
+      if (item.type === 'path') {
+        // Draw freehand path
+        const path = item.data;
+        if (path.length === 0) return;
 
-      this.ctx.beginPath();
-      this.ctx.moveTo(path[0].x, path[0].y);
+        this.ctx.beginPath();
+        this.ctx.moveTo(path[0].x, path[0].y);
 
-      for (let i = 1; i < path.length; i++) {
-        this.ctx.lineTo(path[i].x, path[i].y);
+        for (let i = 1; i < path.length; i++) {
+          this.ctx.lineTo(path[i].x, path[i].y);
+        }
+
+        this.ctx.stroke();
+      } else if (item.type === 'ellipse') {
+        // Draw ellipse
+        this._drawEllipse(item.startX, item.startY, item.endX, item.endY);
+      } else if (item.type === 'rectangle') {
+        // Draw rectangle
+        this._drawRectangle(item.startX, item.startY, item.endX, item.endY);
+      } else if (item.type === 'arrow') {
+        // Draw arrow
+        this._drawArrow(item.startX, item.startY, item.endX, item.endY);
+      } else if (item.type === 'text') {
+        // Draw text
+        this._drawText(item.x, item.y, item.text);
+      } else {
+        // Legacy support for old path format (array of points)
+        if (Array.isArray(item) && item.length > 0) {
+          this.ctx.beginPath();
+          this.ctx.moveTo(item[0].x, item[0].y);
+
+          for (let i = 1; i < item.length; i++) {
+            this.ctx.lineTo(item[i].x, item[i].y);
+          }
+
+          this.ctx.stroke();
+        }
+      }
+    });
+  }
+
+  /**
+   * Redraw canvas with preview shape (during dragging)
+   */
+  _redrawWithPreview() {
+    this._redraw();
+
+    if (this.previewShape) {
+      // Draw preview with slightly transparent stroke
+      const originalAlpha = this.ctx.globalAlpha;
+      this.ctx.globalAlpha = 0.7;
+
+      if (this.previewShape.type === 'ellipse') {
+        this._drawEllipse(this.previewShape.startX, this.previewShape.startY, this.previewShape.endX, this.previewShape.endY);
+      } else if (this.previewShape.type === 'rectangle') {
+        this._drawRectangle(this.previewShape.startX, this.previewShape.startY, this.previewShape.endX, this.previewShape.endY);
+      } else if (this.previewShape.type === 'arrow') {
+        this._drawArrow(this.previewShape.startX, this.previewShape.startY, this.previewShape.endX, this.previewShape.endY);
       }
 
-      this.ctx.stroke();
-    });
+      this.ctx.globalAlpha = originalAlpha;
+    }
+  }
+
+  /**
+   * Draw an ellipse
+   */
+  _drawEllipse(startX, startY, endX, endY) {
+    const centerX = (startX + endX) / 2;
+    const centerY = (startY + endY) / 2;
+    const radiusX = Math.abs(endX - startX) / 2;
+    const radiusY = Math.abs(endY - startY) / 2;
+
+    this.ctx.beginPath();
+    this.ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI);
+    this.ctx.stroke();
+  }
+
+  /**
+   * Draw a rectangle
+   */
+  _drawRectangle(startX, startY, endX, endY) {
+    const width = endX - startX;
+    const height = endY - startY;
+
+    this.ctx.beginPath();
+    this.ctx.rect(startX, startY, width, height);
+    this.ctx.stroke();
+  }
+
+  /**
+   * Show text input at specified position
+   */
+  _showTextInput(x, y) {
+    // If there's already an active text input, finalize it first
+    if (this.textInputActive) {
+      this._finalizeTextInput();
+    }
+
+    this.textX = x;
+    this.textY = y;
+    this.textInputActive = true;
+
+    // Create text input element if it doesn't exist
+    if (!this.textInput) {
+      this.textInput = createElement('input', `${CONFIG.CLASS_PREFIX}text-input`);
+      this.textInput.type = 'text';
+      this.textInput.placeholder = 'Type text...';
+
+      // Handle Enter key to confirm
+      this.textInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          this._finalizeTextInput();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          this._cancelTextInput();
+        }
+      });
+
+      // Handle blur (clicking outside)
+      this.textInput.addEventListener('blur', () => {
+        setTimeout(() => this._finalizeTextInput(), 100);
+      });
+
+      this.container.appendChild(this.textInput);
+    }
+
+    // Position the text input
+    this.textInput.style.left = `${x}px`;
+    this.textInput.style.top = `${y}px`;
+    this.textInput.value = '';
+    this.textInput.style.display = 'block';
+
+    // Focus the input
+    setTimeout(() => {
+      this.textInput.focus();
+    }, 10);
+  }
+
+  /**
+   * Finalize text input and add to canvas
+   */
+  _finalizeTextInput() {
+    if (!this.textInputActive || !this.textInput) return;
+
+    const text = this.textInput.value.trim();
+
+    if (text.length > 0) {
+      // Add text to paths
+      this.paths.push({
+        type: 'text',
+        x: this.textX,
+        y: this.textY,
+        text: text
+      });
+
+      // Redraw canvas with new text
+      this._redraw();
+    }
+
+    this._hideTextInput();
+  }
+
+  /**
+   * Cancel text input without adding
+   */
+  _cancelTextInput() {
+    this._hideTextInput();
+  }
+
+  /**
+   * Hide text input
+   */
+  _hideTextInput() {
+    if (this.textInput) {
+      this.textInput.style.display = 'none';
+      this.textInput.value = '';
+    }
+    this.textInputActive = false;
+  }
+
+  /**
+   * Draw text on canvas
+   */
+  _drawText(x, y, text) {
+    // Set text properties
+    this.ctx.font = '16px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    this.ctx.fillStyle = this.strokeColor;
+    this.ctx.textBaseline = 'top';
+
+    // Draw text with background for better visibility
+    const metrics = this.ctx.measureText(text);
+    const padding = 4;
+
+    // Draw semi-transparent background
+    this.ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    this.ctx.fillRect(
+      x - padding,
+      y - padding,
+      metrics.width + padding * 2,
+      16 + padding * 2
+    );
+
+    // Draw text
+    this.ctx.fillStyle = this.strokeColor;
+    this.ctx.fillText(text, x, y);
+  }
+
+  /**
+   * Draw an arrow with arrowhead
+   */
+  _drawArrow(startX, startY, endX, endY) {
+    // Calculate the angle of the line
+    const angle = Math.atan2(endY - startY, endX - startX);
+
+    // Arrowhead size (proportional to stroke width)
+    const headLength = 15 + (this.strokeWidth * 2);
+    const headWidth = 10 + (this.strokeWidth * 1.5);
+
+    // Draw the main line
+    this.ctx.beginPath();
+    this.ctx.moveTo(startX, startY);
+    this.ctx.lineTo(endX, endY);
+    this.ctx.stroke();
+
+    // Draw the arrowhead
+    this.ctx.beginPath();
+    this.ctx.moveTo(endX, endY);
+
+    // Left side of arrowhead
+    this.ctx.lineTo(
+      endX - headLength * Math.cos(angle) + headWidth * Math.sin(angle),
+      endY - headLength * Math.sin(angle) - headWidth * Math.cos(angle)
+    );
+
+    // Right side of arrowhead
+    this.ctx.moveTo(endX, endY);
+    this.ctx.lineTo(
+      endX - headLength * Math.cos(angle) - headWidth * Math.sin(angle),
+      endY - headLength * Math.sin(angle) + headWidth * Math.cos(angle)
+    );
+
+    this.ctx.stroke();
   }
 
   /**
@@ -414,6 +759,12 @@ class DrawingCanvas {
       // Generate thumbnail
       const thumbnail = await generateThumbnail(finalScreenshot);
 
+      // Count annotations
+      const annotationCount = this.paths.length;
+      const pathCount = this.paths.filter(item => item.type === 'path' || Array.isArray(item)).length;
+      const shapeCount = this.paths.filter(item => item.type === 'ellipse' || item.type === 'rectangle' || item.type === 'arrow').length;
+      const textCount = this.paths.filter(item => item.type === 'text').length;
+
       // Return everything via callback
       if (this.onDone) {
         this.onDone({
@@ -421,15 +772,18 @@ class DrawingCanvas {
           thumbnail: thumbnail,
           metadata: {
             ...this.screenshotData?.metadata,
-            hasAnnotations: this.paths.length > 0,
-            annotationCount: this.paths.length
+            hasAnnotations: annotationCount > 0,
+            annotationCount: annotationCount,
+            pathCount: pathCount,
+            shapeCount: shapeCount,
+            textCount: textCount
           }
         });
       }
 
       dispatchCustomEvent(CONFIG.EVENTS.DRAWING_COMPLETED, {
-        hasAnnotations: this.paths.length > 0,
-        annotationCount: this.paths.length
+        hasAnnotations: annotationCount > 0,
+        annotationCount: annotationCount
       });
 
       console.log('[Tapko] Drawing complete, screenshot + annotations ready');
@@ -559,6 +913,11 @@ class DrawingCanvas {
         this.resizeHandler = null;
       }
 
+      // Cleanup text input
+      if (this.textInput) {
+        this._hideTextInput();
+      }
+
       setTimeout(() => {
         if (this.container && this.container.parentNode) {
           this.container.parentNode.removeChild(this.container);
@@ -567,6 +926,7 @@ class DrawingCanvas {
         this.canvas = null;
         this.ctx = null;
         this.toolbar = null;
+        this.textInput = null;
         this.paths = [];
         this.currentPath = [];
       }, CONFIG.UI.animationDuration);
@@ -580,7 +940,7 @@ class DrawingCanvas {
     this.instructions = createElement('div', `${CONFIG.CLASS_PREFIX}drawing-instructions`);
     this.instructions.innerHTML = `
       <div class="${CONFIG.CLASS_PREFIX}instruction-dot"></div>
-      Click and drag to annotate
+      Select a tool and click-drag to annotate
     `;
   }
 

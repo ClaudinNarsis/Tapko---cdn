@@ -32,6 +32,7 @@ import { dispatchCustomEvent, getUrlParam } from './utils/dom.js';
 import { logManager } from './managers/LogManager.js';
 import { analyticsManager } from './managers/AnalyticsManager.js';
 import FeedbackQueueManager from './managers/FeedbackQueueManager.js';
+import PinManager from './managers/PinManager.js';
 import SyncStatusIndicator from './components/SyncStatusIndicator.js';
 import QueueViewerModal from './components/QueueViewerModal.js';
 import SyncLifecycleManager from './managers/SyncLifecycleManager.js';
@@ -78,6 +79,9 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
       // Queue system components (NEW)
       this.queueManager = null;
       this.syncIndicator = null;
+
+      // Pin management (NEW - Phase 1)
+      this.pinManager = null;
       this.queueViewer = null;
       this.lifecycleManager = null;
       this.networkManager = null;
@@ -262,6 +266,9 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
       // Initialize queue system (NEW)
       await this._initializeQueueSystem();
 
+      // Initialize pin manager (NEW - Phase 1)
+      await this._initializePinManager();
+
       // Create floating entry button (pass shadow root)
       this.floatingButton.create(() => this._toggleFeedbackMode(), this.shadowRoot);
       if (this.isDisabled) {
@@ -377,10 +384,15 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
       // Hide floating button
       this.floatingButton.hide();
 
+      // Show pins in feedback mode
+      if (this.pinManager) {
+        this.pinManager.show();
+      }
+
       try {
         // Create feedback widget (view all feedback button)
         this.feedbackWidget = new FeedbackWidget();
-        this.feedbackWidget.create(this.config.projectId, CONFIG.FEEDBACK_URL, this.shadowRoot);
+        this.feedbackWidget.create(this.config.projectId, CONFIG.FEEDBACK_URL, this.shadowRoot, this.pinManager);
 
         // Create feedback overlay (shows glowing border and handles clicks)
         this.feedbackOverlay = new FeedbackModeOverlay();
@@ -403,6 +415,11 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
 
       } catch (error) {
         console.error('[Tapko] Failed to enter feedback mode:', error);
+
+        // Hide pins on error
+        if (this.pinManager) {
+          this.pinManager.hide();
+        }
 
         // Clean up feedback widget if it was created
         if (this.feedbackWidget) {
@@ -439,6 +456,11 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
       if (!this.isInFeedbackMode) return;
 
       this.isInFeedbackMode = false;
+
+      // Hide pins when exiting feedback mode
+      if (this.pinManager) {
+        this.pinManager.hide();
+      }
 
       // Destroy feedback widget
       if (this.feedbackWidget) {
@@ -489,8 +511,8 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
       }
 
       try {
-        // Create card in shadow root
-        const card = new CommentCard(element, coordinates, this.apiClient, this.shadowRoot);
+        // Create card in shadow root (pass pinManager for Phase 1)
+        const card = new CommentCard(element, coordinates, this.apiClient, this.shadowRoot, this.pinManager);
 
         // Set draw callback to enter drawing mode with screenshot
         card.setDrawCallback((onComplete, screenshotData) => {
@@ -739,6 +761,84 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
         }
       } catch (error) {
         console.error('[Tapko] Failed to initialize queue system:', error);
+      }
+    }
+
+    /**
+     * Initialize pin manager (NEW - Phase 1)
+     */
+    async _initializePinManager() {
+      try {
+        console.log('[Tapko] Initializing pin manager...');
+
+        // Create pin manager
+        this.pinManager = new PinManager(this.shadowRoot, this.apiClient);
+
+        // Initialize and fetch pins for current page
+        await this.pinManager.init(this.config.projectId, window.location.href);
+
+        // Setup scroll/resize handlers for pin position updates
+        // Use requestAnimationFrame for smooth, synchronized updates
+        let rafId = null;
+        const updatePins = () => {
+          if (rafId) {
+            return; // Already scheduled
+          }
+
+          rafId = requestAnimationFrame(() => {
+            if (this.pinManager) {
+              this.pinManager.updateAllPinPositions();
+            }
+            rafId = null;
+          });
+        };
+
+        window.addEventListener('scroll', updatePins, { passive: true });
+        window.addEventListener('resize', updatePins, { passive: true });
+
+        // Listen for successful feedback submissions to create persistent pins
+        this.queueManager.on('queue:item-completed', async ({ id, feedbackId, feedbackData }) => {
+          console.log('[Tapko] Queue item completed, creating persistent pin:', { id, feedbackId });
+
+          if (!feedbackId) {
+            console.warn('[Tapko] No feedbackId provided, cannot create persistent pin');
+            return;
+          }
+
+          if (!feedbackData || !feedbackData.context || !feedbackData.context.commentPosition) {
+            console.warn('[Tapko] No comment position in feedback data, cannot create pin');
+            return;
+          }
+
+          try {
+            const pinData = {
+              id: feedbackId,
+              projectId: feedbackData.projectId,
+              pageUrl: feedbackData.context.pageUrl,
+              position: {
+                documentX: feedbackData.context.commentPosition.x,
+                documentY: feedbackData.context.commentPosition.y,
+                viewportX: feedbackData.context.commentPosition.x,
+                viewportY: feedbackData.context.commentPosition.y
+              },
+              comment: {
+                text: feedbackData.description || feedbackData.title || 'No comment text',
+                createdAt: feedbackData.context.timestamp || new Date().toISOString()
+              },
+              createdAt: feedbackData.context.timestamp || new Date().toISOString(),
+              createdInThisBrowser: true
+            };
+
+            await this.pinManager.createPin(pinData);
+            console.log('[Tapko] Persistent pin created successfully:', feedbackId);
+          } catch (error) {
+            console.error('[Tapko] Failed to create persistent pin:', error);
+          }
+        });
+
+        console.log('[Tapko] Pin manager initialized successfully');
+      } catch (error) {
+        console.error('[Tapko] Failed to initialize pin manager:', error);
       }
     }
 

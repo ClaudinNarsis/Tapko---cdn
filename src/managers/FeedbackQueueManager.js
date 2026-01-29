@@ -395,7 +395,16 @@ class FeedbackQueueManager {
           logsKey: assets.logs?.key
         });
 
-        await this.apiClient.submitFeedback(payload);
+        const response = await this.apiClient.submitFeedback(payload);
+
+        // Capture feedbackId from backend response
+        const feedbackId = response?.data?.feedbackId || response?.data?.id || null;
+        if (feedbackId) {
+          item.feedbackId = feedbackId;
+          console.log('[FeedbackQueue] Captured feedbackId from backend:', feedbackId);
+        } else {
+          console.warn('[FeedbackQueue] No feedbackId in backend response:', response);
+        }
 
         item.uploadProgress.feedback.status = 'completed';
         await this.updateItem(item.id, item);
@@ -404,7 +413,11 @@ class FeedbackQueueManager {
 
       // Mark as completed
       await this.updateStatus(item.id, 'completed');
-      this.emit('queue:item-completed', { id: item.id });
+      this.emit('queue:item-completed', {
+        id: item.id,
+        feedbackId: item.feedbackId,
+        feedbackData: item.feedbackData
+      });
 
       console.log(`[FeedbackQueue] Item ${item.id} completed successfully`);
 
