@@ -22,6 +22,7 @@ class PinManager {
     this.initialized = false;
     this.hiddenFeedbackStats = null; // Stats about hidden feedbacks
     this.currentDeviceInfo = null; // Current device info
+    this.isPinsVisible = false; // Track whether pins should be visible
   }
 
   /**
@@ -238,7 +239,8 @@ class PinManager {
       pinElement.style.left = `${position.left}px`;
       pinElement.style.top = `${position.top}px`;
       pinElement.style.zIndex = CONFIG.UI.zIndex;
-      pinElement.style.display = 'none'; // Hidden by default, shown only in feedback mode
+      // Set display based on current visibility state
+      pinElement.style.display = this.isPinsVisible ? 'block' : 'none';
 
       // Store pin ID as data attribute
       pinElement.setAttribute('data-pin-id', pinData.id);
@@ -255,7 +257,7 @@ class PinManager {
       // Attach click handler
       this._attachPinClickHandler(pinElement, pinData);
 
-      console.log('[PinManager] Pin rendered:', pinData.id);
+      console.log('[PinManager] Pin rendered:', pinData.id, 'visible:', this.isPinsVisible);
     } catch (error) {
       console.error('[PinManager] Failed to render pin:', error);
     }
@@ -497,6 +499,7 @@ class PinManager {
    * Show all pins (make visible)
    */
   show() {
+    this.isPinsVisible = true;
     this.pins.forEach(({ element }) => {
       element.style.display = 'block';
     });
@@ -507,6 +510,7 @@ class PinManager {
    * Hide all pins (make invisible)
    */
   hide() {
+    this.isPinsVisible = false;
     this.pins.forEach(({ element }) => {
       element.style.display = 'none';
     });
