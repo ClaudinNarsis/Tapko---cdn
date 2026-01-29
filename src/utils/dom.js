@@ -365,3 +365,11 @@ export function getCurrentBreakpoint() {
 
   return { name: '2xl', width: width, min: 1536, max: Infinity };
 }
+
+/**
+ * Get URL parameter value by name
+ */
+export function getUrlParam(name) {
+  const urlParams = new URLSearchParams(window.location.search);
+  return urlParams.get(name);
+}

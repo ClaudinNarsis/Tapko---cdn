@@ -25,21 +25,27 @@ import {
 } from '../utils/dom.js';
 
 class CommentCard {
-  constructor(target, coordinates, apiClient, shadowRoot = document.body) {
+  constructor(target, coordinates, apiClient, shadowRoot = document.body, pinManager = null) {
     this.target = target;
     this.coordinates = coordinates;
     this.apiClient = apiClient;
     this.shadowRoot = shadowRoot;
+    this.pinManager = pinManager; // NEW: Pin manager for persistent pins
+    this.feedbackWidget = null; // NEW: Feedback widget reference for hiding during screenshot
     this.card = null;
     this.pinMarker = null;
+    this.draftPinId = null; // NEW: Track draft pin ID
     this.recordingManager = new RecordingManager();
     this.selectedEmoji = null;
     this.isSubmitting = false;
     this.isMinimized = false;
     this.drawingData = null;
-    this.screenshot = null;
+    this.screenshot = null;  // For backward compatibility (will be set to merged or unmerged)
     this.thumbnail = null;
     this.screenshotMetadata = null;
+    // NEW: Separate storage for unmerged screenshot and annotation data
+    this.screenshotDataURL = null;  // Unmerged screenshot for editing
+    this.annotationData = null;     // {paths, strokeColor, strokeWidth}
 
     // Recording UI elements
     this.micIcon = null;
@@ -76,16 +82,20 @@ class CommentCard {
   }
 
   /**
-   * Create pin marker at tap location
+   * Create pin marker at tap location (draft pin - temporary)
    */
   _createPinMarker() {
-    this.pinMarker = createElement('div', `${CONFIG.CLASS_PREFIX}comment-pin`);
+    // Create draft pin with special styling
+    this.pinMarker = createElement('div', `${CONFIG.CLASS_PREFIX}comment-pin ${CONFIG.CLASS_PREFIX}draft`);
     this.pinMarker.style.position = 'absolute';
 
     // Position at exact client location (shadow host is fixed/full-screen)
     this.pinMarker.style.left = `${this.coordinates.x}px`;
     this.pinMarker.style.top = `${this.coordinates.y}px`;
     this.pinMarker.style.zIndex = CONFIG.UI.zIndex;
+
+    // Generate draft pin ID
+    this.draftPinId = `draft-${Date.now()}`;
 
     // Append to shadow root
     this.shadowRoot.appendChild(this.pinMarker);
@@ -299,6 +309,15 @@ class CommentCard {
         // Hide card and pin marker temporarily for clean screenshot
         this.card.style.display = 'none';
         this.pinMarker.style.display = 'none';
+
+        // Hide old history pins and view all feedbacks button during screenshot
+        if (this.pinManager) {
+          this.pinManager.hide();
+        }
+        if (this.feedbackWidget) {
+          this.feedbackWidget.hide();
+        }
+
         await new Promise(resolve => setTimeout(resolve, 50));
 
         try {
@@ -308,6 +327,14 @@ class CommentCard {
           // Restore card and pin marker visibility
           this.card.style.display = '';
           this.pinMarker.style.display = '';
+
+          // Restore old history pins and view all feedbacks button
+          if (this.pinManager) {
+            this.pinManager.show();
+          }
+          if (this.feedbackWidget) {
+            this.feedbackWidget.show();
+          }
 
           // Show processing message
           if (drawBtn) {
@@ -334,28 +361,47 @@ class CommentCard {
                 <path d="M2 2l7.586 7.586" stroke="currentColor" stroke-width="2"/>
                 <circle cx="11" cy="11" r="2" fill="currentColor"/>
               </svg>
-              ${this.screenshot ? 'Edit annotations' : 'Attach annotations'}
+              ${this.annotationData ? 'Edit annotations' : 'Attach annotations'}
             `;
           }
 
           // Minimize card
           this.minimize();
 
-          // Pass resized screenshot to drawing mode
+          // Pass resized screenshot to drawing mode (with existing annotations if any)
+          console.log('[Tapko CommentCard] Opening drawing mode with existing annotations:', this.annotationData);
           this.onDrawRequested((drawingData) => {
-            // Handle drawing completion
+            // Handle Done callback (NEW: receives unmerged data when user clicks Done)
             if (drawingData) {
-              this.screenshot = drawingData.finalScreenshot;  // Canvas with screenshot + annotations
-              this.thumbnail = drawingData.thumbnail;
+              this.screenshotDataURL = drawingData.screenshotDataURL;  // Unmerged screenshot
+              this.annotationData = drawingData.annotationData;        // Annotation data
+              this.thumbnail = drawingData.thumbnail;                  // Merged preview
               this.screenshotMetadata = drawingData.metadata;
-              this.drawingData = drawingData.finalScreenshot;  // For compatibility
+
+              console.log('[Tapko CommentCard] Annotation data saved after Done:', {
+                hasAnnotations: this.annotationData?.hasAnnotations,
+                pathCount: this.annotationData?.paths?.length
+              });
+
+              // For backward compatibility, set screenshot to unmerged
+              this.screenshot = drawingData.screenshotDataURL;
+              this.drawingData = drawingData.screenshotDataURL;
             }
             this.restore();
-          }, { dataURL: resizedScreenshot, metadata: screenshotData.metadata });
+          }, { dataURL: resizedScreenshot, metadata: screenshotData.metadata }, this.annotationData);
         } catch (screenshotError) {
           // Restore visibility even on error
           this.card.style.display = '';
           this.pinMarker.style.display = '';
+
+          // Restore old history pins and view all feedbacks button even on error
+          if (this.pinManager) {
+            this.pinManager.show();
+          }
+          if (this.feedbackWidget) {
+            this.feedbackWidget.show();
+          }
+
           throw screenshotError;
         }
 
@@ -380,17 +426,32 @@ class CommentCard {
         alert('Failed to capture screenshot. Please try again.');
       }
     } else if (this.onDrawRequested) {
-      // Edit existing drawing - pass existing screenshot
+      // Edit existing drawing - pass existing screenshot and annotation data
+      console.log('[Tapko CommentCard] Reopening drawing mode with annotations:', {
+        hasScreenshot: !!this.screenshotDataURL,
+        hasAnnotationData: !!this.annotationData,
+        pathCount: this.annotationData?.paths?.length,
+        annotationData: this.annotationData
+      });
       this.minimize();
       this.onDrawRequested((drawingData) => {
         if (drawingData) {
-          this.screenshot = drawingData.finalScreenshot;
-          this.thumbnail = drawingData.thumbnail;
+          this.screenshotDataURL = drawingData.screenshotDataURL;  // Unmerged screenshot
+          this.annotationData = drawingData.annotationData;        // Annotation data
+          this.thumbnail = drawingData.thumbnail;                  // Merged preview
           this.screenshotMetadata = drawingData.metadata;
-          this.drawingData = drawingData.finalScreenshot;
+
+          console.log('[Tapko CommentCard] Annotation data updated after reopen Done:', {
+            hasAnnotations: this.annotationData?.hasAnnotations,
+            pathCount: this.annotationData?.paths?.length
+          });
+
+          // For backward compatibility
+          this.screenshot = drawingData.screenshotDataURL;
+          this.drawingData = drawingData.screenshotDataURL;
         }
         this.restore();
-      }, { dataURL: this.screenshot, metadata: this.screenshotMetadata });
+      }, { dataURL: this.screenshotDataURL || this.screenshot, metadata: this.screenshotMetadata }, this.annotationData);
     }
 
     dispatchCustomEvent(CONFIG.EVENTS.DRAWING_STARTED);
@@ -494,12 +555,13 @@ class CommentCard {
         });
       }
 
-      // Add click handler on thumbnail to show fullscreen
+      // Add click handler on thumbnail to edit annotations
       const thumbnailImg = bubble.querySelector(`.${CONFIG.CLASS_PREFIX}screenshot-preview img`);
       if (thumbnailImg) {
         thumbnailImg.style.cursor = 'pointer';
         thumbnailImg.addEventListener('click', () => {
-          this._showFullscreenScreenshot();
+          // Open drawing canvas with existing annotations (same as "Edit annotations" button)
+          this._handleDrawClick();
         });
       }
     }
@@ -594,6 +656,13 @@ class CommentCard {
   }
 
   /**
+   * Set feedback widget reference for hiding during screenshots
+   */
+  setFeedbackWidget(feedbackWidget) {
+    this.feedbackWidget = feedbackWidget;
+  }
+
+  /**
    * Submit comment
    */
   async submit() {
@@ -657,11 +726,13 @@ class CommentCard {
       }
     }
 
-    // 2. Prepare screenshot blob
+    // 2. Prepare screenshot blob (UNMERGED)
     let screenshotBlob = null;
-    if (this.screenshot) {
-      screenshotBlob = dataURLToBlob(this.screenshot);
-      console.log('[Tapko Queue] Screenshot blob prepared:', screenshotBlob.size, 'bytes');
+    if (this.screenshotDataURL || this.screenshot) {
+      // Prefer screenshotDataURL (unmerged), fallback to screenshot for backward compat
+      const dataURL = this.screenshotDataURL || this.screenshot;
+      screenshotBlob = dataURLToBlob(dataURL);
+      console.log('[Tapko Queue] Screenshot blob prepared (unmerged):', screenshotBlob.size, 'bytes');
     }
 
     // 3. Prepare logs blob
@@ -676,7 +747,8 @@ class CommentCard {
     const feedbackData = {
       title: this._generateFeedbackTitle(text),
       description: sanitizeHTML(text),
-      screenshot: screenshotBlob,
+      screenshot: screenshotBlob,              // Unmerged screenshot blob
+      annotationData: this.annotationData,     // NEW: Annotation data
       logs: logsBlob,
       context: {
         pageUrl: window.location.href,
@@ -764,11 +836,18 @@ class CommentCard {
       logs: null
     };
 
-    // 1a. Prepare screenshot if available
-    if (this.screenshot) {
-      const blob = dataURLToBlob(this.screenshot);
+    // 1a. Prepare screenshot if available (merge annotations if needed)
+    if (this.screenshotDataURL || this.screenshot) {
+      let screenshotBlob = dataURLToBlob(this.screenshotDataURL || this.screenshot);
+
+      // Merge annotations if they exist
+      if (this.annotationData && this.annotationData.paths && this.annotationData.paths.length > 0) {
+        console.log('[Tapko Legacy] Merging', this.annotationData.paths.length, 'annotations...');
+        screenshotBlob = await this._mergeAnnotationsHelper(screenshotBlob, this.annotationData);
+      }
+
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
-      assets.screenshot = { blob, fileName, type: 'image/jpeg', folder: 'screenshots' };
+      assets.screenshot = { blob: screenshotBlob, fileName, type: 'image/jpeg', folder: 'screenshots' };
     }
 
     // 1b. Prepare logs
@@ -954,6 +1033,14 @@ class CommentCard {
     // Set screenshot mode to clean up UI
     this.card.classList.add(`${CONFIG.CLASS_PREFIX}screenshot-mode`);
 
+    // Hide old history pins and view all feedbacks button during screenshot
+    if (this.pinManager) {
+      this.pinManager.hide();
+    }
+    if (this.feedbackWidget) {
+      this.feedbackWidget.hide();
+    }
+
     // Handle text rendering for screenshot
     let textDiv = null;
     if (textarea) {
@@ -991,6 +1078,14 @@ class CommentCard {
       console.warn('[Tapko] Auto-screenshot failed:', e);
     } finally {
       this.card.classList.remove(`${CONFIG.CLASS_PREFIX}screenshot-mode`);
+
+      // Restore old history pins and view all feedbacks button
+      if (this.pinManager) {
+        this.pinManager.show();
+      }
+      if (this.feedbackWidget) {
+        this.feedbackWidget.show();
+      }
 
       if (textDiv) {
         textDiv.remove();
@@ -1220,6 +1315,115 @@ class CommentCard {
       if (actions) actions.style.display = '';
       this.card.classList.remove(`${CONFIG.CLASS_PREFIX}capture-mode`);
     }
+  }
+
+  /**
+   * Merge annotations into screenshot (for legacy flow)
+   * Returns a blob with annotations merged
+   */
+  async _mergeAnnotationsHelper(screenshotBlob, annotationData) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          canvas.width = img.width;
+          canvas.height = img.height;
+
+          // Draw screenshot
+          ctx.drawImage(img, 0, 0);
+
+          // Apply annotation settings
+          ctx.strokeStyle = annotationData.strokeColor || '#ff0000';
+          ctx.lineWidth = annotationData.strokeWidth || 2;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+
+          // Draw each annotation
+          annotationData.paths.forEach(item => {
+            if (item.type === 'path' || Array.isArray(item)) {
+              // Freehand path
+              const path = item.type === 'path' ? item.data : item;
+              if (path.length === 0) return;
+              ctx.beginPath();
+              ctx.moveTo(path[0].x, path[0].y);
+              for (let i = 1; i < path.length; i++) {
+                ctx.lineTo(path[i].x, path[i].y);
+              }
+              ctx.stroke();
+
+            } else if (item.type === 'ellipse') {
+              // Ellipse
+              const centerX = (item.startX + item.endX) / 2;
+              const centerY = (item.startY + item.endY) / 2;
+              const radiusX = Math.abs(item.endX - item.startX) / 2;
+              const radiusY = Math.abs(item.endY - item.startY) / 2;
+              ctx.beginPath();
+              ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI);
+              ctx.stroke();
+
+            } else if (item.type === 'rectangle') {
+              // Rectangle
+              const width = item.endX - item.startX;
+              const height = item.endY - item.startY;
+              ctx.beginPath();
+              ctx.rect(item.startX, item.startY, width, height);
+              ctx.stroke();
+
+            } else if (item.type === 'arrow') {
+              // Arrow
+              ctx.beginPath();
+              ctx.moveTo(item.startX, item.startY);
+              ctx.lineTo(item.endX, item.endY);
+              ctx.stroke();
+
+              // Draw arrowhead
+              const angle = Math.atan2(item.endY - item.startY, item.endX - item.startX);
+              const arrowLength = 15;
+              const arrowAngle = Math.PI / 6;
+
+              ctx.beginPath();
+              ctx.moveTo(item.endX, item.endY);
+              ctx.lineTo(
+                item.endX - arrowLength * Math.cos(angle - arrowAngle),
+                item.endY - arrowLength * Math.sin(angle - arrowAngle)
+              );
+              ctx.moveTo(item.endX, item.endY);
+              ctx.lineTo(
+                item.endX - arrowLength * Math.cos(angle + arrowAngle),
+                item.endY - arrowLength * Math.sin(angle + arrowAngle)
+              );
+              ctx.stroke();
+
+            } else if (item.type === 'text') {
+              // Text
+              ctx.font = '16px sans-serif';
+              ctx.fillStyle = annotationData.strokeColor || '#ff0000';
+              ctx.fillText(item.text, item.x, item.y);
+            }
+          });
+
+          // Convert to blob
+          canvas.toBlob((blob) => {
+            if (blob) {
+              resolve(blob);
+            } else {
+              reject(new Error('Failed to create merged screenshot blob'));
+            }
+          }, 'image/jpeg', 0.85);
+        };
+        img.onerror = (err) => {
+          reject(new Error('Failed to load screenshot image: ' + err));
+        };
+        img.src = e.target.result;
+      };
+      reader.onerror = (err) => {
+        reject(new Error('Failed to read screenshot blob: ' + err));
+      };
+      reader.readAsDataURL(screenshotBlob);
+    });
   }
 }
 

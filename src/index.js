@@ -28,10 +28,11 @@ import { CommentCard } from './components/CommentCard.js';
 import { DrawingCanvas } from './components/DrawingCanvas.js';
 import { FeedbackDisabledPopup } from './components/FeedbackDisabledPopup.js';
 import { FeedbackWidget } from './components/FeedbackWidget.js';
-import { dispatchCustomEvent } from './utils/dom.js';
+import { dispatchCustomEvent, getUrlParam } from './utils/dom.js';
 import { logManager } from './managers/LogManager.js';
 import { analyticsManager } from './managers/AnalyticsManager.js';
 import FeedbackQueueManager from './managers/FeedbackQueueManager.js';
+import PinManager from './managers/PinManager.js';
 import SyncStatusIndicator from './components/SyncStatusIndicator.js';
 import QueueViewerModal from './components/QueueViewerModal.js';
 import SyncLifecycleManager from './managers/SyncLifecycleManager.js';
@@ -78,6 +79,9 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
       // Queue system components (NEW)
       this.queueManager = null;
       this.syncIndicator = null;
+
+      // Pin management (NEW - Phase 1)
+      this.pinManager = null;
       this.queueViewer = null;
       this.lifecycleManager = null;
       this.networkManager = null;
@@ -181,11 +185,70 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
           // Don't return, allow initialization in disabled state
         }
 
-
-
         this.projectData = validation.data;
+
+        // Verify URL secret key if security is enabled
+        console.log('[Tapko Security] Starting URL secret key verification...');
+        console.log('[Tapko Security] Project data security object:', validation.data?.security);
+
+        const security = validation.data?.security;
+
+        if (!security) {
+          console.log('[Tapko Security] ✓ No security object found in API response - initialization allowed');
+        } else {
+          console.log('[Tapko Security] Security object found:', {
+            is_url_secret_enabled: security.is_url_secret_enabled,
+            url_secret_key_length: security.url_secret_key ? security.url_secret_key.length : 0,
+            url_secret_key_preview: security.url_secret_key ? `${security.url_secret_key.substring(0, 4)}...` : 'not set'
+          });
+
+          if (security.is_url_secret_enabled === true) {
+            console.log('[Tapko Security] URL secret key protection is ENABLED');
+
+            const urlSecretKey = getUrlParam('tapko_url_secret_key');
+            console.log('[Tapko Security] URL parameter "tapko_url_secret_key":', urlSecretKey || 'NOT PROVIDED');
+
+            if (!urlSecretKey) {
+              console.error('[Tapko Security] ✗ FAILED: URL secret key is required but missing from URL parameters');
+              console.error('[Tapko Security] Expected URL format: ?tapko_url_secret_key=YOUR_SECRET_KEY');
+              const error = new Error('[Tapko] URL secret key is required but not provided in URL parameters.');
+              dispatchCustomEvent(CONFIG.EVENTS.ERROR, {
+                message: error.message,
+                type: 'URL_SECRET_KEY_MISSING',
+                validation
+              });
+              throw error;
+            }
+
+            console.log('[Tapko Security] Comparing keys...');
+            console.log('[Tapko Security] - Provided key:', urlSecretKey);
+            console.log('[Tapko Security] - Expected key:', security.url_secret_key);
+            console.log('[Tapko Security] - Keys match:', urlSecretKey === security.url_secret_key);
+
+            if (urlSecretKey !== security.url_secret_key) {
+              console.error('[Tapko Security] ✗ FAILED: URL secret key does not match expected value');
+              console.error('[Tapko Security] Provided:', urlSecretKey);
+              console.error('[Tapko Security] Expected:', security.url_secret_key);
+              const error = new Error('[Tapko] Invalid URL secret key.');
+              dispatchCustomEvent(CONFIG.EVENTS.ERROR, {
+                message: error.message,
+                type: 'URL_SECRET_KEY_INVALID',
+                validation
+              });
+              throw error;
+            }
+
+            console.log('[Tapko Security] ✓ SUCCESS: URL secret key verified successfully');
+          } else {
+            console.log('[Tapko Security] ✓ URL secret key protection is DISABLED - initialization allowed');
+          }
+        }
+
+        console.log('[Tapko Security] Security verification complete - proceeding with initialization');
       } catch (error) {
-        if (error.message.includes('Project not found')) {
+        // Re-throw critical errors that should stop initialization
+        if (error.message.includes('Project not found') ||
+            error.message.includes('URL secret key')) {
           throw error;
         }
         console.warn('[Tapko] Failed to validate project:', error.message);
@@ -202,6 +265,9 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
 
       // Initialize queue system (NEW)
       await this._initializeQueueSystem();
+
+      // Initialize pin manager (NEW - Phase 1)
+      await this._initializePinManager();
 
       // Create floating entry button (pass shadow root)
       this.floatingButton.create(() => this._toggleFeedbackMode(), this.shadowRoot);
@@ -318,10 +384,15 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
       // Hide floating button
       this.floatingButton.hide();
 
+      // Show pins in feedback mode
+      if (this.pinManager) {
+        this.pinManager.show();
+      }
+
       try {
         // Create feedback widget (view all feedback button)
         this.feedbackWidget = new FeedbackWidget();
-        this.feedbackWidget.create(this.config.projectId, CONFIG.FEEDBACK_URL, this.shadowRoot);
+        this.feedbackWidget.create(this.config.projectId, CONFIG.FEEDBACK_URL, this.shadowRoot, this.pinManager);
 
         // Create feedback overlay (shows glowing border and handles clicks)
         this.feedbackOverlay = new FeedbackModeOverlay();
@@ -344,6 +415,11 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
 
       } catch (error) {
         console.error('[Tapko] Failed to enter feedback mode:', error);
+
+        // Hide pins on error
+        if (this.pinManager) {
+          this.pinManager.hide();
+        }
 
         // Clean up feedback widget if it was created
         if (this.feedbackWidget) {
@@ -380,6 +456,11 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
       if (!this.isInFeedbackMode) return;
 
       this.isInFeedbackMode = false;
+
+      // Hide pins when exiting feedback mode
+      if (this.pinManager) {
+        this.pinManager.hide();
+      }
 
       // Destroy feedback widget
       if (this.feedbackWidget) {
@@ -430,18 +511,18 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
       }
 
       try {
-        // Create card in shadow root
-        const card = new CommentCard(element, coordinates, this.apiClient, this.shadowRoot);
+        // Create card in shadow root (pass pinManager for Phase 1)
+        const card = new CommentCard(element, coordinates, this.apiClient, this.shadowRoot, this.pinManager);
 
-        // Set draw callback to enter drawing mode with screenshot
-        card.setDrawCallback((onComplete, screenshotData) => {
-          this._enterDrawingMode(onComplete, screenshotData);
+        // Set draw callback to enter drawing mode with screenshot and annotations
+        card.setDrawCallback((onComplete, screenshotData, existingAnnotations) => {
+          this._enterDrawingMode(onComplete, screenshotData, existingAnnotations);
         });
 
-        // Auto-exit feedback mode after successful submit
-        card.setOnSuccess(() => {
-          this._exitFeedbackMode();
-        });
+        // Set feedback widget reference so it can be hidden during screenshot capture
+        if (this.feedbackWidget) {
+          card.setFeedbackWidget(this.feedbackWidget);
+        }
 
         this.activeCard = card;
 
@@ -479,7 +560,7 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
      * @param {Function} onComplete - Callback when drawing is complete
      * @param {Object} screenshotData - Screenshot data (dataURL and metadata)
      */
-    _enterDrawingMode(onComplete, screenshotData) {
+    _enterDrawingMode(onComplete, screenshotData, existingAnnotations = null) {
       if (this.drawingCanvas) return;
 
       // Hide overlay and its snackbar while drawing
@@ -492,11 +573,11 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
         this.feedbackWidget.hide();
       }
 
-      // Create drawing canvas with screenshot as background
+      // Create drawing canvas with screenshot as background and existing annotations
       this.drawingCanvas = new DrawingCanvas();
       this.drawingCanvas.create(
         (drawingData) => {
-          // Done callback
+          // Done callback (triggers when user clicks Done button)
           if (onComplete) {
             onComplete(drawingData);
           }
@@ -511,7 +592,8 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
         },
         this.shadowRoot,
         screenshotData,
-        null  // No onTap handler - user is annotating existing comment
+        null,  // No onTap handler - user is annotating existing comment
+        existingAnnotations  // NEW: Pass existing annotations for reopening
       );
 
       dispatchCustomEvent(CONFIG.EVENTS.DRAWING_STARTED);
@@ -685,6 +767,129 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
         }
       } catch (error) {
         console.error('[Tapko] Failed to initialize queue system:', error);
+      }
+    }
+
+    /**
+     * Initialize pin manager (NEW - Phase 1)
+     */
+    async _initializePinManager() {
+      try {
+        console.log('[Tapko] Initializing pin manager...');
+
+        // Create pin manager
+        this.pinManager = new PinManager(this.shadowRoot, this.apiClient);
+
+        // Initialize and fetch pins for current page
+        await this.pinManager.init(this.config.projectId, window.location.href);
+
+        // Setup scroll/resize handlers for pin position updates
+        // Use requestAnimationFrame for smooth, synchronized updates
+        let rafId = null;
+        const updatePins = () => {
+          if (rafId) {
+            return; // Already scheduled
+          }
+
+          rafId = requestAnimationFrame(() => {
+            if (this.pinManager) {
+              this.pinManager.updateAllPinPositions();
+            }
+            rafId = null;
+          });
+        };
+
+        window.addEventListener('scroll', updatePins, { passive: true });
+        window.addEventListener('resize', updatePins, { passive: true });
+
+        // Listen for feedback queued event to create pins immediately
+        this.queueManager.on('queue:added', async ({ id, item }) => {
+          console.log('[Tapko] Feedback queued, creating pin immediately:', id);
+
+          const feedbackData = item.feedbackData;
+
+          if (!feedbackData || !feedbackData.context || !feedbackData.context.commentPosition) {
+            console.warn('[Tapko] No comment position in feedback data, cannot create pin');
+            return;
+          }
+
+          try {
+            // Create pin with queue ID immediately (will be updated with feedbackId later)
+            const pinData = {
+              id: id, // Use queue ID initially
+              queueId: id, // Store queue ID for later updates
+              projectId: feedbackData.projectId,
+              pageUrl: feedbackData.context.pageUrl,
+              position: {
+                documentX: feedbackData.context.commentPosition.x,
+                documentY: feedbackData.context.commentPosition.y,
+                viewportX: feedbackData.context.commentPosition.x,
+                viewportY: feedbackData.context.commentPosition.y
+              },
+              comment: {
+                text: feedbackData.description || feedbackData.title || 'No comment text',
+                createdAt: feedbackData.context.timestamp || new Date().toISOString()
+              },
+              createdAt: feedbackData.context.timestamp || new Date().toISOString(),
+              createdInThisBrowser: true
+            };
+
+            await this.pinManager.createPin(pinData);
+            console.log('[Tapko] Pin created immediately after queueing:', id);
+          } catch (error) {
+            console.error('[Tapko] Failed to create immediate pin:', error);
+          }
+        });
+
+        // Listen for successful feedback submissions to update pins with backend feedbackId
+        this.queueManager.on('queue:item-completed', async ({ id, feedbackId, feedbackData }) => {
+          console.log('[Tapko] Queue item completed, updating pin with feedbackId:', { id, feedbackId });
+
+          if (!feedbackId) {
+            console.warn('[Tapko] No feedbackId provided, pin will keep queue ID');
+            return;
+          }
+
+          try {
+            // Update the existing pin with the real feedbackId from backend
+            const existingPin = this.pinManager.getPins().get(id);
+            if (existingPin) {
+              // Remove old pin with queue ID
+              await this.pinManager.removePin(id);
+
+              // Create new pin with backend feedbackId
+              const pinData = {
+                id: feedbackId,
+                queueId: id,
+                projectId: feedbackData.projectId,
+                pageUrl: feedbackData.context.pageUrl,
+                position: {
+                  documentX: feedbackData.context.commentPosition.x,
+                  documentY: feedbackData.context.commentPosition.y,
+                  viewportX: feedbackData.context.commentPosition.x,
+                  viewportY: feedbackData.context.commentPosition.y
+                },
+                comment: {
+                  text: feedbackData.description || feedbackData.title || 'No comment text',
+                  createdAt: feedbackData.context.timestamp || new Date().toISOString()
+                },
+                createdAt: feedbackData.context.timestamp || new Date().toISOString(),
+                createdInThisBrowser: true
+              };
+
+              await this.pinManager.createPin(pinData);
+              console.log('[Tapko] Pin updated with backend feedbackId:', feedbackId);
+            } else {
+              console.warn('[Tapko] No existing pin found for queue ID:', id);
+            }
+          } catch (error) {
+            console.error('[Tapko] Failed to update pin with feedbackId:', error);
+          }
+        });
+
+        console.log('[Tapko] Pin manager initialized successfully');
+      } catch (error) {
+        console.error('[Tapko] Failed to initialize pin manager:', error);
       }
     }
 

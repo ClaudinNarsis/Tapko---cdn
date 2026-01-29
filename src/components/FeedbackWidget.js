@@ -17,8 +17,10 @@ class FeedbackWidget {
   constructor() {
     this.widget = null;
     this.viewAllButton = null;
+    this.warningElement = null;
     this.projectId = null;
     this.feedbackUrl = null;
+    this.pinManager = null;
   }
 
   /**
@@ -26,14 +28,16 @@ class FeedbackWidget {
    * @param {string} projectId - Project ID
    * @param {string} feedbackUrl - Feedback URL
    * @param {ShadowRoot} shadowRoot - Shadow root to append the widget to (defaults to document.body for backward compatibility)
+   * @param {Object} pinManager - Pin manager instance to get hidden feedback stats
    */
-  create(projectId, feedbackUrl, shadowRoot = document.body) {
+  create(projectId, feedbackUrl, shadowRoot = document.body, pinManager = null) {
     if (this.widget) {
       return; // Already created
     }
 
     this.projectId = projectId;
     this.feedbackUrl = feedbackUrl || CONFIG.FEEDBACK_URL;
+    this.pinManager = pinManager;
 
     // Create view all feedback button (standalone)
     this.viewAllButton = createElement('button', `${CONFIG.CLASS_PREFIX}widget-view-all-btn`);
@@ -53,12 +57,56 @@ class FeedbackWidget {
     // Append to shadow root
     shadowRoot.appendChild(this.viewAllButton);
 
+    // Create and show hidden feedback warning if applicable
+    this._createHiddenFeedbackWarning(shadowRoot);
+
     // Show with animation
     requestAnimationFrame(() => {
       this.viewAllButton.classList.add(`${CONFIG.CLASS_PREFIX}visible`);
+      if (this.warningElement) {
+        this.warningElement.classList.add(`${CONFIG.CLASS_PREFIX}visible`);
+      }
     });
 
     return this.viewAllButton;
+  }
+
+  /**
+   * Create hidden feedback warning element
+   * @param {ShadowRoot} shadowRoot - Shadow root to append to
+   * @private
+   */
+  _createHiddenFeedbackWarning(shadowRoot) {
+    if (!this.pinManager) {
+      return;
+    }
+
+    const hiddenMessage = this.pinManager.getHiddenFeedbackMessage();
+    if (!hiddenMessage) {
+      return; // No hidden feedbacks
+    }
+
+    this.warningElement = createElement('div', `${CONFIG.CLASS_PREFIX}widget-hidden-warning`);
+    this.warningElement.innerHTML = `
+      <svg viewBox="0 0 24 24" class="${CONFIG.CLASS_PREFIX}widget-warning-icon" width="16" height="16">
+        <path d="M12 2L2 20h20L12 2zm0 5v6m0 4v2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span class="${CONFIG.CLASS_PREFIX}widget-warning-text">${this._escapeHTML(hiddenMessage)}</span>
+    `;
+
+    shadowRoot.appendChild(this.warningElement);
+  }
+
+  /**
+   * Escape HTML to prevent XSS
+   * @param {string} text - Text to escape
+   * @returns {string} - Escaped text
+   * @private
+   */
+  _escapeHTML(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
 
   /**
@@ -73,25 +121,31 @@ class FeedbackWidget {
   }
 
   /**
-   * Show the button
+   * Show the button and warning
    */
   show() {
     if (this.viewAllButton) {
       this.viewAllButton.classList.add(`${CONFIG.CLASS_PREFIX}visible`);
     }
+    if (this.warningElement) {
+      this.warningElement.classList.add(`${CONFIG.CLASS_PREFIX}visible`);
+    }
   }
 
   /**
-   * Hide the button
+   * Hide the button and warning
    */
   hide() {
     if (this.viewAllButton) {
       this.viewAllButton.classList.remove(`${CONFIG.CLASS_PREFIX}visible`);
     }
+    if (this.warningElement) {
+      this.warningElement.classList.remove(`${CONFIG.CLASS_PREFIX}visible`);
+    }
   }
 
   /**
-   * Remove the button
+   * Remove the button and warning
    */
   destroy() {
     if (this.viewAllButton) {
@@ -102,6 +156,17 @@ class FeedbackWidget {
           this.viewAllButton.parentNode.removeChild(this.viewAllButton);
         }
         this.viewAllButton = null;
+      }, CONFIG.UI.animationDuration);
+    }
+
+    if (this.warningElement) {
+      this.warningElement.classList.remove(`${CONFIG.CLASS_PREFIX}visible`);
+
+      setTimeout(() => {
+        if (this.warningElement && this.warningElement.parentNode) {
+          this.warningElement.parentNode.removeChild(this.warningElement);
+        }
+        this.warningElement = null;
       }, CONFIG.UI.animationDuration);
     }
   }
