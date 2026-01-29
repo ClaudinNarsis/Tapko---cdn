@@ -514,9 +514,9 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
         // Create card in shadow root (pass pinManager for Phase 1)
         const card = new CommentCard(element, coordinates, this.apiClient, this.shadowRoot, this.pinManager);
 
-        // Set draw callback to enter drawing mode with screenshot
-        card.setDrawCallback((onComplete, screenshotData) => {
-          this._enterDrawingMode(onComplete, screenshotData);
+        // Set draw callback to enter drawing mode with screenshot and annotations
+        card.setDrawCallback((onComplete, screenshotData, existingAnnotations) => {
+          this._enterDrawingMode(onComplete, screenshotData, existingAnnotations);
         });
 
         this.activeCard = card;
@@ -555,7 +555,7 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
      * @param {Function} onComplete - Callback when drawing is complete
      * @param {Object} screenshotData - Screenshot data (dataURL and metadata)
      */
-    _enterDrawingMode(onComplete, screenshotData) {
+    _enterDrawingMode(onComplete, screenshotData, existingAnnotations = null) {
       if (this.drawingCanvas) return;
 
       // Hide overlay and its snackbar while drawing
@@ -568,11 +568,11 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
         this.feedbackWidget.hide();
       }
 
-      // Create drawing canvas with screenshot as background
+      // Create drawing canvas with screenshot as background and existing annotations
       this.drawingCanvas = new DrawingCanvas();
       this.drawingCanvas.create(
         (drawingData) => {
-          // Done callback
+          // Done callback (triggers when user clicks Done button)
           if (onComplete) {
             onComplete(drawingData);
           }
@@ -587,7 +587,8 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
         },
         this.shadowRoot,
         screenshotData,
-        null  // No onTap handler - user is annotating existing comment
+        null,  // No onTap handler - user is annotating existing comment
+        existingAnnotations  // NEW: Pass existing annotations for reopening
       );
 
       dispatchCustomEvent(CONFIG.EVENTS.DRAWING_STARTED);
