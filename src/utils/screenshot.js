@@ -55,10 +55,22 @@ async function captureViewportScreenshot(options = {}) {
     const viewportHeight = window.innerHeight;
     const devicePixelRatio = window.devicePixelRatio || 1;
 
+    // CRITICAL FIX: Cap maximum resolution to prevent browser crashes
+    // High-DPI displays (Retina, 4K) can request massive resolutions that crash the browser
+    // Safe maximum: 1920x1080 (Full HD)
+    const MAX_WIDTH = 1920;
+    const MAX_HEIGHT = 1080;
+
+    // Calculate safe dimensions - don't multiply by DPR to avoid oversized captures
+    const idealWidth = Math.min(viewportWidth, MAX_WIDTH);
+    const idealHeight = Math.min(viewportHeight, MAX_HEIGHT);
+
     debugLogger.info('Viewport info collected', {
       viewportWidth,
       viewportHeight,
       devicePixelRatio,
+      idealWidth,
+      idealHeight,
       scrollX,
       scrollY
     });
@@ -76,17 +88,19 @@ async function captureViewportScreenshot(options = {}) {
         await new Promise(resolve => setTimeout(resolve, 100));
       }
 
-      // Request screen capture with specific constraints
+      // Request screen capture with safe constraints
       debugLogger.info('START: Request getDisplayMedia permission', {
-        idealWidth: viewportWidth * devicePixelRatio,
-        idealHeight: viewportHeight * devicePixelRatio
+        idealWidth,
+        idealHeight,
+        maxWidth: MAX_WIDTH,
+        maxHeight: MAX_HEIGHT
       });
 
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: {
           mediaSource: 'screen',
-          width: { ideal: viewportWidth * devicePixelRatio },
-          height: { ideal: viewportHeight * devicePixelRatio }
+          width: { ideal: idealWidth, max: MAX_WIDTH },
+          height: { ideal: idealHeight, max: MAX_HEIGHT }
         },
         audio: false,
         preferCurrentTab: true

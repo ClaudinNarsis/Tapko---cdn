@@ -1,8 +1,8 @@
 /**
- * DebugLogger - Crash-resistant logging system
+ * DebugLogger - Minimal crash detection and logging
  *
- * Writes logs to localStorage immediately to survive browser crashes.
- * Tracks operations and detects incomplete operations (crashes).
+ * Provides lightweight crash detection for monitoring browser issues.
+ * Only active when debug mode is explicitly enabled.
  */
 
 const STORAGE_KEYS = {
@@ -20,7 +20,7 @@ const LOG_LEVELS = {
   CRITICAL: 'CRITICAL'
 };
 
-const MAX_LOGS = 200;
+const MAX_LOGS = 100; // Reduced from 200
 
 class DebugLogger {
   constructor() {
