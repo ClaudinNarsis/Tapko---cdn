@@ -12,6 +12,7 @@
  */
 
 import { ScreenshotPermissionOverlay } from '../components/ScreenshotPermissionOverlay.js';
+import debugLogger from './DebugLogger.js';
 
 
 /**
@@ -37,6 +38,9 @@ async function loadHtmlToImage() {
  * @param {boolean} options.keepWidgetVisible - If true, keeps the widget visible in screenshot (for showing pin markers)
  */
 async function captureViewportScreenshot(options = {}) {
+  debugLogger.startOperation('Capture viewport screenshot');
+  debugLogger.logMemory('Before screenshot capture');
+
   const timingStart = performance.now();
   console.log('[Tapko] Starting viewport capture with Screen Capture API...');
 
@@ -51,6 +55,26 @@ async function captureViewportScreenshot(options = {}) {
     const viewportHeight = window.innerHeight;
     const devicePixelRatio = window.devicePixelRatio || 1;
 
+    // CRITICAL FIX: Cap maximum resolution to prevent browser crashes
+    // High-DPI displays (Retina, 4K) can request massive resolutions that crash the browser
+    // Safe maximum: 1920x1080 (Full HD)
+    const MAX_WIDTH = 1920;
+    const MAX_HEIGHT = 1080;
+
+    // Calculate safe dimensions - don't multiply by DPR to avoid oversized captures
+    const idealWidth = Math.min(viewportWidth, MAX_WIDTH);
+    const idealHeight = Math.min(viewportHeight, MAX_HEIGHT);
+
+    debugLogger.info('Viewport info collected', {
+      viewportWidth,
+      viewportHeight,
+      devicePixelRatio,
+      idealWidth,
+      idealHeight,
+      scrollX,
+      scrollY
+    });
+
     // Get shadow host reference (we'll hide it after permission is granted)
     const shadowHost = document.getElementById('tapko-widget-shadow-host');
     const originalDisplay = shadowHost ? shadowHost.style.display : null;
@@ -64,15 +88,34 @@ async function captureViewportScreenshot(options = {}) {
         await new Promise(resolve => setTimeout(resolve, 100));
       }
 
-      // Request screen capture with specific constraints
+      // Request screen capture with safe constraints
+      debugLogger.info('START: Request getDisplayMedia permission', {
+        idealWidth,
+        idealHeight,
+        maxWidth: MAX_WIDTH,
+        maxHeight: MAX_HEIGHT
+      });
+
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: {
           mediaSource: 'screen',
-          width: { ideal: viewportWidth * devicePixelRatio },
-          height: { ideal: viewportHeight * devicePixelRatio }
+          width: { ideal: idealWidth, max: MAX_WIDTH },
+          height: { ideal: idealHeight, max: MAX_HEIGHT }
         },
         audio: false,
         preferCurrentTab: true
+      });
+
+      debugLogger.info('END: Permission granted, stream obtained');
+
+      // Get actual stream settings
+      const track = stream.getVideoTracks()[0];
+      const settings = track.getSettings();
+      debugLogger.info('Stream video track settings', {
+        width: settings.width,
+        height: settings.height,
+        frameRate: settings.frameRate,
+        aspectRatio: settings.aspectRatio
       });
 
       // Permission granted! Now hide the overlay and shadow host
@@ -101,23 +144,44 @@ async function captureViewportScreenshot(options = {}) {
       await new Promise(resolve => setTimeout(resolve, 100));
 
       // Create canvas and capture frame
+      debugLogger.info('Creating canvas for frame capture', {
+        videoWidth: video.videoWidth,
+        videoHeight: video.videoHeight,
+        totalPixels: video.videoWidth * video.videoHeight
+      });
+
       const canvas = document.createElement('canvas');
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
 
+      debugLogger.info('START: Draw video frame to canvas');
       const ctx = canvas.getContext('2d');
       ctx.drawImage(video, 0, 0);
+      debugLogger.info('END: Video frame drawn to canvas');
 
       // Stop all tracks
       stream.getTracks().forEach(track => track.stop());
 
+      debugLogger.logMemory('Before toDataURL conversion');
+
       // Convert to JPEG data URL
+      debugLogger.info('START: Convert canvas to dataURL');
       const dataURL = canvas.toDataURL('image/jpeg', 0.85);
+      debugLogger.info('END: Conversion to dataURL complete', {
+        dataURLLength: dataURL.length
+      });
+
+      debugLogger.logMemory('After toDataURL conversion');
 
       console.log(`[Tapko] Snapshot success. DataURL length: ${dataURL.length}`);
 
       const timingEnd = performance.now();
       console.log(`[Tapko Timing] Screen capture: ${(timingEnd - timingStart).toFixed(2)}ms`);
+
+      debugLogger.endOperation('Capture viewport screenshot', {
+        success: true,
+        duration: `${(timingEnd - timingStart).toFixed(2)}ms`
+      });
 
       return {
         dataURL,
@@ -146,12 +210,23 @@ async function captureViewportScreenshot(options = {}) {
     }
 
   } catch (error) {
+    debugLogger.error('Screenshot capture failed', {
+      errorName: error.name,
+      errorMessage: error.message,
+      stack: error.stack
+    });
+
     // Ensure overlay is hidden in case of any error
     if (permissionOverlay) {
       permissionOverlay.hide();
     }
 
     console.error('[Tapko] Screenshot capture failed:', error);
+
+    debugLogger.endOperation('Capture viewport screenshot', {
+      success: false,
+      error: error.message
+    });
 
     // Provide helpful error messages
     if (error.name === 'NotAllowedError') {

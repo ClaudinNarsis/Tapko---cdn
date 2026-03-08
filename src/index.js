@@ -39,6 +39,7 @@ import SyncLifecycleManager from './managers/SyncLifecycleManager.js';
 import NetworkStatusManager from './managers/NetworkStatusManager.js';
 import { ShadowStyleManager } from './utils/ShadowStyleManager.js';
 import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
+import debugLogger from './utils/DebugLogger.js';
 
 (function (window, document) {
   'use strict';
@@ -62,6 +63,9 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
 
       // Initialize log capture immediately
       logManager.init();
+
+      // Initialize debug logger and check for crashes
+      this._initializeDebugSystem();
 
       // Shadow DOM properties
       this.shadowHost = null;
@@ -91,6 +95,52 @@ import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
       this.activeCard = null;
       this.escPressCount = 0;
       this.escTimeout = null;
+    }
+
+    /**
+     * Initialize debug system and setup global error handlers
+     */
+    _initializeDebugSystem() {
+      // Setup global error handler
+      window.addEventListener('error', (event) => {
+        debugLogger.error('Global error caught', {
+          message: event.message,
+          filename: event.filename,
+          lineno: event.lineno,
+          colno: event.colno,
+          error: event.error?.message,
+          stack: event.error?.stack
+        });
+      });
+
+      // Setup unhandled promise rejection handler
+      window.addEventListener('unhandledrejection', (event) => {
+        debugLogger.error('Unhandled promise rejection', {
+          reason: event.reason?.message || event.reason,
+          promise: event.promise,
+          stack: event.reason?.stack
+        });
+      });
+
+      // Check for crash on initialization (silent monitoring)
+      const crashData = debugLogger.detectCrash();
+      if (crashData.crashed) {
+        console.warn('[Tapko Debug] Previous session crashed during:', crashData.operation?.name);
+        // Silently clear the crash marker
+        debugLogger.clearAll();
+      }
+
+      // Enable debug mode via URL parameter
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('tapko_debug') === 'true') {
+        debugLogger.enableDebugMode();
+        console.log('[Tapko Debug] Debug mode enabled via URL parameter');
+      }
+
+      debugLogger.info('Tapko widget initializing', {
+        version: CONFIG.VERSION,
+        url: window.location.href
+      });
     }
 
     /**
