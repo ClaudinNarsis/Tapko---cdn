@@ -40,7 +40,6 @@ import NetworkStatusManager from './managers/NetworkStatusManager.js';
 import { ShadowStyleManager } from './utils/ShadowStyleManager.js';
 import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
 import debugLogger from './utils/DebugLogger.js';
-import CrashReportBanner from './components/CrashReportBanner.js';
 
 (function (window, document) {
   'use strict';
@@ -123,15 +122,12 @@ import CrashReportBanner from './components/CrashReportBanner.js';
         });
       });
 
-      // Check for crash on initialization
+      // Check for crash on initialization (silent monitoring)
       const crashData = debugLogger.detectCrash();
       if (crashData.crashed) {
-        console.warn('[Tapko Debug] Previous session crashed!', crashData);
-
-        // Show crash report after a short delay (let widget initialize first)
-        setTimeout(() => {
-          this._showCrashReport(crashData);
-        }, 1000);
+        console.warn('[Tapko Debug] Previous session crashed during:', crashData.operation?.name);
+        // Silently clear the crash marker
+        debugLogger.clearAll();
       }
 
       // Enable debug mode via URL parameter
@@ -145,19 +141,6 @@ import CrashReportBanner from './components/CrashReportBanner.js';
         version: CONFIG.VERSION,
         url: window.location.href
       });
-    }
-
-    /**
-     * Show crash report banner
-     */
-    _showCrashReport(crashData) {
-      if (!this.shadowRoot) {
-        console.warn('[Tapko Debug] Cannot show crash report - shadow root not ready');
-        return;
-      }
-
-      const banner = new CrashReportBanner(this.shadowRoot);
-      banner.show(crashData);
     }
 
     /**
