@@ -239,7 +239,17 @@ class DebugLogger {
    * Mark start of an operation
    */
   startOperation(operationName, context = {}) {
-    if (!this.enabled) return;
+    // CRITICAL: Always enable for crash-prone operations
+    const crashProneOps = [
+      'Capture viewport screenshot',
+      'Resize screenshot for annotation',
+      'Handle draw click',
+      'Draw screenshot background'
+    ];
+
+    const forceEnable = crashProneOps.some(op => operationName.includes(op));
+
+    if (!this.enabled && !forceEnable) return;
 
     const operation = {
       name: operationName,
@@ -248,9 +258,20 @@ class DebugLogger {
       context: this.sanitizeData(context)
     };
 
-    // Save active operation
+    // Save active operation MULTIPLE times for redundancy
     try {
-      localStorage.setItem(STORAGE_KEYS.ACTIVE_OPERATION, JSON.stringify(operation));
+      const opStr = JSON.stringify(operation);
+
+      // Write 3 times to ensure persistence before browser crash
+      localStorage.setItem(STORAGE_KEYS.ACTIVE_OPERATION, opStr);
+      localStorage.setItem(STORAGE_KEYS.ACTIVE_OPERATION + '_backup1', opStr);
+      localStorage.setItem(STORAGE_KEYS.ACTIVE_OPERATION + '_backup2', opStr);
+
+      // Also set a simple flag for quick crash detection
+      localStorage.setItem('tapko_operation_active', operationName);
+
+      // Force sync (browsers batch writes, this helps)
+      localStorage.getItem(STORAGE_KEYS.ACTIVE_OPERATION);
     } catch (e) {
       console.error('[Tapko Debug] Failed to save active operation:', e);
     }
@@ -262,8 +283,6 @@ class DebugLogger {
    * Mark end of an operation
    */
   endOperation(operationName, result = null) {
-    if (!this.enabled) return;
-
     // Clear active operation
     try {
       const activeOp = this.getActiveOperation();
@@ -273,7 +292,12 @@ class DebugLogger {
           duration: `${duration.toFixed(2)}ms`,
           result: result ? this.sanitizeData(result) : null
         });
+
+        // Remove all backup copies
         localStorage.removeItem(STORAGE_KEYS.ACTIVE_OPERATION);
+        localStorage.removeItem(STORAGE_KEYS.ACTIVE_OPERATION + '_backup1');
+        localStorage.removeItem(STORAGE_KEYS.ACTIVE_OPERATION + '_backup2');
+        localStorage.removeItem('tapko_operation_active');
       }
     } catch (e) {
       console.error('[Tapko Debug] Failed to end operation:', e);
@@ -285,9 +309,42 @@ class DebugLogger {
    */
   getActiveOperation() {
     try {
-      const opStr = localStorage.getItem(STORAGE_KEYS.ACTIVE_OPERATION);
+      // Try main storage first
+      let opStr = localStorage.getItem(STORAGE_KEYS.ACTIVE_OPERATION);
+
+      // Fallback to backups if main is corrupted
+      if (!opStr) {
+        opStr = localStorage.getItem(STORAGE_KEYS.ACTIVE_OPERATION + '_backup1');
+      }
+      if (!opStr) {
+        opStr = localStorage.getItem(STORAGE_KEYS.ACTIVE_OPERATION + '_backup2');
+      }
+
+      // Fallback to simple flag
+      if (!opStr) {
+        const simpleName = localStorage.getItem('tapko_operation_active');
+        if (simpleName) {
+          return {
+            name: simpleName,
+            timestamp: new Date().toISOString(),
+            startTime: 0,
+            context: {}
+          };
+        }
+      }
+
       return opStr ? JSON.parse(opStr) : null;
     } catch (e) {
+      // Even parsing failed, try simple flag
+      const simpleName = localStorage.getItem('tapko_operation_active');
+      if (simpleName) {
+        return {
+          name: simpleName,
+          timestamp: 'unknown',
+          startTime: 0,
+          context: {}
+        };
+      }
       return null;
     }
   }
@@ -327,7 +384,10 @@ class DebugLogger {
     try {
       localStorage.removeItem(STORAGE_KEYS.LOGS);
       localStorage.removeItem(STORAGE_KEYS.ACTIVE_OPERATION);
+      localStorage.removeItem(STORAGE_KEYS.ACTIVE_OPERATION + '_backup1');
+      localStorage.removeItem(STORAGE_KEYS.ACTIVE_OPERATION + '_backup2');
       localStorage.removeItem(STORAGE_KEYS.SYSTEM_INFO);
+      localStorage.removeItem('tapko_operation_active');
       console.log('[Tapko Debug] All debug data cleared');
     } catch (e) {
       console.error('[Tapko Debug] Failed to clear data:', e);
