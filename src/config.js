@@ -48,6 +48,20 @@ export const CONFIG = {
     smoothing: true
   },
 
+  // Debug Configuration
+  DEBUG: {
+    enabled: false, // Set to true to enable debug mode by default
+    storageKeys: {
+      LOGS: 'tapko_debug_logs',
+      ACTIVE_OPERATION: 'tapko_debug_active_operation',
+      SYSTEM_INFO: 'tapko_debug_system_info',
+      DEBUG_MODE: 'tapko_debug_mode'
+    },
+    maxLogs: 200,
+    maxCanvasSize: 4096, // Maximum canvas dimension (for future fix)
+    maxPixels: 16777216 // Maximum total pixels (4096 * 4096)
+  },
+
   // Event names
   EVENTS: {
     INITIALIZED: 'tapko:initialized',
@@ -79,4 +93,6 @@ Object.freeze(CONFIG.API);
 Object.freeze(CONFIG.DEFAULTS);
 Object.freeze(CONFIG.UI);
 Object.freeze(CONFIG.DRAWING);
+Object.freeze(CONFIG.DEBUG);
+Object.freeze(CONFIG.DEBUG.storageKeys);
 Object.freeze(CONFIG.EVENTS);
