@@ -15,6 +15,7 @@
 import { CONFIG } from '../config.js';
 import { createElement, dispatchCustomEvent } from '../utils/dom.js';
 import { generateThumbnail } from '../utils/screenshot.js';
+import debugLogger from '../utils/DebugLogger.js';
 
 class DrawingCanvas {
   constructor() {
@@ -67,7 +68,11 @@ class DrawingCanvas {
    * @param {Object} existingAnnotations - Existing annotation data to restore (optional)
    */
   async create(onDoneCallback, onCancelCallback, shadowRoot = document.body, screenshotData = null, onTapCallback = null, existingAnnotations = null) {
+    debugLogger.startOperation('Create DrawingCanvas');
+    debugLogger.logMemory('Before creating drawing canvas');
+
     if (this.container) {
+      debugLogger.info('DrawingCanvas already created, skipping');
       return; // Already created
     }
 
@@ -76,6 +81,13 @@ class DrawingCanvas {
       hasExistingAnnotations: !!existingAnnotations,
       existingAnnotationsPathCount: existingAnnotations?.paths?.length,
       existingAnnotations: existingAnnotations
+    });
+
+    debugLogger.info('DrawingCanvas create parameters', {
+      hasScreenshotData: !!screenshotData,
+      screenshotDataURLLength: screenshotData?.dataURL?.length,
+      hasExistingAnnotations: !!existingAnnotations,
+      annotationPathCount: existingAnnotations?.paths?.length
     });
 
     this.onDone = onDoneCallback;
@@ -96,6 +108,13 @@ class DrawingCanvas {
     const canvasWidth = window.innerWidth * 0.9;
     const canvasHeight = window.innerHeight * 0.9;
 
+    debugLogger.info('Creating drawing canvas', {
+      canvasWidth: canvasWidth * dpr,
+      canvasHeight: canvasHeight * dpr,
+      dpr,
+      totalPixels: (canvasWidth * dpr) * (canvasHeight * dpr)
+    });
+
     this.canvas.width = canvasWidth * dpr;
     this.canvas.height = canvasHeight * dpr;
     this.canvas.style.width = `${canvasWidth}px`;
@@ -109,8 +128,14 @@ class DrawingCanvas {
     // NEW: Draw screenshot as background if provided
     if (screenshotData && screenshotData.dataURL) {
       try {
+        debugLogger.info('Drawing screenshot background');
         await this._drawScreenshotBackground(screenshotData.dataURL);
+        debugLogger.info('Screenshot background drawn successfully');
       } catch (error) {
+        debugLogger.error('Failed to load screenshot background', {
+          error: error.message,
+          stack: error.stack
+        });
         console.error('[Tapko] Failed to load screenshot background:', error);
         // Continue anyway - user can still draw without background
         alert('Failed to load screenshot. You can still annotate, but the background may be missing.');
@@ -119,6 +144,9 @@ class DrawingCanvas {
 
     // NEW: Restore existing annotations if provided (reopening scenario)
     if (existingAnnotations && existingAnnotations.paths) {
+      debugLogger.info('Restoring existing annotations', {
+        pathCount: existingAnnotations.paths.length
+      });
       console.log('[Tapko] Restoring', existingAnnotations.paths.length, 'existing annotations');
       this.paths = JSON.parse(JSON.stringify(existingAnnotations.paths)); // Deep copy to prevent mutations
       if (existingAnnotations.strokeColor) {
@@ -1054,24 +1082,44 @@ class DrawingCanvas {
   async _drawScreenshotBackground(dataURL) {
     if (!dataURL) return;
 
+    debugLogger.startOperation('Draw screenshot background to canvas', {
+      dataURLLength: dataURL.length
+    });
+
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.onload = () => {
+        debugLogger.info('Screenshot image loaded', {
+          width: img.width,
+          height: img.height,
+          totalPixels: img.width * img.height
+        });
         console.log('[Tapko] Screenshot loaded for canvas:', img.width, 'x', img.height);
 
         try {
+          debugLogger.info('START: Draw image to canvas');
           this._drawImageToCanvas(img);
+          debugLogger.info('END: Image drawn to canvas successfully');
           this.screenshotImage = img;
+          debugLogger.endOperation('Draw screenshot background to canvas', { success: true });
           resolve();
         } catch (error) {
+          debugLogger.error('Failed to draw screenshot to canvas', {
+            error: error.message,
+            stack: error.stack
+          });
           console.error('[Tapko] Failed to draw screenshot to canvas:', error);
+          debugLogger.endOperation('Draw screenshot background to canvas', { success: false, error: error.message });
           reject(error);
         }
       };
       img.onerror = (err) => {
+        debugLogger.error('Failed to load screenshot image', { error: err });
         console.error('[Tapko] Failed to load screenshot image for background:', err);
+        debugLogger.endOperation('Draw screenshot background to canvas', { success: false, error: 'Image load failed' });
         reject(new Error('Failed to load screenshot image'));
       };
+      debugLogger.info('Loading screenshot image into Image object');
       img.src = dataURL;
     });
   }
