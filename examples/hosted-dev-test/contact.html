@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Contact Us - Tapko | Dev Testing</title>
+  <link rel="stylesheet" href="shared-styles.css">
+
+  <!-- Tapko Widget -->
+  <script src="https://tapko-dev-generalbucket.s3.ap-south-1.amazonaws.com/cdn/tapko-widget.js"></script>
+  <script>
+  (async () => {
+    try {
+      await Tapko.init({
+        projectId: 'deb96c18-a253-4295-b4a0-3a784ee37f2d',
+        apiKey: 'your-api-key',
+        userId: 'user_36PrQyirxWUXgwmtnnhuXI8G4xu'
+      });
+    } catch (error) {
+      console.error('Error initializing Tapko widget:', error);
+    }
+  })();
+  </script>
+
+  <style>
+    .contact-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 3rem;
+      align-items: start;
+    }
+
+    .contact-info-card {
+      background: white;
+      padding: 2rem;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.07);
+      display: flex;
+      gap: 1.5rem;
+      align-items: flex-start;
+    }
+
+    .contact-icon {
+      width: 60px;
+      height: 60px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 1.5rem;
+      flex-shrink: 0;
+    }
+
+    .contact-form {
+      background: white;
+      padding: 3rem;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.07);
+    }
+
+    @media (max-width: 1024px) {
+      .contact-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Navigation -->
+  <nav class="navbar">
+    <div class="navbar-content">
+      <a href="index.html" class="logo">Tapko</a>
+
+      <button class="mobile-menu-toggle" onclick="toggleMobileMenu()">☰</button>
+
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html">Home</a></li>
+        <li class="nav-dropdown">
+          <a href="features.html" class="nav-dropdown-toggle">
+            Features <span>▾</span>
+          </a>
+          <div class="nav-dropdown-menu">
+            <a href="features.html#integration">Easy Integration</a>
+            <a href="features.html#analytics">Smart Analytics</a>
+            <a href="features.html#customization">Customization</a>
+            <a href="features.html#collaboration">Team Collaboration</a>
+          </div>
+        </li>
+        <li><a href="pricing.html">Pricing</a></li>
+        <li><a href="documentation.html">Docs</a></li>
+        <li class="nav-dropdown">
+          <a href="blog.html" class="nav-dropdown-toggle">
+            Resources <span>▾</span>
+          </a>
+          <div class="nav-dropdown-menu">
+            <a href="blog.html">Blog</a>
+            <a href="documentation.html">Documentation</a>
+            <a href="about.html">About Us</a>
+          </div>
+        </li>
+        <li><a href="contact.html" class="active">Contact</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- Breadcrumbs -->
+  <div class="container">
+    <div class="breadcrumbs">
+      <a href="index.html">Home</a> / <span>Contact</span>
+    </div>
+  </div>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="hero-content">
+      <h1>Get In Touch</h1>
+      <p>Have questions? We'd love to hear from you. Send us a message and we'll respond as soon as possible.</p>
+    </div>
+  </section>
+
+  <!-- Contact Section -->
+  <section class="section">
+    <div class="container">
+      <div class="contact-grid">
+        <!-- Contact Form -->
+        <div class="contact-form">
+          <h2 style="margin-bottom: 1.5rem;">Send Us a Message</h2>
+          <form onsubmit="handleSubmit(event)">
+            <div class="form-group">
+              <label for="name">Full Name *</label>
+              <input type="text" id="name" name="name" required placeholder="John Doe">
+            </div>
+
+            <div class="form-group">
+              <label for="email">Email Address *</label>
+              <input type="email" id="email" name="email" required placeholder="john@example.com">
+            </div>
+
+            <div class="form-group">
+              <label for="company">Company</label>
+              <input type="text" id="company" name="company" placeholder="Your Company Inc.">
+            </div>
+
+            <div class="form-group">
+              <label for="subject">Subject *</label>
+              <select id="subject" name="subject" required>
+                <option value="">Select a subject</option>
+                <option value="sales">Sales Inquiry</option>
+                <option value="support">Technical Support</option>
+                <option value="feedback">Product Feedback</option>
+                <option value="partnership">Partnership Opportunity</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="message">Message *</label>
+              <textarea id="message" name="message" required placeholder="Tell us how we can help you..."></textarea>
+            </div>
+
+            <button type="submit" class="btn btn-secondary" style="width: 100%;">Send Message</button>
+          </form>
+
+          <div id="form-status" style="margin-top: 1rem; padding: 1rem; border-radius: 8px; display: none;"></div>
+        </div>
+
+        <!-- Contact Information -->
+        <div>
+          <h2 style="margin-bottom: 2rem;">Other Ways to Reach Us</h2>
+
+          <div style="display: grid; gap: 1.5rem;">
+            <div class="contact-info-card">
+              <div class="contact-icon">📧</div>
+              <div>
+                <h3 style="font-size: 1.2rem; margin-bottom: 0.5rem;">Email Us</h3>
+                <p class="text-muted" style="margin-bottom: 0.5rem;">For general inquiries</p>
+                <a href="mailto:hello@tapko.io" style="color: #6366f1; text-decoration: none;">hello@tapko.io</a>
+              </div>
+            </div>
+
+            <div class="contact-info-card">
+              <div class="contact-icon">🛟</div>
+              <div>
+                <h3 style="font-size: 1.2rem; margin-bottom: 0.5rem;">Support</h3>
+                <p class="text-muted" style="margin-bottom: 0.5rem;">Need technical help?</p>
+                <a href="mailto:support@tapko.io" style="color: #6366f1; text-decoration: none;">support@tapko.io</a>
+              </div>
+            </div>
+
+            <div class="contact-info-card">
+              <div class="contact-icon">💼</div>
+              <div>
+                <h3 style="font-size: 1.2rem; margin-bottom: 0.5rem;">Sales</h3>
+                <p class="text-muted" style="margin-bottom: 0.5rem;">Interested in enterprise?</p>
+                <a href="mailto:sales@tapko.io" style="color: #6366f1; text-decoration: none;">sales@tapko.io</a>
+              </div>
+            </div>
+
+            <div class="contact-info-card">
+              <div class="contact-icon">💬</div>
+              <div>
+                <h3 style="font-size: 1.2rem; margin-bottom: 0.5rem;">Live Chat</h3>
+                <p class="text-muted" style="margin-bottom: 0.5rem;">Available Mon-Fri, 9am-5pm PST</p>
+                <button onclick="alert('Chat feature coming soon!')" class="btn btn-outline" style="margin-top: 0.5rem; padding: 0.5rem 1rem; font-size: 0.9rem;">Start Chat</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Social Links -->
+          <div style="margin-top: 3rem;">
+            <h3 style="margin-bottom: 1.5rem;">Follow Us</h3>
+            <div style="display: flex; gap: 1rem;">
+              <a href="#" class="btn btn-outline" style="padding: 0.75rem 1.5rem;">Twitter</a>
+              <a href="#" class="btn btn-outline" style="padding: 0.75rem 1.5rem;">LinkedIn</a>
+              <a href="#" class="btn btn-outline" style="padding: 0.75rem 1.5rem;">GitHub</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ Section -->
+  <section class="section section-white">
+    <div class="container">
+      <h2>Frequently Asked Questions</h2>
+      <div style="display: grid; gap: 2rem; max-width: 900px; margin: 0 auto;">
+        <div class="card">
+          <h3 style="font-size: 1.2rem; margin-bottom: 1rem;">How quickly will I get a response?</h3>
+          <p style="margin: 0;">We aim to respond to all inquiries within 24 hours during business days. For urgent technical issues, email support@tapko.io directly.</p>
+        </div>
+        <div class="card">
+          <h3 style="font-size: 1.2rem; margin-bottom: 1rem;">Do you offer phone support?</h3>
+          <p style="margin: 0;">Phone support is available for Enterprise customers. Professional plan customers can schedule calls with our support team on a case-by-case basis.</p>
+        </div>
+        <div class="card">
+          <h3 style="font-size: 1.2rem; margin-bottom: 1rem;">Can I schedule a demo?</h3>
+          <p style="margin: 0;">Absolutely! Select "Sales Inquiry" in the form above and mention you'd like a demo. We'll get back to you within one business day to schedule a time.</p>
+        </div>
+        <div class="card">
+          <h3 style="font-size: 1.2rem; margin-bottom: 1rem;">Where are you located?</h3>
+          <p style="margin: 0;">We're a distributed team with headquarters in San Francisco, CA. Our team members work from around the world to provide global support.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Map/Office Section -->
+  <section class="section">
+    <div class="container">
+      <div style="background: white; padding: 3rem; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.07); text-align: center;">
+        <h2 style="margin-bottom: 1rem;">Our Office</h2>
+        <p class="text-muted" style="font-size: 1.1rem; margin-bottom: 2rem;">
+          Visit us at our San Francisco headquarters
+        </p>
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); height: 300px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.5rem; margin-bottom: 2rem;">
+          Map View Placeholder
+        </div>
+        <div style="color: #666;">
+          <p style="font-weight: 600; margin-bottom: 0.5rem;">Tapko Inc.</p>
+          <p>123 Innovation Drive, Suite 400</p>
+          <p>San Francisco, CA 94103</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <p>&copy; 2024 Tapko. All rights reserved.</p>
+      <div class="footer-links">
+        <a href="about.html">About</a>
+        <a href="features.html">Features</a>
+        <a href="pricing.html">Pricing</a>
+        <a href="documentation.html">Documentation</a>
+        <a href="blog.html">Blog</a>
+        <a href="contact.html">Contact</a>
+      </div>
+      <p style="margin-top: 1.5rem;">Built for better user experiences</p>
+    </div>
+  </footer>
+
+  <script>
+    function toggleMobileMenu() {
+      const navLinks = document.getElementById('navLinks');
+      navLinks.classList.toggle('active');
+    }
+
+    function handleSubmit(event) {
+      event.preventDefault();
+
+      const statusDiv = document.getElementById('form-status');
+      statusDiv.style.display = 'block';
+      statusDiv.style.background = '#d1fae5';
+      statusDiv.style.color = '#065f46';
+      statusDiv.textContent = 'Thank you for your message! We\'ll get back to you within 24 hours.';
+
+      // Reset form
+      event.target.reset();
+
+      // Hide status after 5 seconds
+      setTimeout(() => {
+        statusDiv.style.display = 'none';
+      }, 5000);
+
+      return false;
+    }
+  </script>
+</body>
+</html>

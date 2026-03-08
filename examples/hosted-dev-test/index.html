@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tapko - Hosted Dev Test | Multi-Page Testing</title>
+  <link rel="stylesheet" href="shared-styles.css">
+
+  <!-- Tapko Widget -->
+  <script src="https://tapko-dev-generalbucket.s3.ap-south-1.amazonaws.com/cdn/tapko-widget.js"></script>
+  <script>
+  (async () => {
+    try {
+      await Tapko.init({
+        projectId: 'deb96c18-a253-4295-b4a0-3a784ee37f2d',
+        apiKey: 'your-api-key',
+        userId: 'user_36PrQyirxWUXgwmtnnhuXI8G4xu'
+      });
+    } catch (error) {
+      console.error('Error initializing Tapko widget:', error);
+    }
+  })();
+  </script>
+  <style>
+    .test-banner {
+      background: #fef3c7;
+      border-bottom: 2px solid #f59e0b;
+      padding: 0.75rem 2rem;
+      text-align: center;
+      font-weight: 600;
+      color: #92400e;
+    }
+
+    .page-indicator {
+      display: inline-block;
+      background: #e0e7ff;
+      color: #4338ca;
+      padding: 0.5rem 1rem;
+      border-radius: 50px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      margin-top: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <!-- Test Banner -->
+  <div class="test-banner">
+    🧪 DEV TESTING ENVIRONMENT - Multi-Page Widget Testing Ground
+  </div>
+
+  <!-- Navigation -->
+  <nav class="navbar">
+    <div class="navbar-content">
+      <a href="index.html" class="logo">Tapko</a>
+
+      <button class="mobile-menu-toggle" onclick="toggleMobileMenu()">☰</button>
+
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html">Home</a></li>
+        <li class="nav-dropdown">
+          <a href="features.html" class="nav-dropdown-toggle">
+            Features <span>▾</span>
+          </a>
+          <div class="nav-dropdown-menu">
+            <a href="features.html#integration">Easy Integration</a>
+            <a href="features.html#analytics">Smart Analytics</a>
+            <a href="features.html#customization">Customization</a>
+            <a href="features.html#collaboration">Team Collaboration</a>
+          </div>
+        </li>
+        <li><a href="pricing.html">Pricing</a></li>
+        <li><a href="documentation.html">Docs</a></li>
+        <li class="nav-dropdown">
+          <a href="blog.html" class="nav-dropdown-toggle">
+            Resources <span>▾</span>
+          </a>
+          <div class="nav-dropdown-menu">
+            <a href="blog.html">Blog</a>
+            <a href="documentation.html">Documentation</a>
+            <a href="about.html">About Us</a>
+          </div>
+        </li>
+        <li><a href="contact.html">Contact</a></li>
+        <li><a href="hosted-dev-test.html" class="active">Dev Test</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="hero-content">
+      <span class="page-indicator">HOSTED DEV TEST PAGE</span>
+      <h1>Widget Testing Ground</h1>
+      <p>This is the original hosted dev test page, now integrated into the multi-page testing site</p>
+      <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; margin-top: 2rem;">
+        <a href="index.html" class="btn btn-primary">Explore Main Site</a>
+        <a href="documentation.html" class="btn btn-outline" style="color: white; border-color: white;">Read Docs</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Navigation Testing Section -->
+  <section class="section">
+    <div class="container">
+      <h2>Test Widget Across Multiple Pages</h2>
+      <p class="text-center text-muted" style="font-size: 1.1rem; margin-bottom: 3rem;">
+        Navigate through different pages to test widget behavior, persistence, and functionality
+      </p>
+      <div class="grid grid-3">
+        <div class="card">
+          <div style="font-size: 2.5rem; margin-bottom: 1rem;">🏠</div>
+          <h3>Home Page</h3>
+          <p>Test the widget on the main landing page with hero sections and CTAs</p>
+          <a href="index.html" class="btn btn-outline mt-1" style="width: 100%; text-align: center;">Visit Home</a>
+        </div>
+        <div class="card">
+          <div style="font-size: 2.5rem; margin-bottom: 1rem;">📋</div>
+          <h3>Features Page</h3>
+          <p>Test on a content-heavy page with multiple sections and anchor links</p>
+          <a href="features.html" class="btn btn-outline mt-1" style="width: 100%; text-align: center;">Visit Features</a>
+        </div>
+        <div class="card">
+          <div style="font-size: 2.5rem; margin-bottom: 1rem;">📚</div>
+          <h3>Documentation</h3>
+          <p>Test with sidebar navigation and long-form technical content</p>
+          <a href="documentation.html" class="btn btn-outline mt-1" style="width: 100%; text-align: center;">Visit Docs</a>
+        </div>
+        <div class="card">
+          <div style="font-size: 2.5rem; margin-bottom: 1rem;">💰</div>
+          <h3>Pricing Page</h3>
+          <p>Test with pricing cards, tables, and comparison layouts</p>
+          <a href="pricing.html" class="btn btn-outline mt-1" style="width: 100%; text-align: center;">Visit Pricing</a>
+        </div>
+        <div class="card">
+          <div style="font-size: 2.5rem; margin-bottom: 1rem;">📝</div>
+          <h3>Blog</h3>
+          <p>Test on article listings and individual blog post pages</p>
+          <a href="blog.html" class="btn btn-outline mt-1" style="width: 100%; text-align: center;">Visit Blog</a>
+        </div>
+        <div class="card">
+          <div style="font-size: 2.5rem; margin-bottom: 1rem;">✉️</div>
+          <h3>Contact Form</h3>
+          <p>Test with form inputs and interactive elements</p>
+          <a href="contact.html" class="btn btn-outline mt-1" style="width: 100%; text-align: center;">Visit Contact</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Testing Instructions -->
+  <section class="section section-white">
+    <div class="container-narrow">
+      <h2>Widget Testing Checklist</h2>
+      <div class="card" style="padding: 2.5rem; text-align: left;">
+        <h3 style="margin-bottom: 1.5rem; color: #6366f1;">Test Scenarios</h3>
+        <div style="display: grid; gap: 1rem;">
+          <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
+            <input type="checkbox" style="width: 20px; height: 20px; cursor: pointer;">
+            <span>Activate widget and leave feedback on this page</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
+            <input type="checkbox" style="width: 20px; height: 20px; cursor: pointer;">
+            <span>Navigate to another page while widget is active</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
+            <input type="checkbox" style="width: 20px; height: 20px; cursor: pointer;">
+            <span>Test widget on mobile/tablet viewport sizes</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
+            <input type="checkbox" style="width: 20px; height: 20px; cursor: pointer;">
+            <span>Test dropdown navigation while widget is active</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
+            <input type="checkbox" style="width: 20px; height: 20px; cursor: pointer;">
+            <span>Test widget on documentation page with sidebar</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
+            <input type="checkbox" style="width: 20px; height: 20px; cursor: pointer;">
+            <span>Test widget on form-heavy pages (contact)</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
+            <input type="checkbox" style="width: 20px; height: 20px; cursor: pointer;">
+            <span>Test widget persistence across page navigation</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
+            <input type="checkbox" style="width: 20px; height: 20px; cursor: pointer;">
+            <span>Test scroll behavior with sticky navigation</span>
+          </label>
+        </div>
+        <div style="margin-top: 2rem; padding-top: 2rem; border-top: 2px solid #e5e7eb;">
+          <p style="color: #6366f1; font-weight: 600; font-size: 1.1rem;">
+            💡 The Tapko widget is active on ALL pages in this testing site
+          </p>
+          <p class="text-muted" style="margin-top: 0.5rem;">
+            Look for the feedback button in the bottom-right corner
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <p>&copy; 2024 Tapko. All rights reserved.</p>
+      <div class="footer-links">
+        <a href="about.html">About</a>
+        <a href="features.html">Features</a>
+        <a href="pricing.html">Pricing</a>
+        <a href="documentation.html">Documentation</a>
+        <a href="blog.html">Blog</a>
+        <a href="contact.html">Contact</a>
+      </div>
+      <p style="margin-top: 1.5rem;">Built for better user experiences</p>
+    </div>
+  </footer>
+
+  <script>
+    function toggleMobileMenu() {
+      const navLinks = document.getElementById('navLinks');
+      navLinks.classList.toggle('active');
+    }
+  </script>
+</body>
+</html>

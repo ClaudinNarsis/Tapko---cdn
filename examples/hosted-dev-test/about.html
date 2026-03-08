@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>About Us - Tapko | Dev Testing</title>
+  <link rel="stylesheet" href="shared-styles.css">
+
+  <!-- Tapko Widget -->
+  <script src="https://tapko-dev-generalbucket.s3.ap-south-1.amazonaws.com/cdn/tapko-widget.js"></script>
+  <script>
+  (async () => {
+    try {
+      await Tapko.init({
+        projectId: 'deb96c18-a253-4295-b4a0-3a784ee37f2d',
+        apiKey: 'your-api-key',
+        userId: 'user_36PrQyirxWUXgwmtnnhuXI8G4xu'
+      });
+    } catch (error) {
+      console.error('Error initializing Tapko widget:', error);
+    }
+  })();
+  </script>
+</head>
+<body>
+  <!-- Navigation -->
+  <nav class="navbar">
+    <div class="navbar-content">
+      <a href="index.html" class="logo">Tapko</a>
+
+      <button class="mobile-menu-toggle" onclick="toggleMobileMenu()">☰</button>
+
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html">Home</a></li>
+        <li class="nav-dropdown">
+          <a href="features.html" class="nav-dropdown-toggle">
+            Features <span>▾</span>
+          </a>
+          <div class="nav-dropdown-menu">
+            <a href="features.html#integration">Easy Integration</a>
+            <a href="features.html#analytics">Smart Analytics</a>
+            <a href="features.html#customization">Customization</a>
+            <a href="features.html#collaboration">Team Collaboration</a>
+          </div>
+        </li>
+        <li><a href="pricing.html">Pricing</a></li>
+        <li><a href="documentation.html">Docs</a></li>
+        <li class="nav-dropdown">
+          <a href="blog.html" class="nav-dropdown-toggle">
+            Resources <span>▾</span>
+          </a>
+          <div class="nav-dropdown-menu">
+            <a href="blog.html">Blog</a>
+            <a href="documentation.html">Documentation</a>
+            <a href="about.html" class="active">About Us</a>
+          </div>
+        </li>
+        <li><a href="contact.html">Contact</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- Breadcrumbs -->
+  <div class="container">
+    <div class="breadcrumbs">
+      <a href="index.html">Home</a> / <span>About Us</span>
+    </div>
+  </div>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="hero-content">
+      <h1>About Tapko</h1>
+      <p>Building the future of user feedback, one interaction at a time</p>
+    </div>
+  </section>
+
+  <!-- Mission Section -->
+  <section class="section">
+    <div class="container-narrow">
+      <h2>Our Mission</h2>
+      <p style="font-size: 1.2rem; text-align: center; color: #666; line-height: 1.8;">
+        We believe that every user's voice matters. Our mission is to make feedback collection
+        effortless, insightful, and actionable for businesses of all sizes. By removing barriers
+        between users and product teams, we help companies build products people truly love.
+      </p>
+    </div>
+  </section>
+
+  <!-- Story Section -->
+  <section class="section section-white">
+    <div class="container">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4rem; align-items: center;">
+        <div>
+          <h2 style="text-align: left; margin-bottom: 1.5rem;">Our Story</h2>
+          <p style="color: #666; margin-bottom: 1rem; line-height: 1.8;">
+            Tapko was founded in 2023 by a team of product managers and engineers who were frustrated
+            with traditional feedback tools. They were clunky, expensive, and often required users to
+            navigate away from the product they were using.
+          </p>
+          <p style="color: #666; margin-bottom: 1rem; line-height: 1.8;">
+            We set out to build something different - a feedback tool that feels native to your
+            application, requires minimal setup, and provides actionable insights from day one.
+          </p>
+          <p style="color: #666; line-height: 1.8;">
+            Today, thousands of companies trust Tapko to collect and analyze user feedback,
+            helping them make better product decisions faster.
+          </p>
+        </div>
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 16px; padding: 3rem; color: white;">
+          <h3 style="font-size: 2rem; margin-bottom: 2rem;">By The Numbers</h3>
+          <div style="display: grid; gap: 1.5rem;">
+            <div>
+              <div style="font-size: 2.5rem; font-weight: 700; margin-bottom: 0.5rem;">10,000+</div>
+              <div style="opacity: 0.9;">Active Projects</div>
+            </div>
+            <div>
+              <div style="font-size: 2.5rem; font-weight: 700; margin-bottom: 0.5rem;">2M+</div>
+              <div style="opacity: 0.9;">Feedback Items Collected</div>
+            </div>
+            <div>
+              <div style="font-size: 2.5rem; font-weight: 700; margin-bottom: 0.5rem;">150+</div>
+              <div style="opacity: 0.9;">Countries</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Values Section -->
+  <section class="section">
+    <div class="container">
+      <h2>Our Values</h2>
+      <div class="grid grid-3">
+        <div class="card">
+          <div style="font-size: 2.5rem; margin-bottom: 1rem;">🎯</div>
+          <h3>User-Centric</h3>
+          <p>We put users first in everything we do. Every feature we build is designed to make feedback easier and more meaningful.</p>
+        </div>
+        <div class="card">
+          <div style="font-size: 2.5rem; margin-bottom: 1rem;">🚀</div>
+          <h3>Innovation</h3>
+          <p>We're constantly pushing boundaries to create better ways to collect and analyze user feedback.</p>
+        </div>
+        <div class="card">
+          <div style="font-size: 2.5rem; margin-bottom: 1rem;">🤝</div>
+          <h3>Transparency</h3>
+          <p>We believe in open communication and honest relationships with our customers and team members.</p>
+        </div>
+        <div class="card">
+          <div style="font-size: 2.5rem; margin-bottom: 1rem;">⚡</div>
+          <h3>Speed</h3>
+          <p>Fast integration, fast insights, fast support. We respect your time and move quickly.</p>
+        </div>
+        <div class="card">
+          <div style="font-size: 2.5rem; margin-bottom: 1rem;">🌍</div>
+          <h3>Accessibility</h3>
+          <p>Great tools shouldn't be exclusive. We make Tapko accessible to businesses of all sizes.</p>
+        </div>
+        <div class="card">
+          <div style="font-size: 2.5rem; margin-bottom: 1rem;">💪</div>
+          <h3>Reliability</h3>
+          <p>Your feedback is critical. We maintain 99.9% uptime and enterprise-grade security.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Team Section -->
+  <section class="section section-white">
+    <div class="container">
+      <h2>Meet The Team</h2>
+      <div class="grid grid-4">
+        <div class="card text-center">
+          <div style="width: 120px; height: 120px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); margin: 0 auto 1.5rem; display: flex; align-items: center; justify-content: center; color: white; font-size: 2.5rem; font-weight: 700;">AK</div>
+          <h3 style="font-size: 1.2rem; margin-bottom: 0.5rem;">Alex Kim</h3>
+          <p style="color: #6366f1; font-weight: 600; margin-bottom: 1rem;">CEO & Co-Founder</p>
+          <p style="font-size: 0.9rem;">Former product lead at major SaaS companies. Passionate about user experience.</p>
+        </div>
+        <div class="card text-center">
+          <div style="width: 120px; height: 120px; border-radius: 50%; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); margin: 0 auto 1.5rem; display: flex; align-items: center; justify-content: center; color: white; font-size: 2.5rem; font-weight: 700;">SM</div>
+          <h3 style="font-size: 1.2rem; margin-bottom: 0.5rem;">Sarah Martinez</h3>
+          <p style="color: #6366f1; font-weight: 600; margin-bottom: 1rem;">CTO & Co-Founder</p>
+          <p style="font-size: 0.9rem;">Engineering veteran with expertise in scalable systems and developer tools.</p>
+        </div>
+        <div class="card text-center">
+          <div style="width: 120px; height: 120px; border-radius: 50%; background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); margin: 0 auto 1.5rem; display: flex; align-items: center; justify-content: center; color: white; font-size: 2.5rem; font-weight: 700;">JC</div>
+          <h3 style="font-size: 1.2rem; margin-bottom: 0.5rem;">James Chen</h3>
+          <p style="color: #6366f1; font-weight: 600; margin-bottom: 1rem;">Head of Product</p>
+          <p style="font-size: 0.9rem;">Product strategist who loves turning user feedback into product innovation.</p>
+        </div>
+        <div class="card text-center">
+          <div style="width: 120px; height: 120px; border-radius: 50%; background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); margin: 0 auto 1.5rem; display: flex; align-items: center; justify-content: center; color: white; font-size: 2.5rem; font-weight: 700;">EP</div>
+          <h3 style="font-size: 1.2rem; margin-bottom: 0.5rem;">Emma Patel</h3>
+          <p style="color: #6366f1; font-weight: 600; margin-bottom: 1rem;">Head of Design</p>
+          <p style="font-size: 0.9rem;">UX expert focused on creating intuitive, delightful user experiences.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA Section -->
+  <section class="section">
+    <div class="container-narrow text-center">
+      <h2>Join Us On Our Journey</h2>
+      <p class="text-muted" style="font-size: 1.1rem; margin-bottom: 2rem;">
+        Whether you're looking to improve your product or join our team, we'd love to hear from you
+      </p>
+      <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+        <a href="contact.html" class="btn btn-secondary">Get In Touch</a>
+        <a href="documentation.html" class="btn btn-outline">Try Tapko Free</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <p>&copy; 2024 Tapko. All rights reserved.</p>
+      <div class="footer-links">
+        <a href="about.html">About</a>
+        <a href="features.html">Features</a>
+        <a href="pricing.html">Pricing</a>
+        <a href="documentation.html">Documentation</a>
+        <a href="blog.html">Blog</a>
+        <a href="contact.html">Contact</a>
+      </div>
+      <p style="margin-top: 1.5rem;">Built for better user experiences</p>
+    </div>
+  </footer>
+
+  <script>
+    function toggleMobileMenu() {
+      const navLinks = document.getElementById('navLinks');
+      navLinks.classList.toggle('active');
+    }
+  </script>
+</body>
+</html>
