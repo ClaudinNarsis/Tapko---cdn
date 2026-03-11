@@ -669,9 +669,7 @@ import debugLogger from './utils/DebugLogger.js';
      * @param {Object} screenshotData - Screenshot data (dataURL and metadata)
      */
     _enterDrawingMode(onComplete, screenshotData, existingAnnotations = null) {
-      // CRITICAL MEMORY FIX: Destroy existing drawing canvas before creating new one
       if (this.drawingCanvas) {
-        console.warn('[Tapko] Drawing canvas already exists, destroying before creating new one');
         this.drawingCanvas.destroy();
         this.drawingCanvas = null;
       }

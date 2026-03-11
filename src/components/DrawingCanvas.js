@@ -69,85 +69,43 @@ class DrawingCanvas {
    */
   async create(onDoneCallback, onCancelCallback, shadowRoot = document.body, screenshotData = null, onTapCallback = null, existingAnnotations = null) {
     debugLogger.startOperation('Create DrawingCanvas');
-    debugLogger.logMemory('Before creating drawing canvas');
 
     if (this.container) {
-      debugLogger.info('DrawingCanvas already created, skipping');
-      return; // Already created
+      return;
     }
-
-    console.log('[Tapko DrawingCanvas] create() called with:', {
-      hasScreenshotData: !!screenshotData,
-      hasExistingAnnotations: !!existingAnnotations,
-      existingAnnotationsPathCount: existingAnnotations?.paths?.length,
-      existingAnnotations: existingAnnotations
-    });
-
-    debugLogger.info('DrawingCanvas create parameters', {
-      hasScreenshotData: !!screenshotData,
-      screenshotDataURLLength: screenshotData?.dataURL?.length,
-      hasExistingAnnotations: !!existingAnnotations,
-      annotationPathCount: existingAnnotations?.paths?.length
-    });
 
     this.onDone = onDoneCallback;
     this.onCancel = onCancelCallback;
     this.onTap = onTapCallback;
     this.screenshotData = screenshotData;
 
-    // Create container
     this.container = createElement('div', `${CONFIG.CLASS_PREFIX}drawing-container`);
 
-    // Create canvas
     this.canvas = document.createElement('canvas');
     this.canvas.className = `${CONFIG.CLASS_PREFIX}drawing-canvas`;
 
-    // Set canvas size to 90% of viewport to match CSS
-    // Use DPR of 1 to minimize memory usage and prevent crashes
-    const dpr = 1; // Force DPR to 1 for memory efficiency
+    const dpr = 1;
     const canvasWidth = window.innerWidth * 0.9;
     const canvasHeight = window.innerHeight * 0.9;
-
-    debugLogger.info('Creating drawing canvas', {
-      canvasWidth: canvasWidth * dpr,
-      canvasHeight: canvasHeight * dpr,
-      dpr,
-      totalPixels: (canvasWidth * dpr) * (canvasHeight * dpr)
-    });
 
     this.canvas.width = canvasWidth * dpr;
     this.canvas.height = canvasHeight * dpr;
     this.canvas.style.width = `${canvasWidth}px`;
     this.canvas.style.height = `${canvasHeight}px`;
 
-    console.log('[Tapko] Canvas created:', this.canvas.width, 'x', this.canvas.height, 'Memory-safe mode (DPR=1)');
-
     this.ctx = this.canvas.getContext('2d');
     this.ctx.scale(dpr, dpr);
 
-    // NEW: Draw screenshot as background if provided
     if (screenshotData && screenshotData.dataURL) {
       try {
-        debugLogger.info('Drawing screenshot background');
         await this._drawScreenshotBackground(screenshotData.dataURL);
-        debugLogger.info('Screenshot background drawn successfully');
       } catch (error) {
-        debugLogger.error('Failed to load screenshot background', {
-          error: error.message,
-          stack: error.stack
-        });
         console.error('[Tapko] Failed to load screenshot background:', error);
-        // Continue anyway - user can still draw without background
         alert('Failed to load screenshot. You can still annotate, but the background may be missing.');
       }
     }
 
-    // NEW: Restore existing annotations if provided (reopening scenario)
     if (existingAnnotations && existingAnnotations.paths) {
-      debugLogger.info('Restoring existing annotations', {
-        pathCount: existingAnnotations.paths.length
-      });
-      console.log('[Tapko] Restoring', existingAnnotations.paths.length, 'existing annotations');
       this.paths = JSON.parse(JSON.stringify(existingAnnotations.paths)); // Deep copy to prevent mutations
       if (existingAnnotations.strokeColor) {
         this.strokeColor = existingAnnotations.strokeColor;
@@ -1082,50 +1040,14 @@ class DrawingCanvas {
   async _drawScreenshotBackground(dataURL) {
     if (!dataURL) return;
 
-    debugLogger.startOperation('Draw screenshot background to canvas', {
-      dataURLLength: dataURL.length
-    });
+    debugLogger.startOperation('Draw screenshot background to canvas');
 
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.onload = () => {
-        const imagePixels = img.width * img.height;
-        const estimatedMemory = imagePixels * 4;
-
-        debugLogger.info('Screenshot image loaded', {
-          width: img.width,
-          height: img.height,
-          totalPixels: imagePixels,
-          estimatedMemoryMB: (estimatedMemory / 1024 / 1024).toFixed(2)
-        });
-
-        debugLogger.logMemory('After screenshot image loaded in DrawingCanvas', {
-          operation: 'screenshot image loaded',
-          imageSize: `${img.width}x${img.height}`
-        });
-
-        console.log('[Tapko] Screenshot loaded for canvas:', img.width, 'x', img.height);
-
         try {
-          debugLogger.info('START: Draw image to canvas');
-
-          debugLogger.logMemory('Before drawImage in DrawingCanvas', {
-            operation: 'about to draw screenshot to drawing canvas'
-          });
-
           this._drawImageToCanvas(img);
-
-          debugLogger.logMemory('After drawImage in DrawingCanvas', {
-            operation: 'screenshot drawn to drawing canvas'
-          });
-
-          debugLogger.info('END: Image drawn to canvas successfully');
           this.screenshotImage = img;
-
-          // Log memory delta
-          debugLogger.logMemoryDelta('After screenshot image loaded in DrawingCanvas', 'After drawImage in DrawingCanvas', {
-            operation: 'DrawingCanvas screenshot rendering'
-          });
 
           debugLogger.endOperation('Draw screenshot background to canvas', { success: true });
           resolve();
@@ -1233,21 +1155,17 @@ class DrawingCanvas {
         this._hideTextInput();
       }
 
-      // CRITICAL MEMORY FIX: Clear canvas and screenshot references immediately
-      // This prevents memory leaks between screenshot operations
+      // Clean up canvas and screenshot references to prevent memory leaks
       if (this.canvas) {
-        // Clear canvas pixel buffer
         this.canvas.width = 0;
         this.canvas.height = 0;
       }
 
-      // Clear screenshot image reference
       if (this.screenshotImage) {
         this.screenshotImage.src = '';
         this.screenshotImage = null;
       }
 
-      // Clear screenshot data URL
       if (this.screenshotData) {
         this.screenshotData = null;
       }
