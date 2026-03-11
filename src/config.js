@@ -50,7 +50,7 @@ export const CONFIG = {
 
   // Debug Configuration
   DEBUG: {
-    enabled: false, // Set to true to enable debug mode by default
+    enabled: false,
     storageKeys: {
       LOGS: 'tapko_debug_logs',
       ACTIVE_OPERATION: 'tapko_debug_active_operation',
@@ -58,8 +58,8 @@ export const CONFIG = {
       DEBUG_MODE: 'tapko_debug_mode'
     },
     maxLogs: 200,
-    maxCanvasSize: 4096, // Maximum canvas dimension (for future fix)
-    maxPixels: 16777216 // Maximum total pixels (4096 * 4096)
+    maxCanvasSize: 4096,
+    maxPixels: 16777216
   },
 
   // Event names

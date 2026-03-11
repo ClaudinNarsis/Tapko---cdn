@@ -44,6 +44,9 @@ import debugLogger from './utils/DebugLogger.js';
 (function (window, document) {
   'use strict';
 
+  // Expose CONFIG globally for DebugLogger
+  window.TapkoConfig = CONFIG;
+
   // Prevent multiple initializations
   if (window[CONFIG.NAMESPACE]) {
     console.warn('[Tapko] Widget already initialized');
@@ -141,6 +144,91 @@ import debugLogger from './utils/DebugLogger.js';
         version: CONFIG.VERSION,
         url: window.location.href
       });
+
+      // Expose debug utilities globally for easy access
+      window.TapkoDebug = {
+        // Download memory report
+        downloadMemoryReport: () => {
+          debugLogger.downloadMemoryReport();
+        },
+
+        // Download all logs
+        downloadLogs: () => {
+          debugLogger.downloadLogs(`tapko-logs-${Date.now()}.json`);
+        },
+
+        // View memory report in console
+        viewMemoryReport: () => {
+          const report = debugLogger.getMemoryReport();
+          console.log('='.repeat(60));
+          console.log('TAPKO MEMORY REPORT');
+          console.log('='.repeat(60));
+          console.log('Total Checkpoints:', report.totalCheckpoints);
+          if (report.largestIncrease) {
+            console.log('\nLARGEST MEMORY INCREASE:');
+            console.log(`  From: ${report.largestIncrease.from}`);
+            console.log(`  To: ${report.largestIncrease.to}`);
+            console.log(`  Delta: ${report.largestIncrease.deltaFormatted} (${report.largestIncrease.percentChange}%)`);
+          }
+          console.log('\nAll deltas:');
+          report.deltas.forEach(d => {
+            console.log(`  ${d.from} → ${d.to}: ${d.deltaFormatted} (${d.percentChange}%)`);
+          });
+          console.log('\nFull report object:', report);
+          return report;
+        },
+
+        // View all logs
+        viewLogs: () => {
+          const logs = debugLogger.getLogs();
+          console.log('='.repeat(60));
+          console.log(`TAPKO LOGS (${logs.length} entries)`);
+          console.log('='.repeat(60));
+          logs.forEach((log, i) => {
+            console.log(`${i + 1}. [${log.level}] ${log.message}`, log.data || '');
+          });
+          return logs;
+        },
+
+        // Enable debug mode
+        enable: () => {
+          debugLogger.enableDebugMode();
+          console.log('✅ Debug mode enabled. Reload page to start fresh logging.');
+        },
+
+        // Disable debug mode
+        disable: () => {
+          debugLogger.disableDebugMode();
+          console.log('✅ Debug mode disabled.');
+        },
+
+        // Clear all debug data
+        clear: () => {
+          debugLogger.clearAll();
+          localStorage.removeItem('tapko_memory_checkpoints');
+          console.log('✅ All debug data cleared.');
+        },
+
+        // Check crash status
+        checkCrash: () => {
+          const crash = debugLogger.detectCrash();
+          if (crash.crashed) {
+            console.log('🚨 CRASH DETECTED during:', crash.operation.name);
+            console.log('Details:', crash);
+          } else {
+            console.log('✅ No crash detected');
+          }
+          return crash;
+        }
+      };
+
+      console.log('[Tapko Debug] Utilities available at window.TapkoDebug');
+      console.log('  TapkoDebug.downloadMemoryReport() - Download memory analysis');
+      console.log('  TapkoDebug.downloadLogs()         - Download all logs');
+      console.log('  TapkoDebug.viewMemoryReport()     - View memory in console');
+      console.log('  TapkoDebug.viewLogs()             - View all logs');
+      console.log('  TapkoDebug.enable()               - Enable debug mode');
+      console.log('  TapkoDebug.checkCrash()           - Check for crashes');
     }
 
     /**
@@ -581,7 +669,10 @@ import debugLogger from './utils/DebugLogger.js';
      * @param {Object} screenshotData - Screenshot data (dataURL and metadata)
      */
     _enterDrawingMode(onComplete, screenshotData, existingAnnotations = null) {
-      if (this.drawingCanvas) return;
+      if (this.drawingCanvas) {
+        this.drawingCanvas.destroy();
+        this.drawingCanvas = null;
+      }
 
       // Hide overlay and its snackbar while drawing
       if (this.feedbackOverlay) {
