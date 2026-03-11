@@ -14,6 +14,10 @@
 import { ScreenshotPermissionOverlay } from '../components/ScreenshotPermissionOverlay.js';
 import debugLogger from './DebugLogger.js';
 
+// CRITICAL MEMORY FIX: Rate limiter to prevent rapid consecutive captures
+// This allows time for GPU memory to be released between captures
+let lastCaptureTime = 0;
+const MIN_CAPTURE_INTERVAL = 1000; // 1 second minimum between captures
 
 /**
  * Load html-to-image library dynamically
@@ -41,6 +45,52 @@ async function captureViewportScreenshot(options = {}) {
   debugLogger.startOperation('Capture viewport screenshot');
   debugLogger.logMemory('Before screenshot capture');
 
+  // CRITICAL MEMORY FIX: Rate limit to prevent rapid consecutive captures
+  // GPU/video memory needs time to be released between captures
+  const now = Date.now();
+  const timeSinceLastCapture = now - lastCaptureTime;
+
+  if (timeSinceLastCapture < MIN_CAPTURE_INTERVAL && lastCaptureTime !== 0) {
+    const waitTime = MIN_CAPTURE_INTERVAL - timeSinceLastCapture;
+    console.warn(`[Tapko] Rate limiting: waiting ${waitTime}ms before next capture to allow GPU memory release`);
+    debugLogger.warn('Rate limiting screenshot capture', {
+      timeSinceLastCapture,
+      waitTime,
+      reason: 'GPU memory release'
+    });
+    await new Promise(resolve => setTimeout(resolve, waitTime));
+  }
+
+  lastCaptureTime = Date.now();
+
+  // CRITICAL MEMORY FIX: Check memory before attempting capture
+  // If memory is already elevated, delay and try garbage collection first
+  if (performance.memory) {
+    const memoryPercent = (performance.memory.usedJSHeapSize / performance.memory.jsHeapSizeLimit) * 100;
+    debugLogger.info('Pre-capture memory check', {
+      usedMB: (performance.memory.usedJSHeapSize / 1024 / 1024).toFixed(2),
+      limitMB: (performance.memory.jsHeapSizeLimit / 1024 / 1024).toFixed(2),
+      percentUsed: memoryPercent.toFixed(2)
+    });
+
+    // If memory usage is high (>1.2%), force a small delay to allow garbage collection
+    if (memoryPercent > 1.2) {
+      console.warn('[Tapko] Memory usage elevated, delaying to allow cleanup...');
+      debugLogger.warn('Memory usage elevated before capture', { percentUsed: memoryPercent.toFixed(2) });
+
+      // Small delay to allow browser GC to run
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Check memory again after delay
+      const newPercent = (performance.memory.usedJSHeapSize / performance.memory.jsHeapSizeLimit) * 100;
+      debugLogger.info('Memory after GC delay', {
+        usedMB: (performance.memory.usedJSHeapSize / 1024 / 1024).toFixed(2),
+        percentUsed: newPercent.toFixed(2),
+        wasReduced: newPercent < memoryPercent
+      });
+    }
+  }
+
   const timingStart = performance.now();
   console.log('[Tapko] Starting viewport capture with Screen Capture API...');
 
@@ -57,13 +107,28 @@ async function captureViewportScreenshot(options = {}) {
 
     // CRITICAL FIX: Cap maximum resolution to prevent browser crashes
     // High-DPI displays (Retina, 4K) can request massive resolutions that crash the browser
-    // Safe maximum: 1920x1080 (Full HD)
-    const MAX_WIDTH = 1920;
-    const MAX_HEIGHT = 1080;
+    // Screen Capture API allocates GPU/video memory which can exhaust even with low JS heap usage
+    // Safe maximum: 1280x720 (720p) - Conservative limit to prevent GPU memory exhaustion
+    const MAX_WIDTH = 1280;
+    const MAX_HEIGHT = 720;
 
-    // Calculate safe dimensions - don't multiply by DPR to avoid oversized captures
-    const idealWidth = Math.min(viewportWidth, MAX_WIDTH);
-    const idealHeight = Math.min(viewportHeight, MAX_HEIGHT);
+    // Calculate safe dimensions - scale down if viewport exceeds limits
+    // Don't multiply by DPR to avoid oversized captures
+    let idealWidth = viewportWidth;
+    let idealHeight = viewportHeight;
+
+    // If viewport exceeds max dimensions, scale down proportionally
+    if (viewportWidth > MAX_WIDTH || viewportHeight > MAX_HEIGHT) {
+      const scale = Math.min(MAX_WIDTH / viewportWidth, MAX_HEIGHT / viewportHeight);
+      idealWidth = Math.floor(viewportWidth * scale);
+      idealHeight = Math.floor(viewportHeight * scale);
+
+      debugLogger.warn('Viewport exceeds safe limits, scaling down', {
+        originalViewport: `${viewportWidth}x${viewportHeight}`,
+        scaledViewport: `${idealWidth}x${idealHeight}`,
+        scale: scale.toFixed(3)
+      });
+    }
 
     debugLogger.info('Viewport info collected', {
       viewportWidth,
@@ -107,13 +172,19 @@ async function captureViewportScreenshot(options = {}) {
       });
 
       debugLogger.info('END: Permission granted, stream obtained');
+      debugLogger.logMemory('After permission granted', { operation: 'getDisplayMedia completed' });
 
       // Get actual stream settings
       const track = stream.getVideoTracks()[0];
       const settings = track.getSettings();
+      const actualStreamSize = settings.width * settings.height;
+      const estimatedStreamMemory = actualStreamSize * 4; // RGBA bytes
+
       debugLogger.info('Stream video track settings', {
         width: settings.width,
         height: settings.height,
+        totalPixels: actualStreamSize,
+        estimatedMemoryMB: (estimatedStreamMemory / 1024 / 1024).toFixed(2),
         frameRate: settings.frameRate,
         aspectRatio: settings.aspectRatio
       });
@@ -126,6 +197,8 @@ async function captureViewportScreenshot(options = {}) {
 
       // Hide shadow host for clean screenshot (unless we want to keep widget visible)
       if (shadowHost && !keepWidgetVisible) shadowHost.style.display = 'none';
+
+      debugLogger.logMemory('Before creating video element');
 
       // Create video element to capture the stream
       const video = document.createElement('video');
@@ -140,38 +213,90 @@ async function captureViewportScreenshot(options = {}) {
         setTimeout(() => reject(new Error('Video load timeout')), 5000);
       });
 
+      debugLogger.logMemory('After video metadata loaded');
+
       // Small delay to ensure first frame is rendered
       await new Promise(resolve => setTimeout(resolve, 100));
 
       // Create canvas and capture frame
+      const canvasPixels = video.videoWidth * video.videoHeight;
+      const estimatedCanvasMemory = canvasPixels * 4;
+
       debugLogger.info('Creating canvas for frame capture', {
         videoWidth: video.videoWidth,
         videoHeight: video.videoHeight,
-        totalPixels: video.videoWidth * video.videoHeight
+        totalPixels: canvasPixels,
+        estimatedMemoryMB: (estimatedCanvasMemory / 1024 / 1024).toFixed(2)
+      });
+
+      debugLogger.logMemory('Before canvas creation', {
+        operation: 'about to create canvas',
+        size: `${video.videoWidth}x${video.videoHeight}`
       });
 
       const canvas = document.createElement('canvas');
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
 
+      debugLogger.logMemory('After canvas creation', {
+        operation: 'canvas created',
+        size: `${canvas.width}x${canvas.height}`
+      });
+
       debugLogger.info('START: Draw video frame to canvas');
       const ctx = canvas.getContext('2d');
+
+      debugLogger.logMemory('Before drawImage', { operation: 'about to draw video to canvas' });
+
       ctx.drawImage(video, 0, 0);
+
+      debugLogger.logMemory('After drawImage', { operation: 'video drawn to canvas' });
       debugLogger.info('END: Video frame drawn to canvas');
 
       // Stop all tracks
       stream.getTracks().forEach(track => track.stop());
 
-      debugLogger.logMemory('Before toDataURL conversion');
+      debugLogger.logMemory('Before toDataURL conversion', {
+        operation: 'about to convert canvas to dataURL',
+        quality: 0.85,
+        format: 'image/jpeg'
+      });
 
       // Convert to JPEG data URL
       debugLogger.info('START: Convert canvas to dataURL');
       const dataURL = canvas.toDataURL('image/jpeg', 0.85);
-      debugLogger.info('END: Conversion to dataURL complete', {
-        dataURLLength: dataURL.length
+
+      debugLogger.logMemory('After toDataURL conversion', {
+        operation: 'toDataURL completed',
+        dataURLLength: dataURL.length,
+        dataURLSizeMB: (dataURL.length / 1024 / 1024).toFixed(2)
       });
 
-      debugLogger.logMemory('After toDataURL conversion');
+      debugLogger.info('END: Conversion to dataURL complete', {
+        dataURLLength: dataURL.length,
+        dataURLSizeMB: (dataURL.length / 1024 / 1024).toFixed(2)
+      });
+
+      // Log memory delta for this operation
+      debugLogger.logMemoryDelta('Before screenshot capture', 'After toDataURL conversion', {
+        operation: 'Complete screenshot capture'
+      });
+
+      // CRITICAL MEMORY FIX: Explicitly clean up temporary objects to prevent memory leaks
+      // Without this cleanup, memory accumulates between screenshots causing crashes
+      debugLogger.info('START: Cleaning up video and canvas references');
+
+      // Clear video element
+      video.srcObject = null;
+      video.src = '';
+      video.load(); // Force release of media resources
+
+      // Clear canvas to release pixel buffer
+      canvas.width = 0;
+      canvas.height = 0;
+
+      debugLogger.info('END: Temporary objects cleaned up');
+      debugLogger.logMemory('After cleanup');
 
       console.log(`[Tapko] Snapshot success. DataURL length: ${dataURL.length}`);
 

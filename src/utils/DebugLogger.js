@@ -36,11 +36,22 @@ class DebugLogger {
    * Check if debug mode is enabled
    */
   isDebugMode() {
+    // Check if CONFIG is available (may not be during import)
+    let configEnabled = false;
+    try {
+      // Dynamic import to avoid circular dependency
+      if (typeof window !== 'undefined' && window.TapkoConfig) {
+        configEnabled = window.TapkoConfig.DEBUG.enabled;
+      }
+    } catch (e) {
+      // CONFIG not available yet
+    }
+
     const urlParams = new URLSearchParams(window.location.search);
     const urlDebug = urlParams.get('tapko_debug') === 'true';
     const storageDebug = localStorage.getItem(STORAGE_KEYS.DEBUG_MODE) === 'true';
 
-    return urlDebug || storageDebug;
+    return configEnabled || urlDebug || storageDebug;
   }
 
   /**
@@ -451,13 +462,152 @@ class DebugLogger {
   }
 
   /**
-   * Log memory state
+   * Log memory state with detailed analysis
    */
-  logMemory(label = 'Memory') {
+  logMemory(label = 'Memory', additionalContext = {}) {
     const snapshot = this.getMemorySnapshot();
     if (snapshot) {
-      this.debug(`${label} - ${snapshot.formatted.used} / ${snapshot.formatted.limit} (${snapshot.usedPercent}%)`, snapshot);
+      const memoryData = {
+        ...snapshot,
+        ...additionalContext,
+        label,
+        timestamp: Date.now()
+      };
+
+      this.info(`${label} - ${snapshot.formatted.used} / ${snapshot.formatted.limit} (${snapshot.usedPercent}%)`, memoryData);
+
+      // Store memory checkpoint for comparison
+      this._storeMemoryCheckpoint(label, snapshot);
+    } else {
+      this.warn(`${label} - Memory API not available (non-Chrome browser)`);
     }
+  }
+
+  /**
+   * Store memory checkpoint for tracking
+   */
+  _storeMemoryCheckpoint(label, snapshot) {
+    try {
+      const checkpoints = this._getMemoryCheckpoints();
+      checkpoints.push({
+        label,
+        timestamp: Date.now(),
+        ...snapshot
+      });
+
+      // Keep last 50 checkpoints
+      const trimmed = checkpoints.slice(-50);
+      localStorage.setItem('tapko_memory_checkpoints', JSON.stringify(trimmed));
+    } catch (e) {
+      // Ignore storage errors
+    }
+  }
+
+  /**
+   * Get memory checkpoints
+   */
+  _getMemoryCheckpoints() {
+    try {
+      const data = localStorage.getItem('tapko_memory_checkpoints');
+      return data ? JSON.parse(data) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /**
+   * Get memory delta between two checkpoints
+   */
+  getMemoryDelta(fromLabel, toLabel) {
+    const checkpoints = this._getMemoryCheckpoints();
+    const from = checkpoints.find(c => c.label === fromLabel);
+    const to = checkpoints.find(c => c.label === toLabel);
+
+    if (from && to) {
+      return {
+        delta: to.usedJSHeapSize - from.usedJSHeapSize,
+        deltaFormatted: this.formatBytes(Math.abs(to.usedJSHeapSize - from.usedJSHeapSize)),
+        percentChange: ((to.usedJSHeapSize - from.usedJSHeapSize) / from.usedJSHeapSize * 100).toFixed(2),
+        from: from.formatted.used,
+        to: to.formatted.used
+      };
+    }
+    return null;
+  }
+
+  /**
+   * Log memory delta
+   */
+  logMemoryDelta(fromLabel, toLabel, context = {}) {
+    const delta = this.getMemoryDelta(fromLabel, toLabel);
+    if (delta) {
+      this.info(`Memory Change [${fromLabel} → ${toLabel}]: ${delta.deltaFormatted} (${delta.percentChange}%)`, {
+        ...delta,
+        ...context
+      });
+    }
+  }
+
+  /**
+   * Get memory report for all checkpoints
+   */
+  getMemoryReport() {
+    const checkpoints = this._getMemoryCheckpoints();
+    if (checkpoints.length === 0) {
+      return { message: 'No memory checkpoints available' };
+    }
+
+    const report = {
+      totalCheckpoints: checkpoints.length,
+      firstCheckpoint: checkpoints[0],
+      lastCheckpoint: checkpoints[checkpoints.length - 1],
+      checkpoints: checkpoints,
+      deltas: []
+    };
+
+    // Calculate deltas between consecutive checkpoints
+    for (let i = 1; i < checkpoints.length; i++) {
+      const prev = checkpoints[i - 1];
+      const curr = checkpoints[i];
+      const delta = curr.usedJSHeapSize - prev.usedJSHeapSize;
+
+      report.deltas.push({
+        from: prev.label,
+        to: curr.label,
+        delta,
+        deltaFormatted: this.formatBytes(Math.abs(delta)),
+        percentChange: ((delta / prev.usedJSHeapSize) * 100).toFixed(2),
+        timestamp: curr.timestamp
+      });
+    }
+
+    // Find largest memory increase
+    if (report.deltas.length > 0) {
+      const largest = report.deltas.reduce((max, d) => d.delta > max.delta ? d : max);
+      report.largestIncrease = largest;
+    }
+
+    return report;
+  }
+
+  /**
+   * Download memory report
+   */
+  downloadMemoryReport() {
+    const report = this.getMemoryReport();
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `tapko-memory-report-${Date.now()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    console.log('[Tapko Debug] Memory report downloaded');
+    console.log('Largest memory increase:', report.largestIncrease);
   }
 }
 

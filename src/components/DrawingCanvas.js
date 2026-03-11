@@ -1089,18 +1089,44 @@ class DrawingCanvas {
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.onload = () => {
+        const imagePixels = img.width * img.height;
+        const estimatedMemory = imagePixels * 4;
+
         debugLogger.info('Screenshot image loaded', {
           width: img.width,
           height: img.height,
-          totalPixels: img.width * img.height
+          totalPixels: imagePixels,
+          estimatedMemoryMB: (estimatedMemory / 1024 / 1024).toFixed(2)
         });
+
+        debugLogger.logMemory('After screenshot image loaded in DrawingCanvas', {
+          operation: 'screenshot image loaded',
+          imageSize: `${img.width}x${img.height}`
+        });
+
         console.log('[Tapko] Screenshot loaded for canvas:', img.width, 'x', img.height);
 
         try {
           debugLogger.info('START: Draw image to canvas');
+
+          debugLogger.logMemory('Before drawImage in DrawingCanvas', {
+            operation: 'about to draw screenshot to drawing canvas'
+          });
+
           this._drawImageToCanvas(img);
+
+          debugLogger.logMemory('After drawImage in DrawingCanvas', {
+            operation: 'screenshot drawn to drawing canvas'
+          });
+
           debugLogger.info('END: Image drawn to canvas successfully');
           this.screenshotImage = img;
+
+          // Log memory delta
+          debugLogger.logMemoryDelta('After screenshot image loaded in DrawingCanvas', 'After drawImage in DrawingCanvas', {
+            operation: 'DrawingCanvas screenshot rendering'
+          });
+
           debugLogger.endOperation('Draw screenshot background to canvas', { success: true });
           resolve();
         } catch (error) {
@@ -1205,6 +1231,25 @@ class DrawingCanvas {
       // Cleanup text input
       if (this.textInput) {
         this._hideTextInput();
+      }
+
+      // CRITICAL MEMORY FIX: Clear canvas and screenshot references immediately
+      // This prevents memory leaks between screenshot operations
+      if (this.canvas) {
+        // Clear canvas pixel buffer
+        this.canvas.width = 0;
+        this.canvas.height = 0;
+      }
+
+      // Clear screenshot image reference
+      if (this.screenshotImage) {
+        this.screenshotImage.src = '';
+        this.screenshotImage = null;
+      }
+
+      // Clear screenshot data URL
+      if (this.screenshotData) {
+        this.screenshotData = null;
       }
 
       setTimeout(() => {

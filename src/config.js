@@ -50,7 +50,7 @@ export const CONFIG = {
 
   // Debug Configuration
   DEBUG: {
-    enabled: false, // Set to true to enable debug mode by default
+    enabled: true, // TEMPORARILY ENABLED FOR CRASH DIAGNOSIS
     storageKeys: {
       LOGS: 'tapko_debug_logs',
       ACTIVE_OPERATION: 'tapko_debug_active_operation',

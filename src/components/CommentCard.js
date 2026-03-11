@@ -1145,7 +1145,10 @@ class CommentCard {
             estimatedMemoryMB: (estimatedMemory / 1024 / 1024).toFixed(2)
           });
 
-          debugLogger.logMemory('Before resize operation');
+          debugLogger.logMemory('After image load', {
+            operation: 'image loaded into memory',
+            imageSize: `${originalWidth}x${originalHeight}`
+          });
 
           console.log('[Tapko] Original screenshot size:', originalWidth, 'x', originalHeight);
 
@@ -1155,37 +1158,82 @@ class CommentCard {
             const scale = Math.min(maxDimension / originalWidth, maxDimension / originalHeight);
             const width = Math.floor(originalWidth * scale);
             const height = Math.floor(originalHeight * scale);
+            const resizedPixels = width * height;
+            const resizedMemory = resizedPixels * 4;
 
             debugLogger.info('Resizing needed', {
               targetWidth: width,
               targetHeight: height,
+              targetPixels: resizedPixels,
+              targetMemoryMB: (resizedMemory / 1024 / 1024).toFixed(2),
               scale: scale.toFixed(3)
             });
 
             console.log('[Tapko] Resizing screenshot to:', width, 'x', height);
 
             // Create canvas to resize
+            debugLogger.logMemory('Before resize canvas creation', {
+              operation: 'about to create resize canvas',
+              targetSize: `${width}x${height}`
+            });
+
             debugLogger.info('START: Canvas creation', { width, height });
             const canvas = document.createElement('canvas');
             canvas.width = width;
             canvas.height = height;
+
+            debugLogger.logMemory('After resize canvas creation', {
+              operation: 'resize canvas created',
+              canvasSize: `${width}x${height}`
+            });
             debugLogger.info('END: Canvas created successfully');
 
             debugLogger.info('START: Draw image to canvas');
+            debugLogger.logMemory('Before drawImage in resize', {
+              operation: 'about to draw image to resize canvas'
+            });
+
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, width, height);
+
+            debugLogger.logMemory('After drawImage in resize', {
+              operation: 'image drawn to resize canvas'
+            });
             debugLogger.info('END: Image drawn to canvas');
 
-            debugLogger.logMemory('Before toDataURL conversion');
+            debugLogger.logMemory('Before resize toDataURL', {
+              operation: 'about to convert resize canvas to dataURL',
+              quality: 0.9,
+              format: 'image/jpeg'
+            });
 
             // Convert to JPEG with good quality
             debugLogger.critical('START: Convert to dataURL - THIS IS THE CRASH POINT');
             const resizedDataURL = canvas.toDataURL('image/jpeg', 0.9);
-            debugLogger.info('END: toDataURL conversion complete', {
-              resultLength: resizedDataURL.length
+
+            debugLogger.logMemory('After resize toDataURL', {
+              operation: 'resize toDataURL completed',
+              resultLength: resizedDataURL.length,
+              resultSizeMB: (resizedDataURL.length / 1024 / 1024).toFixed(2)
             });
 
-            debugLogger.logMemory('After toDataURL conversion');
+            debugLogger.info('END: toDataURL conversion complete', {
+              resultLength: resizedDataURL.length,
+              resultSizeMB: (resizedDataURL.length / 1024 / 1024).toFixed(2)
+            });
+
+            // Log memory delta for resize operation
+            debugLogger.logMemoryDelta('After image load', 'After resize toDataURL', {
+              operation: 'Resize operation total'
+            });
+
+            // CRITICAL MEMORY FIX: Clean up canvas and image to prevent memory leak
+            debugLogger.info('START: Cleaning up resize canvas and image');
+            canvas.width = 0;
+            canvas.height = 0;
+            img.src = '';
+            debugLogger.info('END: Resize cleanup complete');
+            debugLogger.logMemory('After resize cleanup');
 
             console.log('[Tapko] Screenshot resized successfully');
             debugLogger.endOperation('Resize screenshot for annotation', { success: true });
@@ -1193,6 +1241,15 @@ class CommentCard {
           } else {
             console.log('[Tapko] Screenshot size is safe, no resizing needed');
             debugLogger.info('No resizing needed, size is safe');
+
+            debugLogger.logMemory('No resize needed', {
+              operation: 'using original screenshot',
+              size: `${originalWidth}x${originalHeight}`
+            });
+
+            // CRITICAL MEMORY FIX: Clean up image even when not resizing
+            img.src = '';
+
             debugLogger.endOperation('Resize screenshot for annotation', { success: true, resized: false });
             resolve(dataURL);
           }
