@@ -1123,98 +1123,58 @@ class CommentCard {
    * This prevents browser crashes from overly large images
    */
   async _resizeScreenshotForAnnotation(dataURL) {
-    debugLogger.startOperation('Resize screenshot for annotation', {
-      dataURLLength: dataURL.length
-    });
+    debugLogger.startOperation('Resize screenshot for annotation');
 
     return new Promise((resolve, reject) => {
       const img = new Image();
 
       img.onload = () => {
         try {
-          const maxDimension = 2048; // Conservative max to prevent crashes
+          const maxDimension = 2048;
           const originalWidth = img.width;
           const originalHeight = img.height;
-          const totalPixels = originalWidth * originalHeight;
-          const estimatedMemory = totalPixels * 4; // 4 bytes per pixel (RGBA)
 
-          debugLogger.info('Screenshot loaded for resize', {
-            width: originalWidth,
-            height: originalHeight,
-            totalPixels,
-            estimatedMemoryMB: (estimatedMemory / 1024 / 1024).toFixed(2)
-          });
-
-          debugLogger.logMemory('Before resize operation');
-
-          console.log('[Tapko] Original screenshot size:', originalWidth, 'x', originalHeight);
-
-          // Check if resizing is needed
           if (originalWidth > maxDimension || originalHeight > maxDimension) {
-            // Calculate scale to fit within max dimension
             const scale = Math.min(maxDimension / originalWidth, maxDimension / originalHeight);
             const width = Math.floor(originalWidth * scale);
             const height = Math.floor(originalHeight * scale);
 
-            debugLogger.info('Resizing needed', {
-              targetWidth: width,
-              targetHeight: height,
-              scale: scale.toFixed(3)
-            });
-
-            console.log('[Tapko] Resizing screenshot to:', width, 'x', height);
-
-            // Create canvas to resize
-            debugLogger.info('START: Canvas creation', { width, height });
             const canvas = document.createElement('canvas');
             canvas.width = width;
             canvas.height = height;
-            debugLogger.info('END: Canvas created successfully');
 
-            debugLogger.info('START: Draw image to canvas');
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, width, height);
-            debugLogger.info('END: Image drawn to canvas');
 
-            debugLogger.logMemory('Before toDataURL conversion');
-
-            // Convert to JPEG with good quality
-            debugLogger.critical('START: Convert to dataURL - THIS IS THE CRASH POINT');
             const resizedDataURL = canvas.toDataURL('image/jpeg', 0.9);
-            debugLogger.info('END: toDataURL conversion complete', {
-              resultLength: resizedDataURL.length
-            });
 
-            debugLogger.logMemory('After toDataURL conversion');
+            // Clean up to prevent memory leak
+            canvas.width = 0;
+            canvas.height = 0;
+            img.src = '';
 
-            console.log('[Tapko] Screenshot resized successfully');
             debugLogger.endOperation('Resize screenshot for annotation', { success: true });
             resolve(resizedDataURL);
           } else {
-            console.log('[Tapko] Screenshot size is safe, no resizing needed');
-            debugLogger.info('No resizing needed, size is safe');
+            // Clean up image even when not resizing
+            img.src = '';
+
             debugLogger.endOperation('Resize screenshot for annotation', { success: true, resized: false });
             resolve(dataURL);
           }
         } catch (error) {
-          debugLogger.critical('EXCEPTION in resize operation', {
-            error: error.message,
-            stack: error.stack
-          });
-          console.error('[Tapko] Exception during resize:', error);
-          debugLogger.endOperation('Resize screenshot for annotation', { success: false, error: error.message });
+          console.error('[Tapko] Resize failed:', error);
+          debugLogger.endOperation('Resize screenshot for annotation', { success: false });
           reject(error);
         }
       };
 
       img.onerror = (err) => {
-        debugLogger.error('Failed to load screenshot image', { error: err });
         console.error('[Tapko] Failed to load screenshot for resizing:', err);
-        debugLogger.endOperation('Resize screenshot for annotation', { success: false, error: 'Image load failed' });
+        debugLogger.endOperation('Resize screenshot for annotation', { success: false });
         reject(new Error('Failed to load screenshot'));
       };
 
-      debugLogger.info('Loading screenshot image', { dataURLLength: dataURL.length });
       img.src = dataURL;
     });
   }

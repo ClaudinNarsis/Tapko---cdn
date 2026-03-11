@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Documentation - Tapko | Dev Testing</title>
+  <link rel="stylesheet" href="shared-styles.css">
+
+  <!-- Tapko Widget -->
+  <script src="https://tapko-dev-generalbucket.s3.ap-south-1.amazonaws.com/cdn/tapko-widget.js"></script>
+  <script>
+  (async () => {
+    try {
+      await Tapko.init({
+        projectId: 'deb96c18-a253-4295-b4a0-3a784ee37f2d',
+        apiKey: 'your-api-key',
+        userId: 'user_36PrQyirxWUXgwmtnnhuXI8G4xu'
+      });
+    } catch (error) {
+      console.error('Error initializing Tapko widget:', error);
+    }
+  })();
+  </script>
+
+  <style>
+    .code-block {
+      background: #1f2937;
+      border-radius: 8px;
+      padding: 1.5rem;
+      color: #e5e7eb;
+      font-family: 'Courier New', monospace;
+      font-size: 0.9rem;
+      overflow-x: auto;
+      margin: 1.5rem 0;
+    }
+
+    .code-block .comment {
+      color: #10b981;
+    }
+
+    .code-block .keyword {
+      color: #c084fc;
+    }
+
+    .code-block .string {
+      color: #fbbf24;
+    }
+
+    .doc-section {
+      margin-bottom: 3rem;
+    }
+
+    .doc-section h3 {
+      font-size: 1.8rem;
+      color: #2d3748;
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 2px solid #e5e7eb;
+    }
+
+    .doc-section h4 {
+      font-size: 1.3rem;
+      color: #2d3748;
+      margin-top: 2rem;
+      margin-bottom: 1rem;
+    }
+
+    .doc-section p {
+      color: #666;
+      line-height: 1.8;
+      margin-bottom: 1rem;
+    }
+
+    .doc-section ul {
+      color: #666;
+      line-height: 1.8;
+      margin-left: 2rem;
+      margin-bottom: 1rem;
+    }
+
+    .alert {
+      padding: 1rem;
+      border-radius: 8px;
+      margin: 1.5rem 0;
+    }
+
+    .alert-info {
+      background: #dbeafe;
+      border-left: 4px solid #3b82f6;
+      color: #1e40af;
+    }
+
+    .alert-warning {
+      background: #fef3c7;
+      border-left: 4px solid #f59e0b;
+      color: #92400e;
+    }
+
+    .alert-success {
+      background: #d1fae5;
+      border-left: 4px solid #10b981;
+      color: #065f46;
+    }
+  </style>
+</head>
+<body>
+  <!-- Navigation -->
+  <nav class="navbar">
+    <div class="navbar-content">
+      <a href="index.html" class="logo">Tapko</a>
+
+      <button class="mobile-menu-toggle" onclick="toggleMobileMenu()">☰</button>
+
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html">Home</a></li>
+        <li class="nav-dropdown">
+          <a href="features.html" class="nav-dropdown-toggle">
+            Features <span>▾</span>
+          </a>
+          <div class="nav-dropdown-menu">
+            <a href="features.html#integration">Easy Integration</a>
+            <a href="features.html#analytics">Smart Analytics</a>
+            <a href="features.html#customization">Customization</a>
+            <a href="features.html#collaboration">Team Collaboration</a>
+          </div>
+        </li>
+        <li><a href="pricing.html">Pricing</a></li>
+        <li><a href="documentation.html" class="active">Docs</a></li>
+        <li class="nav-dropdown">
+          <a href="blog.html" class="nav-dropdown-toggle">
+            Resources <span>▾</span>
+          </a>
+          <div class="nav-dropdown-menu">
+            <a href="blog.html">Blog</a>
+            <a href="documentation.html">Documentation</a>
+            <a href="about.html">About Us</a>
+          </div>
+        </li>
+        <li><a href="contact.html">Contact</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- Breadcrumbs -->
+  <div class="container">
+    <div class="breadcrumbs">
+      <a href="index.html">Home</a> / <span>Documentation</span>
+    </div>
+  </div>
+
+  <!-- Documentation Layout -->
+  <section class="section">
+    <div class="container">
+      <div class="sidebar-layout">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+          <h3 style="margin-bottom: 1rem; color: #2d3748;">Documentation</h3>
+          <nav>
+            <ul>
+              <li><a href="#getting-started" class="active">Getting Started</a></li>
+              <li><a href="#installation">Installation</a>
+                <ul>
+                  <li><a href="#install-npm">NPM</a></li>
+                  <li><a href="#install-cdn">CDN</a></li>
+                </ul>
+              </li>
+              <li><a href="#initialization">Initialization</a></li>
+              <li><a href="#configuration">Configuration</a></li>
+              <li><a href="#methods">API Methods</a>
+                <ul>
+                  <li><a href="#enter-feedback">Enter Feedback Mode</a></li>
+                  <li><a href="#exit-feedback">Exit Feedback Mode</a></li>
+                  <li><a href="#get-status">Get Status</a></li>
+                </ul>
+              </li>
+              <li><a href="#events">Events</a></li>
+              <li><a href="#customization">Customization</a></li>
+              <li><a href="#troubleshooting">Troubleshooting</a></li>
+            </ul>
+          </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+          <!-- Getting Started -->
+          <div id="getting-started" class="doc-section">
+            <h3>Getting Started</h3>
+            <p>
+              Welcome to the Tapko Widget documentation! This guide will help you integrate
+              our feedback widget into your application in just a few minutes.
+            </p>
+            <div class="alert alert-success">
+              <strong>Quick Start:</strong> Copy and paste the code below to get started immediately.
+              You'll need your Project ID and API Key from the Tapko dashboard.
+            </div>
+          </div>
+
+          <!-- Installation -->
+          <div id="installation" class="doc-section">
+            <h3>Installation</h3>
+            <p>Choose your preferred installation method:</p>
+
+            <h4 id="install-npm">Using NPM</h4>
+            <p>Install the Tapko widget via npm:</p>
+            <div class="code-block">
+npm install @tapko/widget
+            </div>
+
+            <p>Then import and initialize in your application:</p>
+            <div class="code-block">
+<span class="keyword">import</span> Tapko <span class="keyword">from</span> <span class="string">'@tapko/widget'</span>;
+
+<span class="keyword">await</span> Tapko.init({
+  projectId: <span class="string">'your-project-id'</span>,
+  apiKey: <span class="string">'your-api-key'</span>
+});
+            </div>
+
+            <h4 id="install-cdn">Using CDN</h4>
+            <p>Add the script tag to your HTML:</p>
+            <div class="code-block">
+&lt;script src="https://cdn.tapko.io/widget/latest/tapko-widget.js"&gt;&lt;/script&gt;
+&lt;script&gt;
+  <span class="keyword">await</span> Tapko.init({
+    projectId: <span class="string">'your-project-id'</span>,
+    apiKey: <span class="string">'your-api-key'</span>
+  });
+&lt;/script&gt;
+            </div>
+          </div>
+
+          <!-- Initialization -->
+          <div id="initialization" class="doc-section">
+            <h3>Initialization</h3>
+            <p>
+              Initialize the Tapko widget with your project credentials. The widget will
+              automatically render a floating button on your page.
+            </p>
+
+            <div class="code-block">
+<span class="keyword">await</span> Tapko.init({
+  projectId: <span class="string">'your-project-id'</span>,
+  apiKey: <span class="string">'your-api-key'</span>,
+  userId: <span class="string">'user-123'</span>, <span class="comment">// Optional: Identify users</span>
+});
+            </div>
+
+            <div class="alert alert-info">
+              <strong>Note:</strong> The init() method is asynchronous. Make sure to use
+              await or handle the promise appropriately.
+            </div>
+          </div>
+
+          <!-- Configuration -->
+          <div id="configuration" class="doc-section">
+            <h3>Configuration</h3>
+            <p>Customize the widget behavior with these configuration options:</p>
+
+            <div class="code-block">
+<span class="keyword">await</span> Tapko.init({
+  projectId: <span class="string">'your-project-id'</span>,
+  apiKey: <span class="string">'your-api-key'</span>,
+
+  <span class="comment">// User identification</span>
+  userId: <span class="string">'user-123'</span>,
+  userEmail: <span class="string">'user@example.com'</span>,
+  userName: <span class="string">'John Doe'</span>,
+
+  <span class="comment">// Appearance</span>
+  theme: {
+    primaryColor: <span class="string">'#6366f1'</span>,
+    position: <span class="string">'bottom-right'</span>, <span class="comment">// 'bottom-right' | 'bottom-left'</span>
+  },
+
+  <span class="comment">// Behavior</span>
+  autoCapture: <span class="keyword">true</span>, <span class="comment">// Capture screenshots automatically</span>
+  enableKeyboard: <span class="keyword">true</span>, <span class="comment">// Enable keyboard shortcuts</span>
+});
+            </div>
+
+            <h4>Configuration Options</h4>
+            <ul>
+              <li><strong>projectId</strong> (required): Your Tapko project ID</li>
+              <li><strong>apiKey</strong> (required): Your Tapko API key</li>
+              <li><strong>userId</strong> (optional): Unique identifier for the user</li>
+              <li><strong>userEmail</strong> (optional): User's email address</li>
+              <li><strong>userName</strong> (optional): User's display name</li>
+              <li><strong>theme</strong> (optional): Customize widget appearance</li>
+              <li><strong>autoCapture</strong> (optional): Enable automatic screenshot capture</li>
+            </ul>
+          </div>
+
+          <!-- API Methods -->
+          <div id="methods" class="doc-section">
+            <h3>API Methods</h3>
+            <p>Control the widget programmatically using these methods:</p>
+
+            <h4 id="enter-feedback">Enter Feedback Mode</h4>
+            <p>Programmatically trigger feedback mode:</p>
+            <div class="code-block">
+Tapko.enterFeedbackMode();
+            </div>
+
+            <h4 id="exit-feedback">Exit Feedback Mode</h4>
+            <p>Exit feedback mode programmatically:</p>
+            <div class="code-block">
+Tapko.exitFeedbackMode();
+            </div>
+
+            <h4 id="get-status">Get Status</h4>
+            <p>Check the current state of the widget:</p>
+            <div class="code-block">
+<span class="keyword">const</span> status = Tapko.getProjectStatus();
+console.log(status.isInFeedbackMode); <span class="comment">// true or false</span>
+            </div>
+
+            <h4>Other Methods</h4>
+            <div class="code-block">
+<span class="comment">// Close all open feedback bubbles</span>
+Tapko.closeAll();
+
+<span class="comment">// Get widget version</span>
+<span class="keyword">const</span> version = Tapko.getVersion();
+
+<span class="comment">// Show queue viewer (if enabled)</span>
+Tapko.showQueueViewer();
+            </div>
+          </div>
+
+          <!-- Events -->
+          <div id="events" class="doc-section">
+            <h3>Events</h3>
+            <p>Listen to widget events to integrate with your application:</p>
+
+            <div class="code-block">
+<span class="comment">// Widget initialized</span>
+window.addEventListener(<span class="string">'tapko:initialized'</span>, (e) => {
+  console.log(<span class="string">'Widget ready'</span>, e.detail);
+});
+
+<span class="comment">// Feedback mode entered</span>
+window.addEventListener(<span class="string">'tapko:feedback:mode:entered'</span>, () => {
+  console.log(<span class="string">'User entered feedback mode'</span>);
+});
+
+<span class="comment">// Feedback mode exited</span>
+window.addEventListener(<span class="string">'tapko:feedback:mode:exited'</span>, () => {
+  console.log(<span class="string">'User exited feedback mode'</span>);
+});
+
+<span class="comment">// Comment submitted</span>
+window.addEventListener(<span class="string">'tapko:comment:submitted'</span>, (e) => {
+  console.log(<span class="string">'Feedback submitted'</span>, e.detail);
+});
+
+<span class="comment">// Comment queued (if queue system enabled)</span>
+window.addEventListener(<span class="string">'tapko:comment:queued'</span>, (e) => {
+  console.log(<span class="string">'Feedback queued'</span>, e.detail);
+});
+
+<span class="comment">// Error occurred</span>
+window.addEventListener(<span class="string">'tapko:error'</span>, (e) => {
+  console.error(<span class="string">'Widget error'</span>, e.detail);
+});
+            </div>
+          </div>
+
+          <!-- Customization -->
+          <div id="customization" class="doc-section">
+            <h3>Customization</h3>
+            <p>Customize the widget to match your brand:</p>
+
+            <div class="code-block">
+<span class="keyword">await</span> Tapko.init({
+  projectId: <span class="string">'your-project-id'</span>,
+  apiKey: <span class="string">'your-api-key'</span>,
+  theme: {
+    <span class="comment">// Colors</span>
+    primaryColor: <span class="string">'#6366f1'</span>,
+    backgroundColor: <span class="string">'#ffffff'</span>,
+    textColor: <span class="string">'#333333'</span>,
+
+    <span class="comment">// Position</span>
+    position: <span class="string">'bottom-right'</span>, <span class="comment">// or 'bottom-left'</span>
+
+    <span class="comment">// Button</span>
+    buttonSize: <span class="string">'medium'</span>, <span class="comment">// 'small', 'medium', 'large'</span>
+    buttonText: <span class="string">'Feedback'</span>,
+  }
+});
+            </div>
+
+            <div class="alert alert-info">
+              <strong>Pro Tip:</strong> Use CSS custom properties for more advanced theming.
+              See our advanced customization guide for details.
+            </div>
+          </div>
+
+          <!-- Troubleshooting -->
+          <div id="troubleshooting" class="doc-section">
+            <h3>Troubleshooting</h3>
+
+            <h4>Widget not appearing</h4>
+            <ul>
+              <li>Check that your Project ID and API Key are correct</li>
+              <li>Ensure the script is loaded before calling init()</li>
+              <li>Check browser console for error messages</li>
+              <li>Verify your domain is whitelisted in Tapko dashboard</li>
+            </ul>
+
+            <h4>Feedback not submitting</h4>
+            <ul>
+              <li>Check your internet connection</li>
+              <li>Verify API key permissions in dashboard</li>
+              <li>Look for CORS errors in console</li>
+              <li>Ensure you haven't exceeded your plan limits</li>
+            </ul>
+
+            <div class="alert alert-warning">
+              <strong>Still having issues?</strong> Contact our support team at support@tapko.io
+              or visit our <a href="contact.html" style="color: inherit; text-decoration: underline;">contact page</a>.
+            </div>
+          </div>
+
+          <!-- Help Section -->
+          <div class="doc-section">
+            <div class="card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+              <h3 style="color: white;">Need More Help?</h3>
+              <p style="color: white; opacity: 0.95; margin-bottom: 1.5rem;">
+                Our team is here to help you get the most out of Tapko
+              </p>
+              <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                <a href="contact.html" class="btn btn-primary">Contact Support</a>
+                <a href="blog.html" class="btn" style="background: rgba(255,255,255,0.2); color: white;">View Tutorials</a>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <p>&copy; 2024 Tapko. All rights reserved.</p>
+      <div class="footer-links">
+        <a href="about.html">About</a>
+        <a href="features.html">Features</a>
+        <a href="pricing.html">Pricing</a>
+        <a href="documentation.html">Documentation</a>
+        <a href="blog.html">Blog</a>
+        <a href="contact.html">Contact</a>
+      </div>
+      <p style="margin-top: 1.5rem;">Built for better user experiences</p>
+    </div>
+  </footer>
+
+  <script>
+    function toggleMobileMenu() {
+      const navLinks = document.getElementById('navLinks');
+      navLinks.classList.toggle('active');
+    }
+
+    // Smooth scroll for sidebar links
+    document.querySelectorAll('.sidebar a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        e.preventDefault();
+
+        // Remove active class from all links
+        document.querySelectorAll('.sidebar a').forEach(link => {
+          link.classList.remove('active');
+        });
+
+        // Add active class to clicked link
+        this.classList.add('active');
+
+        // Scroll to target
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+    });
+  </script>
+</body>
+</html>
