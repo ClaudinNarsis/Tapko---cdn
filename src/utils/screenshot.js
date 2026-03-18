@@ -235,11 +235,9 @@ async function generateThumbnail(screenshotDataURL, maxWidth = 25, maxHeight = 2
       const img = new Image();
 
       img.onload = () => {
-        // Calculate dimensions maintaining aspect ratio
         let width = img.width;
         let height = img.height;
 
-        // Scale down if needed
         if (width > maxWidth || height > maxHeight) {
           const aspectRatio = width / height;
 
@@ -252,7 +250,6 @@ async function generateThumbnail(screenshotDataURL, maxWidth = 25, maxHeight = 2
           }
         }
 
-        // Create canvas for thumbnail
         const canvas = document.createElement('canvas');
         canvas.width = width;
         canvas.height = height;
@@ -260,10 +257,15 @@ async function generateThumbnail(screenshotDataURL, maxWidth = 25, maxHeight = 2
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, width, height);
 
-        // Convert to data URL
         const thumbnailDataURL = canvas.toDataURL('image/png', 0.8);
+
+        // Clean up to prevent memory leaks
+        canvas.width = 0;
+        canvas.height = 0;
+        img.src = '';
+
         const timingEnd = performance.now();
-        console.log(`[Tapko Timing] Thumbnail generation: ${(timingEnd - timingStart).toFixed(2)}ms`);
+        console.log(`[Tapko] Thumbnail generated in ${(timingEnd - timingStart).toFixed(0)}ms`);
         resolve(thumbnailDataURL);
       };
 

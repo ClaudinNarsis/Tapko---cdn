@@ -167,6 +167,7 @@ class PinManager {
               text: commentText,
               createdAt: feedback.createdAt || new Date().toISOString()
             },
+            status: feedback.status || 'pending', // Include status from feedback
             createdAt: feedback.createdAt || new Date().toISOString(),
             createdInThisBrowser: false // From backend
           };
@@ -353,10 +354,25 @@ class PinManager {
     const card = createElement('div', `${CONFIG.CLASS_PREFIX}pin-detail`);
 
     const createdDate = new Date(pinData.comment.createdAt).toLocaleDateString();
+    const status = pinData.status || 'pending';
+
+    // Status display labels
+    const statusLabels = {
+      'pending': 'Pending',
+      'in_progress': 'In Progress',
+      'resolved': 'Resolved',
+      'closed': 'Closed',
+      'open': 'Open'
+    };
+
+    const statusLabel = statusLabels[status] || status.charAt(0).toUpperCase() + status.slice(1);
 
     card.innerHTML = `
       <div class="${CONFIG.CLASS_PREFIX}pin-detail-header">
-        <span class="${CONFIG.CLASS_PREFIX}pin-detail-date">${createdDate}</span>
+        <div class="${CONFIG.CLASS_PREFIX}pin-detail-meta">
+          <span class="${CONFIG.CLASS_PREFIX}pin-detail-date">${createdDate}</span>
+          <span class="${CONFIG.CLASS_PREFIX}pin-detail-status ${CONFIG.CLASS_PREFIX}pin-detail-status-${status}">${statusLabel}</span>
+        </div>
         <button class="${CONFIG.CLASS_PREFIX}pin-detail-close" aria-label="Close">×</button>
       </div>
       <div class="${CONFIG.CLASS_PREFIX}pin-detail-content">
