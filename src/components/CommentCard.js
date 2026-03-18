@@ -1308,6 +1308,14 @@ class CommentCard {
       window.removeEventListener('resize', this.scrollHandler);
       this.scrollHandler = null;
     }
+
+    // Clean up screenshot data to prevent memory leaks
+    this.screenshot = null;
+    this.screenshotDataURL = null;
+    this.thumbnail = null;
+    this.screenshotMetadata = null;
+    this.annotationData = null;
+    this.drawingData = null;
   }
 
   /**
