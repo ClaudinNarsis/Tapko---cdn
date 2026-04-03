@@ -13,6 +13,7 @@
 import { CONFIG } from '../config.js';
 import { RecordingManager } from '../managers/RecordingManager.js';
 import { logManager } from '../managers/LogManager.js';
+import { networkLogManager } from '../managers/NetworkLogManager.js';
 import debugLogger from '../utils/DebugLogger.js';
 import { dataURLToBlob, captureViewportScreenshot, generateThumbnail } from '../utils/screenshot.js';
 import {
@@ -763,6 +764,10 @@ class CommentCard {
     const logsBlob = logManager.getLogsAsTextBlob();
     console.log('[Tapko Queue] Logs blob prepared:', logsBlob.size, 'bytes');
 
+    // 3b. Prepare network logs blob
+    const networkLogsBlob = networkLogManager.getNetworkLogsAsJsonBlob();
+    console.log('[Tapko Queue] Network logs blob prepared:', networkLogsBlob.size, 'bytes');
+
     // 4. Prepare context
     const feedbackPosition = getFeedbackPosition(this.target);
     const browserInfo = getBrowserInfo();
@@ -774,6 +779,7 @@ class CommentCard {
       screenshot: screenshotBlob,              // Unmerged screenshot blob
       annotationData: this.annotationData,     // NEW: Annotation data
       logs: logsBlob,
+      networkLogs: networkLogsBlob,
       context: {
         pageUrl: window.location.href,
         userAgent: navigator.userAgent,
@@ -878,6 +884,11 @@ class CommentCard {
     const logsBlob = logManager.getLogsAsTextBlob();
     const logsFileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.txt`;
     assets.logs = { blob: logsBlob, fileName: logsFileName, type: 'text/plain', folder: 'logs' };
+
+    // 1c. Prepare network logs
+    const networkLogsBlob = networkLogManager.getNetworkLogsAsJsonBlob();
+    const networkLogsFileName = `${Date.now()}-${Math.random().toString(36).substring(7)}-network.txt`;
+    assets.networkLogs = { blob: networkLogsBlob, fileName: networkLogsFileName, type: 'text/plain', folder: 'logs' };
 
     const prepareEnd = performance.now();
     console.log(`[Tapko Timing] Asset preparation: ${(prepareEnd - prepareStart).toFixed(2)}ms`);
