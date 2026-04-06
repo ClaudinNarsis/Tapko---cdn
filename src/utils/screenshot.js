@@ -96,13 +96,29 @@ async function captureViewportScreenshot(options = {}) {
     const originalDisplay = shadowHost ? shadowHost.style.display : null;
 
     try {
-      // Show permission overlay if shadowRoot is provided (BEFORE hiding widget)
+      // Hide shadow host BEFORE getDisplayMedia and wait for the compositor to repaint.
+      // With preferCurrentTab, Chrome grabs the tab's GPU compositor frame immediately
+      // when getDisplayMedia resolves — if the widget is still composited at that moment
+      // Chrome processes it at 2x DPR on HiDPI displays, crashing the GPU process.
+      // Hiding first + awaiting two rAF cycles ensures the compositor has repainted
+      // without the widget before the capture frame is grabbed.
+      debugLogger.checkpoint('shadow-hide', { idealWidth, idealHeight, devicePixelRatio });
+      if (shadowHost) shadowHost.style.display = 'none';
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      debugLogger.checkpoint('shadow-hide-raf-done');
+
+      // Show permission overlay if shadowRoot is provided
       if (shadowRoot) {
         permissionOverlay = new ScreenshotPermissionOverlay(shadowRoot);
         permissionOverlay.show();
+        debugLogger.checkpoint('permission-overlay-shown');
         // Small delay to ensure overlay is visible before permission prompt
         await new Promise(resolve => setTimeout(resolve, 100));
       }
+
+      debugLogger.checkpoint('getDisplayMedia-start');
+      debugLogger.logUserAction('screenshot-permission-prompt-shown', { idealWidth, idealHeight });
 
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: {
@@ -114,14 +130,14 @@ async function captureViewportScreenshot(options = {}) {
         preferCurrentTab: true
       });
 
-      // Permission granted! Now hide the overlay and shadow host
+      debugLogger.checkpoint('getDisplayMedia-resolved');
+      debugLogger.logUserAction('screenshot-permission-granted');
+
+      // Permission granted! Hide the overlay
       if (permissionOverlay) {
         permissionOverlay.hide();
         permissionOverlay = null;
       }
-
-      // Hide shadow host for clean screenshot (unless we want to keep widget visible)
-      if (shadowHost && !keepWidgetVisible) shadowHost.style.display = 'none';
 
       // Create video element to capture the stream
       const video = document.createElement('video');
@@ -129,24 +145,42 @@ async function captureViewportScreenshot(options = {}) {
       video.autoplay = true;
       video.playsInline = true;
 
+      debugLogger.checkpoint('video-element-created');
+
       await new Promise((resolve, reject) => {
         video.onloadedmetadata = resolve;
         video.onerror = reject;
         setTimeout(() => reject(new Error('Video load timeout')), 5000);
       });
 
+      debugLogger.checkpoint('video-metadata-loaded', {
+        videoWidth: video.videoWidth,
+        videoHeight: video.videoHeight,
+        dpr: devicePixelRatio,
+        canvasAllocMB: ((video.videoWidth * video.videoHeight * 4) / 1024 / 1024).toFixed(1)
+      });
+
       await new Promise(resolve => setTimeout(resolve, 100));
 
+      debugLogger.checkpoint('canvas-create', { videoWidth: video.videoWidth, videoHeight: video.videoHeight });
       const canvas = document.createElement('canvas');
+
+      debugLogger.checkpoint('canvas-size', { width: video.videoWidth, height: video.videoHeight, allocBytes: video.videoWidth * video.videoHeight * 4 });
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
 
+      debugLogger.checkpoint('canvas-context');
       const ctx = canvas.getContext('2d');
+
+      debugLogger.checkpoint('canvas-drawImage');
       ctx.drawImage(video, 0, 0);
 
+      debugLogger.checkpoint('tracks-stop');
       stream.getTracks().forEach(track => track.stop());
 
+      debugLogger.checkpoint('toDataURL-start');
       const dataURL = canvas.toDataURL('image/jpeg', 0.85);
+      debugLogger.checkpoint('toDataURL-done', { dataURLLength: dataURL.length });
 
       // Clean up temporary objects to prevent memory leaks
       video.srcObject = null;

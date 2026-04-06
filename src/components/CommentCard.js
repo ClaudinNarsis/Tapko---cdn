@@ -240,19 +240,28 @@ class CommentCard {
     // Cancel button
     const cancelBtn = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}btn-cancel`);
     if (cancelBtn) {
-      cancelBtn.addEventListener('click', () => this.close());
+      cancelBtn.addEventListener('click', () => {
+        debugLogger.logUserAction('comment-card-cancel');
+        this.close();
+      });
     }
 
     // Submit button
     const submitBtn = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}btn-submit`);
     if (submitBtn) {
-      submitBtn.addEventListener('click', () => this.submit());
+      submitBtn.addEventListener('click', () => {
+        debugLogger.logUserAction('comment-card-submit-click', { hasScreenshot: !!this.screenshot, hasAnnotation: !!this.annotationData });
+        this.submit();
+      });
     }
 
     // Draw button
     const drawBtn = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}btn-draw`);
     if (drawBtn) {
-      drawBtn.addEventListener('click', () => this._handleDrawClick());
+      drawBtn.addEventListener('click', () => {
+        debugLogger.logUserAction('comment-card-draw-click', { hasExistingScreenshot: !!this.screenshot });
+        this._handleDrawClick();
+      });
     }
 
     // Keyboard shortcuts

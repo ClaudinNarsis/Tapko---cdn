@@ -127,12 +127,15 @@ import debugLogger from './utils/DebugLogger.js';
         });
       });
 
-      // Check for crash on initialization (silent monitoring)
+      // Check for crash on initialization — do NOT auto-clear; let user download the report first
       const crashData = debugLogger.detectCrash();
       if (crashData.crashed) {
-        console.warn('[Tapko Debug] Previous session crashed during:', crashData.operation?.name);
-        // Silently clear the crash marker
-        debugLogger.clearAll();
+        console.warn('╔══════════════════════════════════════════════════════════╗');
+        console.warn('║  [Tapko] CRASH DETECTED from previous session            ║');
+        console.warn(`║  Crashed during: ${(crashData.operation?.name || 'unknown').padEnd(40)}║`);
+        console.warn('║  Run: TapkoDebug.downloadCrashReport()  to download logs ║');
+        console.warn('║  Run: TapkoDebug.clear()  to reset after downloading     ║');
+        console.warn('╚══════════════════════════════════════════════════════════╝');
       }
 
       // Enable debug mode via URL parameter
@@ -234,10 +237,62 @@ import debugLogger from './utils/DebugLogger.js';
             console.log('✅ No crash detected');
           }
           return crash;
+        },
+
+        // Download full crash diagnostic report (memory timeline, user actions, step checkpoints)
+        downloadCrashReport: () => {
+          const summary = debugLogger.downloadCrashReport();
+          return summary;
+        },
+
+        // View recent step checkpoints (nearest to crash)
+        viewCheckpoints: () => {
+          const checkpoints = debugLogger.getCrashCheckpoints();
+          console.log('='.repeat(60));
+          console.log(`TAPKO CRASH CHECKPOINTS (${checkpoints.length} entries)`);
+          console.log('='.repeat(60));
+          checkpoints.slice(-30).forEach((cp, i) => {
+            const mem = cp.mem ? `| mem: ${cp.mem.usedMB}MB (${cp.mem.usedPct}%)` : '';
+            console.log(`${i + 1}. [t+${cp.perf}ms] ${cp.name} ${mem}`, cp.data || '');
+          });
+          return checkpoints;
+        },
+
+        // View user actions (what the user did before crash)
+        viewUserActions: () => {
+          const actions = debugLogger.getUserActions();
+          console.log('='.repeat(60));
+          console.log(`TAPKO USER ACTIONS (${actions.length} entries)`);
+          console.log('='.repeat(60));
+          actions.forEach((a, i) => {
+            const mem = a.mem ? `| mem: ${a.mem.usedMB}MB` : '';
+            console.log(`${i + 1}. [${new Date(a.t).toLocaleTimeString()}] ${a.action} ${mem}`, a.detail || '');
+          });
+          return actions;
+        },
+
+        // View memory timeline
+        viewMemoryTimeline: () => {
+          const ticks = debugLogger.getMemoryTicks();
+          console.log('='.repeat(60));
+          console.log(`TAPKO MEMORY TIMELINE (${ticks.length} ticks, every 2s)`);
+          console.log('='.repeat(60));
+          ticks.forEach((t, i) => {
+            if (t.memoryApiAvailable === false) {
+              console.log(`${i + 1}. [${new Date(t.t).toLocaleTimeString()}] Memory API not available`);
+            } else {
+              console.log(`${i + 1}. [${new Date(t.t).toLocaleTimeString()}] ${t.usedMB}MB / ${t.limitMB}MB (${t.usedPct}%)`);
+            }
+          });
+          return ticks;
         }
       };
 
       console.log('[Tapko Debug] Utilities available at window.TapkoDebug');
+      console.log('  TapkoDebug.downloadCrashReport()  - ⭐ Download full crash diagnostic (use after crash)');
+      console.log('  TapkoDebug.viewCheckpoints()      - View step-by-step checkpoints');
+      console.log('  TapkoDebug.viewUserActions()      - View user actions before crash');
+      console.log('  TapkoDebug.viewMemoryTimeline()   - View memory every 2s');
       console.log('  TapkoDebug.downloadMemoryReport() - Download memory analysis');
       console.log('  TapkoDebug.downloadLogs()         - Download all logs');
       console.log('  TapkoDebug.viewMemoryReport()     - View memory in console');
@@ -500,6 +555,8 @@ import debugLogger from './utils/DebugLogger.js';
     async _enterFeedbackMode() {
       if (this.isInFeedbackMode || this.isDisabled) return;
 
+      debugLogger.logUserAction('enter-feedback-mode');
+      debugLogger.checkpoint('enter-feedback-mode');
       this.isInFeedbackMode = true;
 
       // Save original overflow but DON'T lock scroll - allow normal scrolling
@@ -579,6 +636,7 @@ import debugLogger from './utils/DebugLogger.js';
     _exitFeedbackMode() {
       if (!this.isInFeedbackMode) return;
 
+      debugLogger.logUserAction('exit-feedback-mode');
       this.isInFeedbackMode = false;
 
       // Hide pins when exiting feedback mode
@@ -628,6 +686,9 @@ import debugLogger from './utils/DebugLogger.js';
       if (!this.isInitialized || this.isDisabled) {
         return;
       }
+
+      debugLogger.logUserAction('feedback-tap', { tag: element?.tagName, x: Math.round(coordinates?.x), y: Math.round(coordinates?.y) });
+      debugLogger.checkpoint('comment-card-create');
 
       // Close existing card
       if (this.activeCard) {
