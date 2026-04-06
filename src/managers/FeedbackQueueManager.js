@@ -107,6 +107,7 @@ class FeedbackQueueManager {
           screenshot: feedbackData.screenshot, // Blob (unmerged)
           annotationData: feedbackData.annotationData, // NEW: Annotation data {paths, strokeColor, strokeWidth}
           logs: feedbackData.logs, // Blob
+          networkLogs: feedbackData.networkLogs, // Blob
           context: feedbackData.context,
           idempotencyKey: feedbackData.idempotencyKey,
           projectId: feedbackData.projectId,
@@ -120,6 +121,12 @@ class FeedbackQueueManager {
             bucket: null
           },
           logs: {
+            status: 'pending',
+            url: null,
+            key: null,
+            bucket: null
+          },
+          networkLogs: {
             status: 'pending',
             url: null,
             key: null,
@@ -362,7 +369,28 @@ class FeedbackQueueManager {
         this.emit('queue:step-completed', { id: item.id, step: 'logs' });
       }
 
-      // Step 3: Submit feedback payload
+      // Step 3: Upload network logs to S3
+      if (item.uploadProgress.networkLogs.status !== 'completed' && item.feedbackData.networkLogs) {
+        console.log(`[FeedbackQueue] Uploading network logs for item ${item.id}...`);
+
+        const networkLogsResult = await this.uploadAsset(
+          item.feedbackData.networkLogs,
+          'text/plain',
+          'logs'
+        );
+
+        item.uploadProgress.networkLogs = {
+          status: 'completed',
+          url: networkLogsResult.url,
+          key: networkLogsResult.key,
+          bucket: networkLogsResult.bucket
+        };
+
+        await this.updateItem(item.id, item);
+        this.emit('queue:step-completed', { id: item.id, step: 'networkLogs' });
+      }
+
+      // Step 4: Submit feedback payload
       if (item.uploadProgress.feedback.status !== 'completed') {
         console.log(`[FeedbackQueue] Submitting feedback for item ${item.id}...`);
 
@@ -388,6 +416,15 @@ class FeedbackQueueManager {
           };
         }
 
+        if (item.uploadProgress.networkLogs.status === 'completed' && item.uploadProgress.networkLogs.key) {
+          assets.networkLogs = {
+            key: item.uploadProgress.networkLogs.key,
+            url: item.uploadProgress.networkLogs.url,
+            bucket: item.uploadProgress.networkLogs.bucket,
+            mimeType: 'text/plain'
+          };
+        }
+
         const payload = {
           title: item.feedbackData.title,
           description: item.feedbackData.description,
@@ -402,8 +439,10 @@ class FeedbackQueueManager {
           title: payload.title,
           hasScreenshot: !!assets.screenshot,
           hasLogs: !!assets.logs,
+          hasNetworkLogs: !!assets.networkLogs,
           screenshotKey: assets.screenshot?.key,
-          logsKey: assets.logs?.key
+          logsKey: assets.logs?.key,
+          networkLogsKey: assets.networkLogs?.key
         });
 
         const response = await this.apiClient.submitFeedback(payload);
