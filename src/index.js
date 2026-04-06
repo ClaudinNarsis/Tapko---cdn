@@ -30,6 +30,7 @@ import { FeedbackDisabledPopup } from './components/FeedbackDisabledPopup.js';
 import { FeedbackWidget } from './components/FeedbackWidget.js';
 import { dispatchCustomEvent, getUrlParam } from './utils/dom.js';
 import { logManager } from './managers/LogManager.js';
+import { networkLogManager } from './managers/NetworkLogManager.js';
 import { analyticsManager } from './managers/AnalyticsManager.js';
 import FeedbackQueueManager from './managers/FeedbackQueueManager.js';
 import PinManager from './managers/PinManager.js';
@@ -66,6 +67,7 @@ import debugLogger from './utils/DebugLogger.js';
 
       // Initialize log capture immediately
       logManager.init();
+      networkLogManager.init();
 
       // Initialize debug logger and check for crashes
       this._initializeDebugSystem();
@@ -209,6 +211,19 @@ import debugLogger from './utils/DebugLogger.js';
           console.log('✅ All debug data cleared.');
         },
 
+        // View captured network requests
+        viewNetworkLogs: () => {
+          const logs = networkLogManager.getNetworkLogs();
+          console.log('='.repeat(60));
+          console.log(`TAPKO NETWORK LOGS (${logs.length} entries)`);
+          console.log('='.repeat(60));
+          logs.forEach((entry, i) => {
+            const status = entry.status != null ? `${entry.status} ${entry.statusText || ''}`.trim() : (entry.error || 'pending');
+            console.log(`${i + 1}. [${entry.type.toUpperCase()}] [${entry.method}] ${entry.url} → ${status} (${entry.duration != null ? entry.duration + 'ms' : '-'})`);
+          });
+          return logs;
+        },
+
         // Check crash status
         checkCrash: () => {
           const crash = debugLogger.detectCrash();
@@ -228,6 +243,7 @@ import debugLogger from './utils/DebugLogger.js';
       console.log('  TapkoDebug.viewMemoryReport()     - View memory in console');
       console.log('  TapkoDebug.viewLogs()             - View all logs');
       console.log('  TapkoDebug.enable()               - Enable debug mode');
+      console.log('  TapkoDebug.viewNetworkLogs()      - View captured network requests');
       console.log('  TapkoDebug.checkCrash()           - Check for crashes');
     }
 
