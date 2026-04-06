@@ -81,14 +81,18 @@ async function captureViewportScreenshot(options = {}) {
     const MAX_WIDTH = 1280;
     const MAX_HEIGHT = 720;
 
-    let idealWidth = viewportWidth;
-    let idealHeight = viewportHeight;
+    // On Retina/HiDPI displays getDisplayMedia allocates an IOSurface at physical pixels
+    // (viewport * DPR), so a 1280×720 CSS constraint becomes 2560×1440 on DPR=2 — 4×
+    // the GPU memory. Force constraints to physical-pixel budget by capping at DPR=1.
+    const captureDPR = Math.min(devicePixelRatio, 1);
+    let idealWidth  = Math.floor(viewportWidth  * captureDPR);
+    let idealHeight = Math.floor(viewportHeight * captureDPR);
 
     // Scale down if viewport exceeds limits
-    if (viewportWidth > MAX_WIDTH || viewportHeight > MAX_HEIGHT) {
-      const scale = Math.min(MAX_WIDTH / viewportWidth, MAX_HEIGHT / viewportHeight);
-      idealWidth = Math.floor(viewportWidth * scale);
-      idealHeight = Math.floor(viewportHeight * scale);
+    if (idealWidth > MAX_WIDTH || idealHeight > MAX_HEIGHT) {
+      const scale = Math.min(MAX_WIDTH / idealWidth, MAX_HEIGHT / idealHeight);
+      idealWidth  = Math.floor(idealWidth  * scale);
+      idealHeight = Math.floor(idealHeight * scale);
     }
 
     // Get shadow host reference (we'll hide it after permission is granted)
@@ -104,6 +108,15 @@ async function captureViewportScreenshot(options = {}) {
       // without the widget before the capture frame is grabbed.
       debugLogger.checkpoint('shadow-hide', { idealWidth, idealHeight, devicePixelRatio });
       if (shadowHost) shadowHost.style.display = 'none';
+
+      // Freeze all CSS animations and transitions on the host page before capture.
+      // Active animated layers each hold a composited IOSurface tile; pausing them
+      // collapses that GPU memory pressure before Chrome allocates the capture buffer.
+      document.body.style.setProperty('animation-play-state', 'paused', 'important');
+      document.body.style.setProperty('transition', 'none', 'important');
+      // Notify host page so it can pause canvas/WebGL rAF loops if desired.
+      document.dispatchEvent(new CustomEvent('tapko:capture-start'));
+
       await new Promise(resolve => requestAnimationFrame(resolve));
       await new Promise(resolve => requestAnimationFrame(resolve));
       debugLogger.checkpoint('shadow-hide-raf-done');
@@ -221,6 +234,10 @@ async function captureViewportScreenshot(options = {}) {
       throw innerError;
     } finally {
       if (shadowHost) shadowHost.style.display = originalDisplay;
+      // Guarantee animation state is restored even if capture fails mid-way.
+      document.body.style.removeProperty('animation-play-state');
+      document.body.style.removeProperty('transition');
+      document.dispatchEvent(new CustomEvent('tapko:capture-end'));
     }
 
   } catch (error) {
