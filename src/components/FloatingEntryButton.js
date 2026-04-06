@@ -11,6 +11,7 @@
 
 import { CONFIG } from '../config.js';
 import { createElement, dispatchCustomEvent } from '../utils/dom.js';
+import debugLogger from '../utils/DebugLogger.js';
 
 class FloatingEntryButton {
   constructor() {
@@ -53,6 +54,7 @@ class FloatingEntryButton {
    * Handle button click
    */
   _handleClick() {
+    debugLogger.logUserAction('floating-button-click', { isInFeedbackMode: this.isInFeedbackMode, isDisabled: this.isDisabled });
     if (this.onClick) {
       this.onClick();
     }

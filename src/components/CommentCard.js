@@ -13,6 +13,7 @@
 import { CONFIG } from '../config.js';
 import { RecordingManager } from '../managers/RecordingManager.js';
 import { logManager } from '../managers/LogManager.js';
+import { networkLogManager } from '../managers/NetworkLogManager.js';
 import debugLogger from '../utils/DebugLogger.js';
 import { dataURLToBlob, captureViewportScreenshot, generateThumbnail } from '../utils/screenshot.js';
 import {
@@ -239,19 +240,28 @@ class CommentCard {
     // Cancel button
     const cancelBtn = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}btn-cancel`);
     if (cancelBtn) {
-      cancelBtn.addEventListener('click', () => this.close());
+      cancelBtn.addEventListener('click', () => {
+        debugLogger.logUserAction('comment-card-cancel');
+        this.close();
+      });
     }
 
     // Submit button
     const submitBtn = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}btn-submit`);
     if (submitBtn) {
-      submitBtn.addEventListener('click', () => this.submit());
+      submitBtn.addEventListener('click', () => {
+        debugLogger.logUserAction('comment-card-submit-click', { hasScreenshot: !!this.screenshot, hasAnnotation: !!this.annotationData });
+        this.submit();
+      });
     }
 
     // Draw button
     const drawBtn = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}btn-draw`);
     if (drawBtn) {
-      drawBtn.addEventListener('click', () => this._handleDrawClick());
+      drawBtn.addEventListener('click', () => {
+        debugLogger.logUserAction('comment-card-draw-click', { hasExistingScreenshot: !!this.screenshot });
+        this._handleDrawClick();
+      });
     }
 
     // Keyboard shortcuts
@@ -763,6 +773,10 @@ class CommentCard {
     const logsBlob = logManager.getLogsAsTextBlob();
     console.log('[Tapko Queue] Logs blob prepared:', logsBlob.size, 'bytes');
 
+    // 3b. Prepare network logs blob
+    const networkLogsBlob = networkLogManager.getNetworkLogsAsJsonBlob();
+    console.log('[Tapko Queue] Network logs blob prepared:', networkLogsBlob.size, 'bytes');
+
     // 4. Prepare context
     const feedbackPosition = getFeedbackPosition(this.target);
     const browserInfo = getBrowserInfo();
@@ -774,6 +788,7 @@ class CommentCard {
       screenshot: screenshotBlob,              // Unmerged screenshot blob
       annotationData: this.annotationData,     // NEW: Annotation data
       logs: logsBlob,
+      networkLogs: networkLogsBlob,
       context: {
         pageUrl: window.location.href,
         userAgent: navigator.userAgent,
@@ -878,6 +893,11 @@ class CommentCard {
     const logsBlob = logManager.getLogsAsTextBlob();
     const logsFileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.txt`;
     assets.logs = { blob: logsBlob, fileName: logsFileName, type: 'text/plain', folder: 'logs' };
+
+    // 1c. Prepare network logs
+    const networkLogsBlob = networkLogManager.getNetworkLogsAsJsonBlob();
+    const networkLogsFileName = `${Date.now()}-${Math.random().toString(36).substring(7)}-network.txt`;
+    assets.networkLogs = { blob: networkLogsBlob, fileName: networkLogsFileName, type: 'text/plain', folder: 'logs' };
 
     const prepareEnd = performance.now();
     console.log(`[Tapko Timing] Asset preparation: ${(prepareEnd - prepareStart).toFixed(2)}ms`);
@@ -1046,6 +1066,36 @@ class CommentCard {
   }
 
   /**
+   * Snapshot current pin and card geometry for canvas compositing.
+   * Must be called while the shadow host is still visible.
+   */
+  _buildWidgetOverlay() {
+    const overlay = {};
+
+    // Pin centre in CSS viewport coordinates
+    if (this.pinMarker) {
+      const r = this.pinMarker.getBoundingClientRect();
+      overlay.pinX = r.left + r.width / 2;
+      overlay.pinY = r.top + r.height / 2;
+    } else {
+      overlay.pinX = this.coordinates.x;
+      overlay.pinY = this.coordinates.y;
+    }
+
+    // Card bounding rect
+    if (this.card) {
+      const r = this.card.getBoundingClientRect();
+      overlay.cardRect = { left: r.left, top: r.top, width: r.width, height: r.height };
+    }
+
+    // Comment text (trimmed, capped to avoid overflow)
+    const textarea = this.card && this.card.querySelector('textarea');
+    overlay.cardText = textarea ? textarea.value.trim().slice(0, 300) : '';
+
+    return overlay;
+  }
+
+  /**
    * Capture screenshot helper
    */
   async _captureScreenshot(textarea) {
@@ -1085,14 +1135,19 @@ class CommentCard {
       textarea.style.display = 'none';
     }
 
+    // Snapshot pin and card positions BEFORE the shadow host is hidden by captureViewportScreenshot.
+    // These are passed as widgetOverlay so the canvas compositing step can paint them on top
+    // of the captured frame without ever re-showing the shadow host (which caused GPU crashes).
+    const widgetOverlay = this._buildWidgetOverlay();
+
     await new Promise(resolve => requestAnimationFrame(resolve));
     await new Promise(resolve => setTimeout(resolve, 50));
 
     try {
-      // Capture screenshot with pin marker visible so user can see where they commented
       const screenshotData = await captureViewportScreenshot({
         shadowRoot: this.shadowRoot,
-        keepWidgetVisible: true  // Keep pin marker visible in screenshot
+        keepWidgetVisible: false,
+        widgetOverlay
       });
 
       this.screenshot = screenshotData.dataURL;
