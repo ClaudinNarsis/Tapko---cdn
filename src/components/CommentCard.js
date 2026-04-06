@@ -1066,6 +1066,36 @@ class CommentCard {
   }
 
   /**
+   * Snapshot current pin and card geometry for canvas compositing.
+   * Must be called while the shadow host is still visible.
+   */
+  _buildWidgetOverlay() {
+    const overlay = {};
+
+    // Pin centre in CSS viewport coordinates
+    if (this.pinMarker) {
+      const r = this.pinMarker.getBoundingClientRect();
+      overlay.pinX = r.left + r.width / 2;
+      overlay.pinY = r.top + r.height / 2;
+    } else {
+      overlay.pinX = this.coordinates.x;
+      overlay.pinY = this.coordinates.y;
+    }
+
+    // Card bounding rect
+    if (this.card) {
+      const r = this.card.getBoundingClientRect();
+      overlay.cardRect = { left: r.left, top: r.top, width: r.width, height: r.height };
+    }
+
+    // Comment text (trimmed, capped to avoid overflow)
+    const textarea = this.card && this.card.querySelector('textarea');
+    overlay.cardText = textarea ? textarea.value.trim().slice(0, 300) : '';
+
+    return overlay;
+  }
+
+  /**
    * Capture screenshot helper
    */
   async _captureScreenshot(textarea) {
@@ -1105,14 +1135,19 @@ class CommentCard {
       textarea.style.display = 'none';
     }
 
+    // Snapshot pin and card positions BEFORE the shadow host is hidden by captureViewportScreenshot.
+    // These are passed as widgetOverlay so the canvas compositing step can paint them on top
+    // of the captured frame without ever re-showing the shadow host (which caused GPU crashes).
+    const widgetOverlay = this._buildWidgetOverlay();
+
     await new Promise(resolve => requestAnimationFrame(resolve));
     await new Promise(resolve => setTimeout(resolve, 50));
 
     try {
-      // Capture screenshot with pin marker visible so user can see where they commented
       const screenshotData = await captureViewportScreenshot({
         shadowRoot: this.shadowRoot,
-        keepWidgetVisible: true  // Keep pin marker visible in screenshot
+        keepWidgetVisible: false,
+        widgetOverlay
       });
 
       this.screenshot = screenshotData.dataURL;
