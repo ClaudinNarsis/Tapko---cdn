@@ -35,6 +35,101 @@ async function loadHtmlToImage() {
 }
 
 /**
+ * Draw pin marker and comment card bubble onto an existing canvas context.
+ * Called after the video frame is drawn so nothing touches the GPU compositor.
+ *
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {Object} overlay
+ * @param {number} overlay.pinX   - Pin centre X in CSS viewport pixels
+ * @param {number} overlay.pinY   - Pin centre Y in CSS viewport pixels
+ * @param {Object} overlay.cardRect - {left, top, width, height} of the card in CSS pixels
+ * @param {string} overlay.cardText - Comment text to render inside the card
+ * @param {number} scale - CSS-pixel → video-pixel ratio (videoWidth / viewportWidth)
+ */
+function _drawWidgetOverlay(ctx, overlay, scale) {
+  const { pinX, pinY, cardRect, cardText } = overlay;
+
+  ctx.save();
+  ctx.scale(scale, scale);
+
+  // --- Pin dot (mirrors .dtc-comment-pin CSS) ---
+  const PIN_RADIUS = 6;
+  ctx.beginPath();
+  ctx.arc(pinX, pinY, PIN_RADIUS, 0, Math.PI * 2);
+  ctx.fillStyle = '#4f46e5';
+  ctx.fill();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#ffffff';
+  ctx.stroke();
+  // Subtle drop shadow ring
+  ctx.beginPath();
+  ctx.arc(pinX, pinY, PIN_RADIUS + 3, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(79, 70, 229, 0.35)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // --- Card bubble ---
+  if (cardRect) {
+    const { left, top, width, height } = cardRect;
+    const RADIUS = 12;
+    const PADDING = 12;
+
+    // White rounded rect with shadow
+    ctx.shadowColor = 'rgba(0,0,0,0.15)';
+    ctx.shadowBlur = 12 / scale;
+    ctx.shadowOffsetY = 4 / scale;
+    ctx.beginPath();
+    ctx.moveTo(left + RADIUS, top);
+    ctx.lineTo(left + width - RADIUS, top);
+    ctx.quadraticCurveTo(left + width, top, left + width, top + RADIUS);
+    ctx.lineTo(left + width, top + height - RADIUS);
+    ctx.quadraticCurveTo(left + width, top + height, left + width - RADIUS, top + height);
+    ctx.lineTo(left + RADIUS, top + height);
+    ctx.quadraticCurveTo(left, top + height, left, top + height - RADIUS);
+    ctx.lineTo(left, top + RADIUS);
+    ctx.quadraticCurveTo(left, top, left + RADIUS, top);
+    ctx.closePath();
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+
+    // Border
+    ctx.strokeStyle = '#e5e7eb';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Comment text
+    if (cardText) {
+      ctx.fillStyle = '#1f2937';
+      ctx.font = '13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      ctx.textBaseline = 'top';
+
+      // Word-wrap text within card width
+      const maxLineWidth = width - PADDING * 2;
+      const words = cardText.split(' ');
+      let line = '';
+      let lineY = top + PADDING;
+      const lineHeight = 18;
+
+      for (const word of words) {
+        const test = line ? `${line} ${word}` : word;
+        if (ctx.measureText(test).width > maxLineWidth && line) {
+          ctx.fillText(line, left + PADDING, lineY);
+          line = word;
+          lineY += lineHeight;
+          if (lineY + lineHeight > top + height - PADDING) break;
+        } else {
+          line = test;
+        }
+      }
+      if (line) ctx.fillText(line, left + PADDING, lineY);
+    }
+  }
+
+  ctx.restore();
+}
+
+/**
  * Capture viewport-only screenshot using Screen Capture API
  * This method bypasses CORS and gradient rendering issues
  * @param {Object} options - Screenshot options
@@ -66,7 +161,7 @@ async function captureViewportScreenshot(options = {}) {
 
   const timingStart = performance.now();
 
-  const { shadowRoot, keepWidgetVisible = false } = options;
+  const { shadowRoot, keepWidgetVisible = false, widgetOverlay = null } = options;
   let permissionOverlay = null;
 
   try {
@@ -81,14 +176,18 @@ async function captureViewportScreenshot(options = {}) {
     const MAX_WIDTH = 1280;
     const MAX_HEIGHT = 720;
 
-    let idealWidth = viewportWidth;
-    let idealHeight = viewportHeight;
+    // On Retina/HiDPI displays getDisplayMedia allocates an IOSurface at physical pixels
+    // (viewport * DPR), so a 1280×720 CSS constraint becomes 2560×1440 on DPR=2 — 4×
+    // the GPU memory. Force constraints to physical-pixel budget by capping at DPR=1.
+    const captureDPR = Math.min(devicePixelRatio, 1);
+    let idealWidth  = Math.floor(viewportWidth  * captureDPR);
+    let idealHeight = Math.floor(viewportHeight * captureDPR);
 
     // Scale down if viewport exceeds limits
-    if (viewportWidth > MAX_WIDTH || viewportHeight > MAX_HEIGHT) {
-      const scale = Math.min(MAX_WIDTH / viewportWidth, MAX_HEIGHT / viewportHeight);
-      idealWidth = Math.floor(viewportWidth * scale);
-      idealHeight = Math.floor(viewportHeight * scale);
+    if (idealWidth > MAX_WIDTH || idealHeight > MAX_HEIGHT) {
+      const scale = Math.min(MAX_WIDTH / idealWidth, MAX_HEIGHT / idealHeight);
+      idealWidth  = Math.floor(idealWidth  * scale);
+      idealHeight = Math.floor(idealHeight * scale);
     }
 
     // Get shadow host reference (we'll hide it after permission is granted)
@@ -104,6 +203,15 @@ async function captureViewportScreenshot(options = {}) {
       // without the widget before the capture frame is grabbed.
       debugLogger.checkpoint('shadow-hide', { idealWidth, idealHeight, devicePixelRatio });
       if (shadowHost) shadowHost.style.display = 'none';
+
+      // Freeze all CSS animations and transitions on the host page before capture.
+      // Active animated layers each hold a composited IOSurface tile; pausing them
+      // collapses that GPU memory pressure before Chrome allocates the capture buffer.
+      document.body.style.setProperty('animation-play-state', 'paused', 'important');
+      document.body.style.setProperty('transition', 'none', 'important');
+      // Notify host page so it can pause canvas/WebGL rAF loops if desired.
+      document.dispatchEvent(new CustomEvent('tapko:capture-start'));
+
       await new Promise(resolve => requestAnimationFrame(resolve));
       await new Promise(resolve => requestAnimationFrame(resolve));
       debugLogger.checkpoint('shadow-hide-raf-done');
@@ -175,6 +283,14 @@ async function captureViewportScreenshot(options = {}) {
       debugLogger.checkpoint('canvas-drawImage');
       ctx.drawImage(video, 0, 0);
 
+      // Composite pin and card on top of the captured frame without touching the GPU
+      // compositor. The scale converts CSS viewport pixels → captured video pixels.
+      if (widgetOverlay) {
+        const scale = video.videoWidth / viewportWidth;
+        _drawWidgetOverlay(ctx, widgetOverlay, scale);
+        debugLogger.checkpoint('widget-overlay-drawn');
+      }
+
       debugLogger.checkpoint('tracks-stop');
       stream.getTracks().forEach(track => track.stop());
 
@@ -221,6 +337,10 @@ async function captureViewportScreenshot(options = {}) {
       throw innerError;
     } finally {
       if (shadowHost) shadowHost.style.display = originalDisplay;
+      // Guarantee animation state is restored even if capture fails mid-way.
+      document.body.style.removeProperty('animation-play-state');
+      document.body.style.removeProperty('transition');
+      document.dispatchEvent(new CustomEvent('tapko:capture-end'));
     }
 
   } catch (error) {
