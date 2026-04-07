@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Acme — Onboarding (SPA replaceState)</title>
+  <link rel="stylesheet" href="shared.css">
+  <style>
+    .wizard {
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .step-indicator {
+      display: flex;
+      gap: 0;
+      margin-bottom: 2.5rem;
+    }
+
+    .step-dot {
+      flex: 1;
+      height: 4px;
+      background: #e2e8f0;
+      transition: background 0.3s;
+    }
+
+    .step-dot.done {
+      background: #6366f1;
+    }
+
+    .step-dot:first-child {
+      border-radius: 2px 0 0 2px;
+    }
+
+    .step-dot:last-child {
+      border-radius: 0 2px 2px 0;
+    }
+
+    .step-label {
+      text-align: center;
+      font-size: 0.75rem;
+      color: #94a3b8;
+      margin-bottom: 0.35rem;
+      letter-spacing: 0.06em;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .step-card {
+      background: white;
+      border: 1px solid #e2e8f0;
+      border-radius: 16px;
+      padding: 2.5rem;
+    }
+
+    .step-card h2 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 0.75rem;
+    }
+
+    .step-card p {
+      color: #64748b;
+      font-size: 0.9rem;
+      line-height: 1.7;
+      margin-bottom: 1.5rem;
+    }
+
+    .form-field {
+      margin-bottom: 1.25rem;
+    }
+
+    .form-field label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 0.4rem;
+    }
+
+    .form-field input,
+    .form-field select {
+      width: 100%;
+      padding: 0.65rem 0.9rem;
+      border: 1.5px solid #d1d5db;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      color: #0f172a;
+      background: white;
+      transition: border-color 0.15s;
+    }
+
+    .form-field input:focus,
+    .form-field select:focus {
+      outline: none;
+      border-color: #6366f1;
+      box-shadow: 0 0 0 3px #eef2ff;
+    }
+
+    .option-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .option-card {
+      border: 1.5px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 1rem;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+
+    .option-card:hover,
+    .option-card.selected {
+      border-color: #6366f1;
+      background: #eef2ff;
+    }
+
+    .option-card h4 {
+      font-size: 0.875rem;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 0.25rem;
+    }
+
+    .option-card p {
+      font-size: 0.75rem;
+      color: #64748b;
+      margin: 0;
+    }
+
+    .step-nav {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 2rem;
+    }
+
+    .check-list {
+      list-style: none;
+      margin-bottom: 1.5rem;
+    }
+
+    .check-list li {
+      font-size: 0.875rem;
+      color: #374151;
+      padding: 0.4rem 0;
+      display: flex;
+      gap: 0.6rem;
+      align-items: center;
+    }
+
+    .check-list li::before {
+      content: '✓';
+      color: #22c55e;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <a href="index.html" class="logo">Ac<span>me</span></a>
+    <ul class="nav-links">
+      <li><a href="index.html">Home</a></li>
+      <li><a href="page-pushstate.html">SPA (pushState)</a></li>
+      <li><a href="page-replacestate.html" class="active">SPA (replaceState)</a></li>
+      <li><a href="page-hash.html">Hash nav</a></li>
+      <li><a href="page-anchor.html">Anchor links</a></li>
+    </ul>
+    <span class="nav-badge">Navigation test site</span>
+  </nav>
+
+  <div class="container">
+    <div class="section-label">SPA — history.replaceState</div>
+    <h2 class="section-title">Onboarding wizard</h2>
+    <p class="section-sub">Each step uses <code>history.replaceState</code> to update the URL without creating a new history entry — and without a page reload.</p>
+
+    <div class="wizard">
+      <p class="step-label" id="step-label">Step 1 of 4</p>
+      <div class="step-indicator">
+        <div class="step-dot done" id="dot-1"></div>
+        <div class="step-dot" id="dot-2"></div>
+        <div class="step-dot" id="dot-3"></div>
+        <div class="step-dot" id="dot-4"></div>
+      </div>
+
+      <!-- Step 1 -->
+      <div class="step-card" id="step-1">
+        <h2>Create your workspace</h2>
+        <p>Give your workspace a name. This is what your teammates will see when they join.</p>
+        <div class="form-field">
+          <label>Workspace name</label>
+          <input type="text" placeholder="e.g. Acme Engineering" value="">
+        </div>
+        <div class="form-field">
+          <label>URL slug</label>
+          <input type="text" placeholder="acme-engineering" value="">
+        </div>
+        <div class="step-nav">
+          <span></span>
+          <button class="btn btn-primary" onclick="goStep(2)">Continue</button>
+        </div>
+      </div>
+
+      <!-- Step 2 -->
+      <div class="step-card" id="step-2" style="display:none">
+        <h2>Tell us about your team</h2>
+        <p>We'll use this to suggest templates and integrations that fit how you work.</p>
+        <div class="option-grid">
+          <div class="option-card" onclick="selectOption(this)">
+            <h4>Software</h4>
+            <p>Engineering sprints, bug tracking, releases</p>
+          </div>
+          <div class="option-card" onclick="selectOption(this)">
+            <h4>Design</h4>
+            <p>Figma projects, design reviews, hand-offs</p>
+          </div>
+          <div class="option-card" onclick="selectOption(this)">
+            <h4>Marketing</h4>
+            <p>Campaigns, content calendars, launches</p>
+          </div>
+          <div class="option-card" onclick="selectOption(this)">
+            <h4>Operations</h4>
+            <p>SOPs, onboarding, cross-team projects</p>
+          </div>
+        </div>
+        <div class="step-nav">
+          <button class="btn btn-outline" onclick="goStep(1)">Back</button>
+          <button class="btn btn-primary" onclick="goStep(3)">Continue</button>
+        </div>
+      </div>
+
+      <!-- Step 3 -->
+      <div class="step-card" id="step-3" style="display:none">
+        <h2>Invite your team</h2>
+        <p>Add teammates by email. You can skip this and do it later from your workspace settings.</p>
+        <div class="form-field">
+          <label>Email addresses (comma separated)</label>
+          <input type="text" placeholder="alice@acme.com, bob@acme.com">
+        </div>
+        <div class="form-field">
+          <label>Default role</label>
+          <select>
+            <option>Member</option>
+            <option>Admin</option>
+            <option>Guest</option>
+          </select>
+        </div>
+        <div class="step-nav">
+          <button class="btn btn-outline" onclick="goStep(2)">Back</button>
+          <button class="btn btn-primary" onclick="goStep(4)">Continue</button>
+        </div>
+      </div>
+
+      <!-- Step 4 -->
+      <div class="step-card" id="step-4" style="display:none">
+        <h2>You're all set!</h2>
+        <p>Your workspace is ready. Here's what happens next:</p>
+        <ul class="check-list">
+          <li>Teammates receive their invite emails</li>
+          <li>Your first project template has been created</li>
+          <li>Recommended integrations are ready to connect</li>
+          <li>A 14-day trial of the Pro plan has started</li>
+        </ul>
+        <div class="step-nav">
+          <button class="btn btn-outline" onclick="goStep(3)">Back</button>
+          <a href="page-pushstate.html" class="btn btn-primary">Go to dashboard</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    &copy; 2026 Acme Inc. — Navigation test site for Tapko widget secret key persistence
+  </footer>
+
+  <script>
+    const stepPaths = {
+      1: '/onboarding/workspace',
+      2: '/onboarding/team',
+      3: '/onboarding/invite',
+      4: '/onboarding/complete'
+    };
+
+    function goStep(n) {
+      // replaceState — no new history entry, URL changes
+      history.replaceState({ step: n }, '', stepPaths[n]);
+
+      for (let i = 1; i <= 4; i++) {
+        document.getElementById('step-' + i).style.display = (i === n) ? 'block' : 'none';
+        document.getElementById('dot-' + i).classList.toggle('done', i <= n);
+      }
+
+      document.getElementById('step-label').textContent = 'Step ' + n + ' of 4';
+    }
+
+    function selectOption(el) {
+      el.closest('.option-grid').querySelectorAll('.option-card').forEach(c => c.classList.remove('selected'));
+      el.classList.add('selected');
+    }
+  </script>
+
+</body>
+</html>

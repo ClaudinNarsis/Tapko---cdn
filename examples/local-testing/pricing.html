@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pricing - Tapko | Dev Testing</title>
+  <link rel="stylesheet" href="shared-styles.css">
+
+  <script src="http://localhost:5500/dist/tapko-widget.js"></script>
+
+  <style>
+    .pricing-card {
+      background: white;
+      border-radius: 12px;
+      padding: 2.5rem;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.07);
+      transition: transform 0.3s, box-shadow 0.3s;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .pricing-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 12px 24px rgba(0,0,0,0.15);
+    }
+
+    .pricing-card.featured {
+      border: 3px solid #6366f1;
+      position: relative;
+      transform: scale(1.05);
+    }
+
+    .pricing-card.featured::before {
+      content: 'MOST POPULAR';
+      position: absolute;
+      top: -15px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #6366f1;
+      color: white;
+      padding: 0.5rem 1.5rem;
+      border-radius: 50px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+    }
+
+    .pricing-header h3 {
+      font-size: 1.5rem;
+      margin-bottom: 0.5rem;
+      color: #2d3748;
+    }
+
+    .pricing-price {
+      font-size: 3rem;
+      font-weight: 700;
+      color: #6366f1;
+      margin: 1rem 0;
+    }
+
+    .pricing-price span {
+      font-size: 1rem;
+      color: #666;
+      font-weight: 400;
+    }
+
+    .pricing-features {
+      list-style: none;
+      padding: 0;
+      margin: 2rem 0;
+      flex-grow: 1;
+    }
+
+    .pricing-features li {
+      padding: 0.75rem 0;
+      color: #666;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+    }
+
+    .pricing-features li::before {
+      content: '✓';
+      color: #10b981;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .pricing-features li.disabled {
+      opacity: 0.4;
+    }
+
+    .pricing-features li.disabled::before {
+      content: '−';
+      color: #999;
+    }
+
+    .comparison-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.07);
+    }
+
+    .comparison-table th,
+    .comparison-table td {
+      padding: 1.25rem;
+      text-align: left;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .comparison-table th {
+      background: #f9fafb;
+      font-weight: 600;
+      color: #2d3748;
+    }
+
+    .comparison-table td:not(:first-child) {
+      text-align: center;
+    }
+
+    .check {
+      color: #10b981;
+      font-weight: 700;
+    }
+
+    .cross {
+      color: #e5e7eb;
+    }
+  </style>
+</head>
+<body>
+  <!-- Navigation -->
+  <nav class="navbar">
+    <div class="navbar-content">
+      <a href="index.html" class="logo">Tapko</a>
+
+      <button class="mobile-menu-toggle" onclick="toggleMobileMenu()">☰</button>
+
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html">Home</a></li>
+        <li class="nav-dropdown">
+          <a href="features.html" class="nav-dropdown-toggle">
+            Features <span>▾</span>
+          </a>
+          <div class="nav-dropdown-menu">
+            <a href="features.html#integration">Easy Integration</a>
+            <a href="features.html#analytics">Smart Analytics</a>
+            <a href="features.html#customization">Customization</a>
+            <a href="features.html#collaboration">Team Collaboration</a>
+          </div>
+        </li>
+        <li><a href="pricing.html" class="active">Pricing</a></li>
+        <li><a href="documentation.html">Docs</a></li>
+        <li class="nav-dropdown">
+          <a href="blog.html" class="nav-dropdown-toggle">
+            Resources <span>▾</span>
+          </a>
+          <div class="nav-dropdown-menu">
+            <a href="blog.html">Blog</a>
+            <a href="documentation.html">Documentation</a>
+            <a href="about.html">About Us</a>
+          </div>
+        </li>
+        <li><a href="contact.html">Contact</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- Breadcrumbs -->
+  <div class="container">
+    <div class="breadcrumbs">
+      <a href="index.html">Home</a> / <span>Pricing</span>
+    </div>
+  </div>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="hero-content">
+      <h1>Simple, Transparent Pricing</h1>
+      <p>Choose the plan that's right for your team. All plans include 14-day free trial.</p>
+    </div>
+  </section>
+
+  <!-- Pricing Cards -->
+  <section class="section">
+    <div class="container">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem; align-items: stretch;">
+        <!-- Starter Plan -->
+        <div class="pricing-card">
+          <div class="pricing-header">
+            <h3>Starter</h3>
+            <p class="text-muted">Perfect for side projects and testing</p>
+          </div>
+          <div class="pricing-price">
+            Free
+          </div>
+          <ul class="pricing-features">
+            <li>Up to 100 feedback items/month</li>
+            <li>1 project</li>
+            <li>Basic analytics</li>
+            <li>Email support</li>
+            <li>Community access</li>
+            <li class="disabled">Custom branding</li>
+            <li class="disabled">API access</li>
+            <li class="disabled">Team collaboration</li>
+          </ul>
+          <a href="documentation.html" class="btn btn-outline" style="width: 100%; text-align: center;">Get Started</a>
+        </div>
+
+        <!-- Pro Plan (Featured) -->
+        <div class="pricing-card featured">
+          <div class="pricing-header">
+            <h3>Professional</h3>
+            <p class="text-muted">For growing teams and businesses</p>
+          </div>
+          <div class="pricing-price">
+            $49 <span>/month</span>
+          </div>
+          <ul class="pricing-features">
+            <li>Up to 5,000 feedback items/month</li>
+            <li>Unlimited projects</li>
+            <li>Advanced analytics</li>
+            <li>Priority email support</li>
+            <li>Custom branding</li>
+            <li>API access</li>
+            <li>Up to 5 team members</li>
+            <li>Integrations (Slack, Jira, etc.)</li>
+            <li class="disabled">SSO / SAML</li>
+            <li class="disabled">Dedicated support</li>
+          </ul>
+          <a href="documentation.html" class="btn btn-secondary" style="width: 100%; text-align: center;">Start Free Trial</a>
+        </div>
+
+        <!-- Enterprise Plan -->
+        <div class="pricing-card">
+          <div class="pricing-header">
+            <h3>Enterprise</h3>
+            <p class="text-muted">For large organizations</p>
+          </div>
+          <div class="pricing-price">
+            Custom
+          </div>
+          <ul class="pricing-features">
+            <li>Unlimited feedback items</li>
+            <li>Unlimited projects</li>
+            <li>Advanced analytics + AI</li>
+            <li>24/7 dedicated support</li>
+            <li>Custom branding</li>
+            <li>Full API access</li>
+            <li>Unlimited team members</li>
+            <li>All integrations</li>
+            <li>SSO / SAML</li>
+            <li>Custom SLA</li>
+            <li>On-premise option</li>
+            <li>Training & onboarding</li>
+          </ul>
+          <a href="contact.html" class="btn btn-outline" style="width: 100%; text-align: center;">Contact Sales</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Comparison Table -->
+  <section class="section section-white">
+    <div class="container">
+      <h2>Feature Comparison</h2>
+      <div style="overflow-x: auto;">
+        <table class="comparison-table">
+          <thead>
+            <tr>
+              <th>Feature</th>
+              <th>Starter</th>
+              <th>Professional</th>
+              <th>Enterprise</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Feedback Items / Month</strong></td>
+              <td>100</td>
+              <td>5,000</td>
+              <td>Unlimited</td>
+            </tr>
+            <tr>
+              <td><strong>Projects</strong></td>
+              <td>1</td>
+              <td>Unlimited</td>
+              <td>Unlimited</td>
+            </tr>
+            <tr>
+              <td><strong>Team Members</strong></td>
+              <td>1</td>
+              <td>5</td>
+              <td>Unlimited</td>
+            </tr>
+            <tr>
+              <td><strong>Basic Analytics</strong></td>
+              <td><span class="check">✓</span></td>
+              <td><span class="check">✓</span></td>
+              <td><span class="check">✓</span></td>
+            </tr>
+            <tr>
+              <td><strong>Advanced Analytics</strong></td>
+              <td><span class="cross">−</span></td>
+              <td><span class="check">✓</span></td>
+              <td><span class="check">✓</span></td>
+            </tr>
+            <tr>
+              <td><strong>AI Sentiment Analysis</strong></td>
+              <td><span class="cross">−</span></td>
+              <td><span class="cross">−</span></td>
+              <td><span class="check">✓</span></td>
+            </tr>
+            <tr>
+              <td><strong>Custom Branding</strong></td>
+              <td><span class="cross">−</span></td>
+              <td><span class="check">✓</span></td>
+              <td><span class="check">✓</span></td>
+            </tr>
+            <tr>
+              <td><strong>API Access</strong></td>
+              <td><span class="cross">−</span></td>
+              <td><span class="check">✓</span></td>
+              <td><span class="check">✓</span></td>
+            </tr>
+            <tr>
+              <td><strong>Integrations</strong></td>
+              <td><span class="cross">−</span></td>
+              <td><span class="check">✓</span></td>
+              <td><span class="check">✓</span></td>
+            </tr>
+            <tr>
+              <td><strong>SSO / SAML</strong></td>
+              <td><span class="cross">−</span></td>
+              <td><span class="cross">−</span></td>
+              <td><span class="check">✓</span></td>
+            </tr>
+            <tr>
+              <td><strong>Priority Support</strong></td>
+              <td><span class="cross">−</span></td>
+              <td><span class="check">✓</span></td>
+              <td><span class="check">✓</span></td>
+            </tr>
+            <tr>
+              <td><strong>Dedicated Support</strong></td>
+              <td><span class="cross">−</span></td>
+              <td><span class="cross">−</span></td>
+              <td><span class="check">✓</span></td>
+            </tr>
+            <tr>
+              <td><strong>Custom SLA</strong></td>
+              <td><span class="cross">−</span></td>
+              <td><span class="cross">−</span></td>
+              <td><span class="check">✓</span></td>
+            </tr>
+            <tr>
+              <td><strong>On-Premise Option</strong></td>
+              <td><span class="cross">−</span></td>
+              <td><span class="cross">−</span></td>
+              <td><span class="check">✓</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ Section -->
+  <section class="section">
+    <div class="container-narrow">
+      <h2>Frequently Asked Questions</h2>
+      <div style="display: grid; gap: 2rem;">
+        <div class="card">
+          <h3 style="font-size: 1.2rem; margin-bottom: 1rem;">Can I change plans later?</h3>
+          <p style="margin: 0;">Yes! You can upgrade or downgrade your plan at any time. Changes take effect immediately, and we'll prorate any charges.</p>
+        </div>
+        <div class="card">
+          <h3 style="font-size: 1.2rem; margin-bottom: 1rem;">What happens if I exceed my monthly limit?</h3>
+          <p style="margin: 0;">We'll send you a notification when you reach 80% of your limit. You can upgrade your plan or we'll automatically archive older feedback to keep you within limits.</p>
+        </div>
+        <div class="card">
+          <h3 style="font-size: 1.2rem; margin-bottom: 1rem;">Is there a long-term contract?</h3>
+          <p style="margin: 0;">No long-term contracts required! All plans are month-to-month. We also offer annual billing with a 20% discount.</p>
+        </div>
+        <div class="card">
+          <h3 style="font-size: 1.2rem; margin-bottom: 1rem;">Do you offer non-profit discounts?</h3>
+          <p style="margin: 0;">Yes! We offer 50% off Professional plans for eligible non-profit organizations. Contact us for details.</p>
+        </div>
+        <div class="card">
+          <h3 style="font-size: 1.2rem; margin-bottom: 1rem;">What payment methods do you accept?</h3>
+          <p style="margin: 0;">We accept all major credit cards, PayPal, and bank transfers for Enterprise customers.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA Section -->
+  <section class="section section-white">
+    <div class="container-narrow text-center">
+      <h2>Still Have Questions?</h2>
+      <p class="text-muted" style="font-size: 1.1rem; margin-bottom: 2rem;">
+        Our team is here to help you find the perfect plan for your needs
+      </p>
+      <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+        <a href="contact.html" class="btn btn-secondary">Contact Sales</a>
+        <a href="documentation.html" class="btn btn-outline">Try Free</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <p>&copy; 2024 Tapko. All rights reserved.</p>
+      <div class="footer-links">
+        <a href="about.html">About</a>
+        <a href="features.html">Features</a>
+        <a href="pricing.html">Pricing</a>
+        <a href="documentation.html">Documentation</a>
+        <a href="blog.html">Blog</a>
+        <a href="contact.html">Contact</a>
+      </div>
+      <p style="margin-top: 1.5rem;">Built for better user experiences</p>
+    </div>
+  </footer>
+
+  <script>
+    function toggleMobileMenu() {
+      const navLinks = document.getElementById('navLinks');
+      navLinks.classList.toggle('active');
+    }
+  </script>
+</body>
+</html>
