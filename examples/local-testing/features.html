@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Features - Tapko | Dev Testing</title>
+  <link rel="stylesheet" href="shared-styles.css">
+
+  <script src="http://localhost:5500/dist/tapko-widget.js"></script>
+</head>
+<body>
+  <!-- Navigation -->
+  <nav class="navbar">
+    <div class="navbar-content">
+      <a href="index.html" class="logo">Tapko</a>
+
+      <button class="mobile-menu-toggle" onclick="toggleMobileMenu()">☰</button>
+
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html">Home</a></li>
+        <li class="nav-dropdown">
+          <a href="features.html" class="nav-dropdown-toggle active">
+            Features <span>▾</span>
+          </a>
+          <div class="nav-dropdown-menu">
+            <a href="#integration">Easy Integration</a>
+            <a href="#analytics">Smart Analytics</a>
+            <a href="#customization">Customization</a>
+            <a href="#collaboration">Team Collaboration</a>
+          </div>
+        </li>
+        <li><a href="pricing.html">Pricing</a></li>
+        <li><a href="documentation.html">Docs</a></li>
+        <li class="nav-dropdown">
+          <a href="blog.html" class="nav-dropdown-toggle">
+            Resources <span>▾</span>
+          </a>
+          <div class="nav-dropdown-menu">
+            <a href="blog.html">Blog</a>
+            <a href="documentation.html">Documentation</a>
+            <a href="about.html">About Us</a>
+          </div>
+        </li>
+        <li><a href="contact.html">Contact</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- Breadcrumbs -->
+  <div class="container">
+    <div class="breadcrumbs">
+      <a href="index.html">Home</a> / <span>Features</span>
+    </div>
+  </div>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="hero-content">
+      <h1>Powerful Features for Modern Teams</h1>
+      <p>Everything you need to collect, analyze, and act on user feedback</p>
+    </div>
+  </section>
+
+  <!-- Feature: Integration -->
+  <section id="integration" class="section">
+    <div class="container">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4rem; align-items: center;">
+        <div>
+          <span class="badge badge-primary">Integration</span>
+          <h2 style="text-align: left; margin-top: 1rem; margin-bottom: 1.5rem;">Easy Integration</h2>
+          <p style="color: #666; margin-bottom: 1.5rem; line-height: 1.8; font-size: 1.1rem;">
+            Get started in minutes, not days. Our SDK is designed for developers who value their time.
+          </p>
+          <div style="display: grid; gap: 1rem;">
+            <div class="card" style="padding: 1.5rem;">
+              <h4 style="color: #6366f1; margin-bottom: 0.5rem;">Simple Setup</h4>
+              <p style="margin: 0; color: #666;">Just three lines of code to start collecting feedback</p>
+            </div>
+            <div class="card" style="padding: 1.5rem;">
+              <h4 style="color: #6366f1; margin-bottom: 0.5rem;">Framework Agnostic</h4>
+              <p style="margin: 0; color: #666;">Works with React, Vue, Angular, or vanilla JavaScript</p>
+            </div>
+            <div class="card" style="padding: 1.5rem;">
+              <h4 style="color: #6366f1; margin-bottom: 0.5rem;">Zero Dependencies</h4>
+              <p style="margin: 0; color: #666;">Lightweight bundle with no external dependencies</p>
+            </div>
+          </div>
+        </div>
+        <div style="background: #1f2937; border-radius: 12px; padding: 2rem; color: #e5e7eb; font-family: monospace; font-size: 0.9rem;">
+          <div style="color: #10b981; margin-bottom: 1rem;">// Install via npm</div>
+          <div style="margin-bottom: 1.5rem;">npm install @tapko/widget</div>
+
+          <div style="color: #10b981; margin-bottom: 1rem;">// Or use CDN</div>
+          <div style="margin-bottom: 1.5rem;">&lt;script src="tapko-widget.js"&gt;&lt;/script&gt;</div>
+
+          <div style="color: #10b981; margin-bottom: 1rem;">// Initialize</div>
+          <div>await Tapko.init(&#123;</div>
+          <div style="padding-left: 1rem;">projectId: 'your-id',</div>
+          <div style="padding-left: 1rem;">apiKey: 'your-key'</div>
+          <div>&#125;);</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Feature: Analytics -->
+  <section id="analytics" class="section section-white">
+    <div class="container">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4rem; align-items: center;">
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 16px; padding: 3rem; color: white;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">📊</div>
+          <h3 style="font-size: 1.8rem; margin-bottom: 1.5rem;">Real-Time Analytics Dashboard</h3>
+          <ul style="list-style: none; padding: 0; display: grid; gap: 1rem;">
+            <li style="display: flex; align-items: center; gap: 0.5rem;">
+              <span>✓</span> Sentiment analysis powered by AI
+            </li>
+            <li style="display: flex; align-items: center; gap: 0.5rem;">
+              <span>✓</span> Automatic categorization
+            </li>
+            <li style="display: flex; align-items: center; gap: 0.5rem;">
+              <span>✓</span> User journey tracking
+            </li>
+            <li style="display: flex; align-items: center; gap: 0.5rem;">
+              <span>✓</span> Custom reports and exports
+            </li>
+          </ul>
+        </div>
+        <div>
+          <span class="badge badge-primary">Analytics</span>
+          <h2 style="text-align: left; margin-top: 1rem; margin-bottom: 1.5rem;">Smart Insights</h2>
+          <p style="color: #666; margin-bottom: 1.5rem; line-height: 1.8; font-size: 1.1rem;">
+            Turn raw feedback into actionable insights with our intelligent analytics engine.
+          </p>
+          <div class="grid grid-2" style="gap: 1.5rem;">
+            <div style="text-align: center;">
+              <div style="font-size: 2.5rem; font-weight: 700; color: #6366f1; margin-bottom: 0.5rem;">95%</div>
+              <p class="text-muted">Auto-categorization accuracy</p>
+            </div>
+            <div style="text-align: center;">
+              <div style="font-size: 2.5rem; font-weight: 700; color: #6366f1; margin-bottom: 0.5rem;">&lt;1s</div>
+              <p class="text-muted">Real-time processing</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Feature: Customization -->
+  <section id="customization" class="section">
+    <div class="container">
+      <div style="text-align: center; margin-bottom: 3rem;">
+        <span class="badge badge-primary">Customization</span>
+        <h2 style="margin-top: 1rem;">Match Your Brand Perfectly</h2>
+        <p class="text-muted" style="font-size: 1.1rem; margin-top: 1rem;">
+          Full control over appearance and behavior
+        </p>
+      </div>
+      <div class="grid grid-3">
+        <div class="card">
+          <div style="font-size: 2.5rem; margin-bottom: 1rem;">🎨</div>
+          <h3>Theme Customization</h3>
+          <p>Customize colors, fonts, borders, and spacing to match your brand guidelines perfectly.</p>
+        </div>
+        <div class="card">
+          <div style="font-size: 2.5rem; margin-bottom: 1rem;">📝</div>
+          <h3>Custom Fields</h3>
+          <p>Add custom form fields to collect specific information relevant to your product.</p>
+        </div>
+        <div class="card">
+          <div style="font-size: 2.5rem; margin-bottom: 1rem;">🌐</div>
+          <h3>Localization</h3>
+          <p>Support for 40+ languages with easy translation management.</p>
+        </div>
+        <div class="card">
+          <div style="font-size: 2.5rem; margin-bottom: 1rem;">🎯</div>
+          <h3>Trigger Rules</h3>
+          <p>Show feedback prompts based on user behavior, time on page, or custom events.</p>
+        </div>
+        <div class="card">
+          <div style="font-size: 2.5rem; margin-bottom: 1rem;">🔒</div>
+          <h3>Privacy Controls</h3>
+          <p>Fine-grained control over data collection and user privacy settings.</p>
+        </div>
+        <div class="card">
+          <div style="font-size: 2.5rem; margin-bottom: 1rem;">⚙️</div>
+          <h3>Behavior Settings</h3>
+          <p>Configure position, animations, keyboard shortcuts, and interaction patterns.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Feature: Collaboration -->
+  <section id="collaboration" class="section section-white">
+    <div class="container">
+      <div style="text-align: center; margin-bottom: 3rem;">
+        <span class="badge badge-primary">Collaboration</span>
+        <h2 style="margin-top: 1rem;">Built For Teams</h2>
+        <p class="text-muted" style="font-size: 1.1rem; margin-top: 1rem;">
+          Collaborate seamlessly across your organization
+        </p>
+      </div>
+      <div class="grid grid-2">
+        <div class="card" style="padding: 2.5rem;">
+          <div style="font-size: 2.5rem; margin-bottom: 1rem;">👥</div>
+          <h3>Team Management</h3>
+          <p style="margin-bottom: 1.5rem;">Invite team members, assign roles, and manage permissions with granular access control.</p>
+          <ul style="color: #666; line-height: 2;">
+            <li>Role-based access control</li>
+            <li>Custom permission sets</li>
+            <li>Activity logs and audit trails</li>
+          </ul>
+        </div>
+        <div class="card" style="padding: 2.5rem;">
+          <div style="font-size: 2.5rem; margin-bottom: 1rem;">💬</div>
+          <h3>Internal Comments</h3>
+          <p style="margin-bottom: 1.5rem;">Discuss feedback internally without cluttering the user-facing thread.</p>
+          <ul style="color: #666; line-height: 2;">
+            <li>@mentions and notifications</li>
+            <li>Rich text formatting</li>
+            <li>File attachments</li>
+          </ul>
+        </div>
+        <div class="card" style="padding: 2.5rem;">
+          <div style="font-size: 2.5rem; margin-bottom: 1rem;">🔗</div>
+          <h3>Integrations</h3>
+          <p style="margin-bottom: 1.5rem;">Connect with tools you already use to streamline your workflow.</p>
+          <ul style="color: #666; line-height: 2;">
+            <li>Slack, Teams, Discord</li>
+            <li>Jira, Linear, Asana</li>
+            <li>Webhooks and API access</li>
+          </ul>
+        </div>
+        <div class="card" style="padding: 2.5rem;">
+          <div style="font-size: 2.5rem; margin-bottom: 1rem;">📋</div>
+          <h3>Workflow Automation</h3>
+          <p style="margin-bottom: 1.5rem;">Automate repetitive tasks and keep your team focused on what matters.</p>
+          <ul style="color: #666; line-height: 2;">
+            <li>Auto-assignment rules</li>
+            <li>Status automation</li>
+            <li>Custom workflows</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- More Features -->
+  <section class="section">
+    <div class="container">
+      <h2>And Much More...</h2>
+      <div class="grid grid-4">
+        <div class="card text-center">
+          <div style="font-size: 2rem; margin-bottom: 0.5rem;">🔒</div>
+          <h4>Enterprise Security</h4>
+          <p style="font-size: 0.9rem; margin: 0;">SOC 2, GDPR, CCPA compliant</p>
+        </div>
+        <div class="card text-center">
+          <div style="font-size: 2rem; margin-bottom: 0.5rem;">📱</div>
+          <h4>Mobile Optimized</h4>
+          <p style="font-size: 0.9rem; margin: 0;">Perfect on all devices</p>
+        </div>
+        <div class="card text-center">
+          <div style="font-size: 2rem; margin-bottom: 0.5rem;">⚡</div>
+          <h4>99.9% Uptime</h4>
+          <p style="font-size: 0.9rem; margin: 0;">Enterprise-grade reliability</p>
+        </div>
+        <div class="card text-center">
+          <div style="font-size: 2rem; margin-bottom: 0.5rem;">📊</div>
+          <h4>Export Anywhere</h4>
+          <p style="font-size: 0.9rem; margin: 0;">CSV, JSON, API access</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA Section -->
+  <section class="section section-white">
+    <div class="container-narrow text-center">
+      <h2>Ready to See It In Action?</h2>
+      <p class="text-muted" style="font-size: 1.1rem; margin-bottom: 2rem;">
+        Try the Tapko widget right here on this page, or start your free trial today
+      </p>
+      <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+        <a href="documentation.html" class="btn btn-secondary">Start Free Trial</a>
+        <a href="pricing.html" class="btn btn-outline">View Pricing</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <p>&copy; 2024 Tapko. All rights reserved.</p>
+      <div class="footer-links">
+        <a href="about.html">About</a>
+        <a href="features.html">Features</a>
+        <a href="pricing.html">Pricing</a>
+        <a href="documentation.html">Documentation</a>
+        <a href="blog.html">Blog</a>
+        <a href="contact.html">Contact</a>
+      </div>
+      <p style="margin-top: 1.5rem;">Built for better user experiences</p>
+    </div>
+  </footer>
+
+  <script>
+    function toggleMobileMenu() {
+      const navLinks = document.getElementById('navLinks');
+      navLinks.classList.toggle('active');
+    }
+
+    // Smooth scroll for anchor links
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        e.preventDefault();
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+    });
+  </script>
+</body>
+</html>

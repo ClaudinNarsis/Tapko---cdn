@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blog - Tapko | Dev Testing</title>
+  <link rel="stylesheet" href="shared-styles.css">
+  <script src="http://localhost:5500/dist/tapko-widget.js"></script>
+
+  <style>
+    .blog-card {
+      background: white;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.07);
+      transition: transform 0.3s, box-shadow 0.3s;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .blog-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 12px 24px rgba(0,0,0,0.15);
+    }
+
+    .blog-card-image {
+      width: 100%;
+      height: 200px;
+      object-fit: cover;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .blog-card-content {
+      padding: 1.5rem;
+      flex-grow: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .blog-card-meta {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+      font-size: 0.875rem;
+      color: #999;
+      margin-bottom: 1rem;
+    }
+
+    .blog-card h3 {
+      font-size: 1.3rem;
+      margin-bottom: 0.75rem;
+      color: #2d3748;
+    }
+
+    .blog-card h3 a {
+      color: inherit;
+      text-decoration: none;
+      transition: color 0.3s;
+    }
+
+    .blog-card h3 a:hover {
+      color: #6366f1;
+    }
+
+    .blog-card p {
+      color: #666;
+      line-height: 1.6;
+      margin-bottom: 1rem;
+      flex-grow: 1;
+    }
+
+    .read-more {
+      color: #6366f1;
+      text-decoration: none;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: gap 0.3s;
+    }
+
+    .read-more:hover {
+      gap: 0.75rem;
+    }
+
+    .featured-post {
+      background: white;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.07);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      margin-bottom: 3rem;
+    }
+
+    .featured-post-image {
+      width: 100%;
+      height: 100%;
+      min-height: 300px;
+      object-fit: cover;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .featured-post-content {
+      padding: 3rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    @media (max-width: 768px) {
+      .featured-post {
+        grid-template-columns: 1fr;
+      }
+
+      .featured-post-image {
+        min-height: 200px;
+      }
+
+      .featured-post-content {
+        padding: 2rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Navigation -->
+  <nav class="navbar">
+    <div class="navbar-content">
+      <a href="index.html" class="logo">Tapko</a>
+
+      <button class="mobile-menu-toggle" onclick="toggleMobileMenu()">☰</button>
+
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html">Home</a></li>
+        <li class="nav-dropdown">
+          <a href="features.html" class="nav-dropdown-toggle">
+            Features <span>▾</span>
+          </a>
+          <div class="nav-dropdown-menu">
+            <a href="features.html#integration">Easy Integration</a>
+            <a href="features.html#analytics">Smart Analytics</a>
+            <a href="features.html#customization">Customization</a>
+            <a href="features.html#collaboration">Team Collaboration</a>
+          </div>
+        </li>
+        <li><a href="pricing.html">Pricing</a></li>
+        <li><a href="documentation.html">Docs</a></li>
+        <li class="nav-dropdown">
+          <a href="blog.html" class="nav-dropdown-toggle active">
+            Resources <span>▾</span>
+          </a>
+          <div class="nav-dropdown-menu">
+            <a href="blog.html" class="active">Blog</a>
+            <a href="documentation.html">Documentation</a>
+            <a href="about.html">About Us</a>
+          </div>
+        </li>
+        <li><a href="contact.html">Contact</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- Breadcrumbs -->
+  <div class="container">
+    <div class="breadcrumbs">
+      <a href="index.html">Home</a> / <span>Blog</span>
+    </div>
+  </div>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="hero-content">
+      <h1>The Tapko Blog</h1>
+      <p>Insights, updates, and best practices for user feedback management</p>
+    </div>
+  </section>
+
+  <!-- Featured Post -->
+  <section class="section">
+    <div class="container">
+      <div class="featured-post">
+        <div class="featured-post-image"></div>
+        <div class="featured-post-content">
+          <span class="badge badge-primary">Featured</span>
+          <h2 style="font-size: 2rem; margin: 1rem 0;">Building a Feedback-Driven Product Culture</h2>
+          <div class="blog-card-meta">
+            <span>By Sarah Martinez</span>
+            <span>•</span>
+            <span>March 5, 2024</span>
+            <span>•</span>
+            <span>8 min read</span>
+          </div>
+          <p style="font-size: 1.1rem; color: #666; margin-bottom: 1.5rem;">
+            Learn how successful companies build products that users love by creating a
+            culture centered around continuous feedback and iteration.
+          </p>
+          <a href="blog-post.html" class="btn btn-secondary">Read Article →</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Blog Posts Grid -->
+  <section class="section section-white">
+    <div class="container">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+        <h2>Latest Articles</h2>
+        <div style="display: flex; gap: 1rem;">
+          <span class="badge badge-primary" style="cursor: pointer;">All</span>
+          <span class="badge" style="cursor: pointer; background: #e5e7eb; color: #666;">Product</span>
+          <span class="badge" style="cursor: pointer; background: #e5e7eb; color: #666;">Engineering</span>
+          <span class="badge" style="cursor: pointer; background: #e5e7eb; color: #666;">Design</span>
+        </div>
+      </div>
+
+      <div class="grid grid-3">
+        <div class="blog-card">
+          <div class="blog-card-image"></div>
+          <div class="blog-card-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+              <span class="badge badge-primary">Product</span>
+            </div>
+            <h3><a href="blog-post.html">10 Best Practices for Collecting User Feedback</a></h3>
+            <div class="blog-card-meta">
+              <span>Alex Kim</span>
+              <span>•</span>
+              <span>March 1, 2024</span>
+            </div>
+            <p>Discover proven strategies to collect meaningful feedback that actually drives product improvements.</p>
+            <a href="blog-post.html" class="read-more">Read more →</a>
+          </div>
+        </div>
+
+        <div class="blog-card">
+          <div class="blog-card-image"></div>
+          <div class="blog-card-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+              <span class="badge badge-warning">Engineering</span>
+            </div>
+            <h3><a href="blog-post.html">Implementing Real-Time Feedback in Your App</a></h3>
+            <div class="blog-card-meta">
+              <span>James Chen</span>
+              <span>•</span>
+              <span>February 28, 2024</span>
+            </div>
+            <p>A technical deep-dive into building responsive feedback systems with modern web technologies.</p>
+            <a href="blog-post.html" class="read-more">Read more →</a>
+          </div>
+        </div>
+
+        <div class="blog-card">
+          <div class="blog-card-image"></div>
+          <div class="blog-card-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+              <span class="badge badge-success">Design</span>
+            </div>
+            <h3><a href="blog-post.html">Designing Intuitive Feedback Experiences</a></h3>
+            <div class="blog-card-meta">
+              <span>Emma Patel</span>
+              <span>•</span>
+              <span>February 25, 2024</span>
+            </div>
+            <p>How to design feedback flows that feel natural and encourage user participation.</p>
+            <a href="blog-post.html" class="read-more">Read more →</a>
+          </div>
+        </div>
+
+        <div class="blog-card">
+          <div class="blog-card-image"></div>
+          <div class="blog-card-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+              <span class="badge badge-primary">Product</span>
+            </div>
+            <h3><a href="blog-post.html">From Feedback to Features: A Complete Guide</a></h3>
+            <div class="blog-card-meta">
+              <span>Alex Kim</span>
+              <span>•</span>
+              <span>February 20, 2024</span>
+            </div>
+            <p>Learn how to transform raw user feedback into actionable product features your users will love.</p>
+            <a href="blog-post.html" class="read-more">Read more →</a>
+          </div>
+        </div>
+
+        <div class="blog-card">
+          <div class="blog-card-image"></div>
+          <div class="blog-card-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+              <span class="badge badge-warning">Engineering</span>
+            </div>
+            <h3><a href="blog-post.html">Building Scalable Feedback Infrastructure</a></h3>
+            <div class="blog-card-meta">
+              <span>Sarah Martinez</span>
+              <span>•</span>
+              <span>February 15, 2024</span>
+            </div>
+            <p>Architecture patterns and best practices for handling millions of feedback items at scale.</p>
+            <a href="blog-post.html" class="read-more">Read more →</a>
+          </div>
+        </div>
+
+        <div class="blog-card">
+          <div class="blog-card-image"></div>
+          <div class="blog-card-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+              <span class="badge badge-success">Design</span>
+            </div>
+            <h3><a href="blog-post.html">The Psychology of Feedback Collection</a></h3>
+            <div class="blog-card-meta">
+              <span>Emma Patel</span>
+              <span>•</span>
+              <span>February 10, 2024</span>
+            </div>
+            <p>Understanding user psychology to design feedback mechanisms that people actually want to use.</p>
+            <a href="blog-post.html" class="read-more">Read more →</a>
+          </div>
+        </div>
+
+        <div class="blog-card">
+          <div class="blog-card-image"></div>
+          <div class="blog-card-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+              <span class="badge badge-primary">Product</span>
+            </div>
+            <h3><a href="blog-post.html">Measuring the ROI of User Feedback</a></h3>
+            <div class="blog-card-meta">
+              <span>James Chen</span>
+              <span>•</span>
+              <span>February 5, 2024</span>
+            </div>
+            <p>Quantifying the business impact of implementing a structured feedback system in your organization.</p>
+            <a href="blog-post.html" class="read-more">Read more →</a>
+          </div>
+        </div>
+
+        <div class="blog-card">
+          <div class="blog-card-image"></div>
+          <div class="blog-card-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+              <span class="badge badge-warning">Engineering</span>
+            </div>
+            <h3><a href="blog-post.html">Privacy-First Feedback Collection</a></h3>
+            <div class="blog-card-meta">
+              <span>Sarah Martinez</span>
+              <span>•</span>
+              <span>January 30, 2024</span>
+            </div>
+            <p>How to collect valuable feedback while respecting user privacy and complying with regulations.</p>
+            <a href="blog-post.html" class="read-more">Read more →</a>
+          </div>
+        </div>
+
+        <div class="blog-card">
+          <div class="blog-card-image"></div>
+          <div class="blog-card-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+              <span class="badge badge-primary">Product</span>
+            </div>
+            <h3><a href="blog-post.html">Case Study: How Startup X 10x'd Their Product</a></h3>
+            <div class="blog-card-meta">
+              <span>Alex Kim</span>
+              <span>•</span>
+              <span>January 25, 2024</span>
+            </div>
+            <p>Real-world success story of a startup that used continuous feedback to achieve rapid growth.</p>
+            <a href="blog-post.html" class="read-more">Read more →</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pagination -->
+      <div style="display: flex; justify-content: center; gap: 0.5rem; margin-top: 3rem;">
+        <button class="btn btn-outline" style="opacity: 0.5; cursor: not-allowed;">← Previous</button>
+        <button class="btn btn-secondary">1</button>
+        <button class="btn btn-outline">2</button>
+        <button class="btn btn-outline">3</button>
+        <button class="btn btn-outline">Next →</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Newsletter Section -->
+  <section class="section">
+    <div class="container-narrow text-center">
+      <div class="card" style="padding: 3rem;">
+        <h2>Subscribe to Our Newsletter</h2>
+        <p class="text-muted" style="font-size: 1.1rem; margin-bottom: 2rem;">
+          Get the latest articles, product updates, and insights delivered to your inbox
+        </p>
+        <form style="display: flex; gap: 1rem; max-width: 500px; margin: 0 auto; flex-wrap: wrap;">
+          <input
+            type="email"
+            placeholder="Your email address"
+            style="flex: 1; padding: 0.875rem; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 1rem; min-width: 250px;"
+          >
+          <button type="submit" class="btn btn-secondary">Subscribe</button>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <p>&copy; 2024 Tapko. All rights reserved.</p>
+      <div class="footer-links">
+        <a href="about.html">About</a>
+        <a href="features.html">Features</a>
+        <a href="pricing.html">Pricing</a>
+        <a href="documentation.html">Documentation</a>
+        <a href="blog.html">Blog</a>
+        <a href="contact.html">Contact</a>
+      </div>
+      <p style="margin-top: 1.5rem;">Built for better user experiences</p>
+    </div>
+  </footer>
+
+  <script>
+    function toggleMobileMenu() {
+      const navLinks = document.getElementById('navLinks');
+      navLinks.classList.toggle('active');
+    }
+  </script>
+</body>
+</html>
