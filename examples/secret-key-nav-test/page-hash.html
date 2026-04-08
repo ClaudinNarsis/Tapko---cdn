@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Acme — Docs (Hash navigation)</title>
+  <link rel="stylesheet" href="shared.css">
+  <style>
+    .hash-nav-bar {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 2rem;
+      flex-wrap: wrap;
+    }
+
+    .hash-link {
+      padding: 0.45rem 1rem;
+      border-radius: 7px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #64748b;
+      text-decoration: none;
+      border: 1.5px solid #e2e8f0;
+      background: white;
+      transition: all 0.15s;
+    }
+
+    .hash-link:hover {
+      border-color: #6366f1;
+      color: #4f46e5;
+      background: #eef2ff;
+    }
+
+    .hash-link.active {
+      border-color: #6366f1;
+      color: #4f46e5;
+      background: #eef2ff;
+    }
+
+    .panel {
+      display: none;
+    }
+
+    .panel.active {
+      display: block;
+    }
+
+    .doc-card {
+      background: white;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 1.75rem;
+      margin-bottom: 1rem;
+    }
+
+    .doc-card h3 {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 0.5rem;
+    }
+
+    .doc-card p {
+      font-size: 0.875rem;
+      color: #64748b;
+      line-height: 1.6;
+      margin-bottom: 0.5rem;
+    }
+
+    .doc-card p:last-child {
+      margin-bottom: 0;
+    }
+
+    code {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.8rem;
+      background: #f1f5f9;
+      padding: 0.15em 0.4em;
+      border-radius: 4px;
+      color: #4f46e5;
+    }
+
+    pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      border-radius: 10px;
+      padding: 1.25rem;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.8rem;
+      line-height: 1.7;
+      overflow-x: auto;
+      margin: 1rem 0;
+    }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <a href="index.html" class="logo">Ac<span>me</span></a>
+    <ul class="nav-links">
+      <li><a href="index.html">Home</a></li>
+      <li><a href="page-pushstate.html">SPA (pushState)</a></li>
+      <li><a href="page-replacestate.html">SPA (replaceState)</a></li>
+      <li><a href="page-hash.html" class="active">Hash nav</a></li>
+      <li><a href="page-anchor.html">Anchor links</a></li>
+    </ul>
+    <span class="nav-badge">Navigation test site</span>
+  </nav>
+
+  <div class="container">
+    <div class="section-label">Hash navigation</div>
+    <h2 class="section-title">Documentation</h2>
+    <p class="section-sub">Navigation here changes <code>location.hash</code>, which fires a <code>hashchange</code> event but does not reload the page.</p>
+
+    <div class="hash-nav-bar">
+      <a class="hash-link" href="#getting-started" onclick="showPanel('getting-started')">Getting started</a>
+      <a class="hash-link" href="#api-reference" onclick="showPanel('api-reference')">API reference</a>
+      <a class="hash-link" href="#integrations" onclick="showPanel('integrations')">Integrations</a>
+      <a class="hash-link" href="#changelog" onclick="showPanel('changelog')">Changelog</a>
+    </div>
+
+    <!-- Getting started -->
+    <div class="panel" id="panel-getting-started">
+      <div class="doc-card">
+        <h3>Installation</h3>
+        <p>Install Acme via npm or add the CDN script to your HTML.</p>
+        <pre>npm install @acme/sdk</pre>
+        <p>Then import and initialise:</p>
+        <pre>import { Acme } from '@acme/sdk'
+const client = new Acme({ apiKey: 'YOUR_KEY' })</pre>
+      </div>
+      <div class="doc-card">
+        <h3>Authentication</h3>
+        <p>All API requests must include your API key in the <code>Authorization</code> header.</p>
+        <pre>Authorization: Bearer YOUR_API_KEY</pre>
+        <p>Keys can be created and revoked in <strong>Workspace → Settings → API keys</strong>.</p>
+      </div>
+      <div class="doc-card">
+        <h3>Quick start</h3>
+        <p>Create your first project in three lines:</p>
+        <pre>const project = await client.projects.create({
+  name: 'My first project'
+})
+console.log(project.id) // → prj_abc123</pre>
+      </div>
+    </div>
+
+    <!-- API reference -->
+    <div class="panel" id="panel-api-reference">
+      <div class="doc-card">
+        <h3>GET /projects</h3>
+        <p>Returns a paginated list of all projects in the workspace.</p>
+        <pre>GET https://api.acme.dev/v1/projects
+?page=1&amp;per_page=20&amp;sort=updated_at</pre>
+      </div>
+      <div class="doc-card">
+        <h3>POST /tasks</h3>
+        <p>Creates a new task inside a project. All fields except <code>title</code> are optional.</p>
+        <pre>{
+  "title": "Implement dark mode",
+  "project_id": "prj_abc123",
+  "assignee": "usr_xyz",
+  "due_date": "2026-05-01",
+  "priority": "high"
+}</pre>
+      </div>
+      <div class="doc-card">
+        <h3>Rate limits</h3>
+        <p>The API is rate limited to <strong>300 requests per minute</strong> per API key. Responses include <code>X-RateLimit-Remaining</code> and <code>X-RateLimit-Reset</code> headers.</p>
+      </div>
+    </div>
+
+    <!-- Integrations -->
+    <div class="panel" id="panel-integrations">
+      <div class="doc-card">
+        <h3>GitHub</h3>
+        <p>Connect your GitHub repos to automatically link commits, PRs, and issues to Acme tasks. Requires <code>repo</code> OAuth scope.</p>
+      </div>
+      <div class="doc-card">
+        <h3>Slack</h3>
+        <p>Receive notifications in any Slack channel when tasks are created, completed, or commented on. Supports custom filters per channel.</p>
+      </div>
+      <div class="doc-card">
+        <h3>Figma</h3>
+        <p>Embed Figma frames directly in task descriptions and comments. Changes in Figma are reflected in Acme in real time.</p>
+      </div>
+    </div>
+
+    <!-- Changelog -->
+    <div class="panel" id="panel-changelog">
+      <div class="doc-card">
+        <h3>v2.4.0 — April 2026</h3>
+        <p>Real-time collaboration cursors, improved mobile keyboard handling, and Figma embed v2.</p>
+      </div>
+      <div class="doc-card">
+        <h3>v2.3.0 — March 2026</h3>
+        <p>New timeline view, bulk task editing, and redesigned notification centre.</p>
+      </div>
+      <div class="doc-card">
+        <h3>v2.2.0 — February 2026</h3>
+        <p>GitHub integration GA, custom task statuses, and dark mode (finally).</p>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    &copy; 2026 Acme Inc. — Navigation test site for Tapko widget secret key persistence
+  </footer>
+
+  <script>
+    const panels = ['getting-started', 'api-reference', 'integrations', 'changelog'];
+
+    function showPanel(id) {
+      panels.forEach(p => {
+        document.getElementById('panel-' + p).classList.toggle('active', p === id);
+      });
+      document.querySelectorAll('.hash-link').forEach(a => {
+        a.classList.toggle('active', a.getAttribute('href') === '#' + id);
+      });
+    }
+
+    // Show panel based on current hash on load
+    function init() {
+      const hash = window.location.hash.replace('#', '') || 'getting-started';
+      showPanel(hash);
+    }
+
+    window.addEventListener('hashchange', () => {
+      const hash = window.location.hash.replace('#', '');
+      if (panels.includes(hash)) showPanel(hash);
+    });
+
+    init();
+  </script>
+
+</body>
+</html>

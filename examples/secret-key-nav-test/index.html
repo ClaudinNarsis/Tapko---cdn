@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="http://localhost:5500/dist/tapko-widget.js"></script>
+<script>
+(async () => {
+        try {
+  await Tapko.init({
+    projectId: '5b05e596-28ae-4894-92ac-323fb901f542',
+    apiKey: 'your-api-key',
+    userId: 'user_36PrQyirxWUXgwmtnnhuXI8G4xu'
+  });} catch (error) {
+        console.error('Error initializing Tapko widget:', error);
+    }
+    })();
+</script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Acme — The modern project tool</title>
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+  <nav>
+    <a href="index.html" class="logo">Ac<span>me</span></a>
+    <ul class="nav-links">
+      <li><a href="index.html" class="active">Home</a></li>
+      <li><a href="page-pushstate.html">SPA (pushState)</a></li>
+      <li><a href="page-replacestate.html">SPA (replaceState)</a></li>
+      <li><a href="page-hash.html">Hash nav</a></li>
+      <li><a href="page-anchor.html">Anchor links</a></li>
+    </ul>
+    <span class="nav-badge">Navigation test site</span>
+  </nav>
+
+  <section class="hero">
+    <div class="hero-badge">Now in public beta</div>
+    <h1>Ship projects faster, together</h1>
+    <p>Acme brings your team, tasks, and tools into one place — so you spend less time coordinating and more time building.</p>
+    <div class="btn-row">
+      <a href="page-pushstate.html" class="btn btn-primary">Get started free</a>
+      <a href="page-anchor.html" class="btn btn-outline">See how it works</a>
+    </div>
+  </section>
+
+  <div class="container">
+    <div class="section-label">Why Acme</div>
+    <h2 class="section-title">Everything your team needs</h2>
+    <p class="section-sub">From planning to shipping, Acme gives you the structure to move fast without breaking things.</p>
+
+    <div class="grid">
+      <div class="card">
+        <div class="card-icon">⚡</div>
+        <h3>Instant setup</h3>
+        <p>Get a project up and running in under two minutes. No config files, no boilerplate.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">🔁</div>
+        <h3>Real-time sync</h3>
+        <p>Changes appear instantly for every team member. No refresh required, ever.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">🔒</div>
+        <h3>Granular permissions</h3>
+        <p>Control who sees what, down to individual tasks and documents.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">📊</div>
+        <h3>Progress insights</h3>
+        <p>Automated reports surface blockers and velocity without manual effort.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">🔗</div>
+        <h3>Deep integrations</h3>
+        <p>Connects to GitHub, Figma, Slack, and 50+ other tools your team already uses.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">📱</div>
+        <h3>Mobile-first</h3>
+        <p>Full-featured iOS and Android apps so you can stay on top of things from anywhere.</p>
+      </div>
+    </div>
+
+    <div class="section-label">Customers</div>
+    <h2 class="section-title">Trusted by teams at</h2>
+    <p class="section-sub">From two-person startups to enterprise engineering orgs.</p>
+
+    <div class="grid">
+      <div class="card">
+        <h3>Vercel</h3>
+        <p>"Acme replaced three different tools for us. Our sprint velocity went up 30% in the first month."</p>
+      </div>
+      <div class="card">
+        <h3>Stripe</h3>
+        <p>"The best part is how little time we spend in Acme itself — it just keeps things moving in the background."</p>
+      </div>
+      <div class="card">
+        <h3>Linear</h3>
+        <p>"We evaluated six PM tools. Acme was the only one that felt built for engineers, not managers."</p>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    &copy; 2026 Acme Inc. — Navigation test site for Tapko widget secret key persistence
+  </footer>
+
+</body>
+</html>

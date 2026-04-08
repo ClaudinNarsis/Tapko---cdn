@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Acme — Pricing (Anchor links)</title>
+  <link rel="stylesheet" href="shared.css">
+  <style>
+    .anchor-section {
+      scroll-margin-top: 80px;
+      padding-top: 1rem;
+      margin-bottom: 5rem;
+    }
+
+    .sticky-anchors {
+      position: sticky;
+      top: 61px;
+      background: white;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 0 2rem;
+      display: flex;
+      gap: 0.25rem;
+      z-index: 50;
+    }
+
+    .sticky-anchors a {
+      padding: 0.65rem 0.9rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #64748b;
+      text-decoration: none;
+      border-bottom: 2px solid transparent;
+      transition: color 0.15s, border-color 0.15s;
+    }
+
+    .sticky-anchors a:hover {
+      color: #0f172a;
+    }
+
+    .sticky-anchors a.active {
+      color: #4f46e5;
+      border-bottom-color: #4f46e5;
+    }
+
+    .faq-item {
+      border-bottom: 1px solid #e2e8f0;
+      padding: 1.25rem 0;
+    }
+
+    .faq-item:last-child {
+      border-bottom: none;
+    }
+
+    .faq-q {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #0f172a;
+      margin-bottom: 0.5rem;
+    }
+
+    .faq-a {
+      font-size: 0.875rem;
+      color: #64748b;
+      line-height: 1.7;
+    }
+
+    .comparison-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid #e2e8f0;
+      font-size: 0.875rem;
+    }
+
+    .comparison-table th {
+      background: #f8fafc;
+      padding: 0.9rem 1.25rem;
+      text-align: left;
+      font-weight: 700;
+      color: #374151;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .comparison-table td {
+      padding: 0.85rem 1.25rem;
+      border-bottom: 1px solid #f1f5f9;
+      color: #374151;
+    }
+
+    .comparison-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .check { color: #22c55e; font-weight: 700; }
+    .cross { color: #94a3b8; }
+
+    .cta-box {
+      background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+      border-radius: 16px;
+      padding: 3rem 2.5rem;
+      text-align: center;
+      color: white;
+    }
+
+    .cta-box h2 {
+      font-size: 1.75rem;
+      font-weight: 800;
+      margin-bottom: 0.75rem;
+    }
+
+    .cta-box p {
+      font-size: 1rem;
+      opacity: 0.85;
+      margin-bottom: 1.75rem;
+    }
+
+    .btn-white {
+      background: white;
+      color: #4f46e5;
+      font-weight: 700;
+    }
+
+    .btn-white:hover {
+      background: #f5f3ff;
+    }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <a href="index.html" class="logo">Ac<span>me</span></a>
+    <ul class="nav-links">
+      <li><a href="index.html">Home</a></li>
+      <li><a href="page-pushstate.html">SPA (pushState)</a></li>
+      <li><a href="page-replacestate.html">SPA (replaceState)</a></li>
+      <li><a href="page-hash.html">Hash nav</a></li>
+      <li><a href="page-anchor.html" class="active">Anchor links</a></li>
+    </ul>
+    <span class="nav-badge">Navigation test site</span>
+  </nav>
+
+  <!-- Sticky in-page anchor nav -->
+  <div class="sticky-anchors" id="stickyAnchors">
+    <a href="#plans" class="active">Plans</a>
+    <a href="#comparison">Comparison</a>
+    <a href="#faq">FAQ</a>
+    <a href="#cta">Get started</a>
+  </div>
+
+  <div class="container">
+
+    <!-- Plans -->
+    <section class="anchor-section" id="plans">
+      <div class="section-label">Pricing</div>
+      <h2 class="section-title">Simple, honest pricing</h2>
+      <p class="section-sub">Start free and scale as your team grows. No per-seat surprises.</p>
+
+      <div class="pricing-grid">
+        <div class="pricing-card">
+          <div class="plan-name">Starter</div>
+          <div class="plan-price">$0 <span>/ month</span></div>
+          <p class="plan-desc">For small teams just getting started with project management.</p>
+          <ul class="plan-features">
+            <li>Up to 5 users</li>
+            <li>3 active projects</li>
+            <li>Basic task management</li>
+            <li>7-day activity history</li>
+          </ul>
+          <a href="#cta" class="btn btn-outline" style="width:100%; text-align:center;">Get started free</a>
+        </div>
+
+        <div class="pricing-card featured">
+          <div class="plan-name">Pro</div>
+          <div class="plan-price">$19 <span>/ user / mo</span></div>
+          <p class="plan-desc">For growing teams that need more projects, history, and integrations.</p>
+          <ul class="plan-features">
+            <li>Unlimited users</li>
+            <li>Unlimited projects</li>
+            <li>GitHub, Figma, Slack</li>
+            <li>90-day activity history</li>
+            <li>Priority support</li>
+          </ul>
+          <a href="#cta" class="btn btn-primary" style="width:100%; text-align:center;">Start 14-day trial</a>
+        </div>
+
+        <div class="pricing-card">
+          <div class="plan-name">Enterprise</div>
+          <div class="plan-price">Custom</div>
+          <p class="plan-desc">For large organisations with compliance, SSO, and custom contract needs.</p>
+          <ul class="plan-features">
+            <li>Everything in Pro</li>
+            <li>SSO & SCIM provisioning</li>
+            <li>Custom data retention</li>
+            <li>SLA & dedicated CSM</li>
+            <li>Audit logs</li>
+          </ul>
+          <a href="#cta" class="btn btn-outline" style="width:100%; text-align:center;">Contact sales</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Comparison -->
+    <section class="anchor-section" id="comparison">
+      <div class="section-label">Compare</div>
+      <h2 class="section-title">What's included</h2>
+      <p class="section-sub">A full feature breakdown across all plans.</p>
+
+      <table class="comparison-table">
+        <thead>
+          <tr>
+            <th>Feature</th>
+            <th>Starter</th>
+            <th>Pro</th>
+            <th>Enterprise</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Users</td>
+            <td>Up to 5</td>
+            <td>Unlimited</td>
+            <td>Unlimited</td>
+          </tr>
+          <tr>
+            <td>Projects</td>
+            <td>3</td>
+            <td>Unlimited</td>
+            <td>Unlimited</td>
+          </tr>
+          <tr>
+            <td>Activity history</td>
+            <td>7 days</td>
+            <td>90 days</td>
+            <td>Custom</td>
+          </tr>
+          <tr>
+            <td>GitHub integration</td>
+            <td class="cross">—</td>
+            <td class="check">✓</td>
+            <td class="check">✓</td>
+          </tr>
+          <tr>
+            <td>Figma embeds</td>
+            <td class="cross">—</td>
+            <td class="check">✓</td>
+            <td class="check">✓</td>
+          </tr>
+          <tr>
+            <td>SSO / SCIM</td>
+            <td class="cross">—</td>
+            <td class="cross">—</td>
+            <td class="check">✓</td>
+          </tr>
+          <tr>
+            <td>Audit logs</td>
+            <td class="cross">—</td>
+            <td class="cross">—</td>
+            <td class="check">✓</td>
+          </tr>
+          <tr>
+            <td>SLA</td>
+            <td class="cross">—</td>
+            <td class="cross">—</td>
+            <td class="check">✓</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- FAQ -->
+    <section class="anchor-section" id="faq">
+      <div class="section-label">FAQ</div>
+      <h2 class="section-title">Common questions</h2>
+      <p class="section-sub">Can't find what you need? Email us at support@acme.dev.</p>
+
+      <div class="faq-item">
+        <div class="faq-q">Can I switch plans mid-cycle?</div>
+        <div class="faq-a">Yes. You can upgrade instantly and we'll prorate the difference. Downgrades take effect at the end of your billing period.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">Is there a free trial for Pro?</div>
+        <div class="faq-a">Yes — all Pro features are available free for 14 days. No credit card required to start.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">How does per-seat pricing work?</div>
+        <div class="faq-a">You're billed for the number of active users in your workspace. Guests and viewers are never counted.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">What payment methods do you accept?</div>
+        <div class="faq-a">Visa, Mastercard, Amex, and ACH bank transfer. Enterprise customers can also pay by invoice.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">Can I export my data if I cancel?</div>
+        <div class="faq-a">Absolutely. You can export all tasks, comments, attachments, and history at any time in JSON or CSV format.</div>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="anchor-section" id="cta">
+      <div class="cta-box">
+        <h2>Ready to ship faster?</h2>
+        <p>Join 12,000+ teams using Acme to build better products together.</p>
+        <a href="page-replacestate.html" class="btn btn-white">Start for free</a>
+      </div>
+    </section>
+
+  </div>
+
+  <footer>
+    &copy; 2026 Acme Inc. — Navigation test site for Tapko widget secret key persistence
+  </footer>
+
+  <script>
+    // Highlight active anchor link on scroll
+    const sections = ['plans', 'comparison', 'faq', 'cta'];
+    const anchors = document.querySelectorAll('.sticky-anchors a');
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          anchors.forEach(a => {
+            a.classList.toggle('active', a.getAttribute('href') === '#' + entry.target.id);
+          });
+        }
+      });
+    }, { rootMargin: '-40% 0px -55% 0px' });
+
+    sections.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) observer.observe(el);
+    });
+  </script>
+
+</body>
+</html>

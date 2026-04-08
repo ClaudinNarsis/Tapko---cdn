@@ -369,68 +369,107 @@ import debugLogger from './utils/DebugLogger.js';
         baseUrl: this.config.apiUrl
       });
 
-      // Validate project before initializing
+      // Fast path: skip API round-trip when restoring from session cache
+      if (options._cachedProjectData) {
+        this.projectData = options._cachedProjectData;
+        this.isDisabled = options._isDisabled ?? false;
+      } else {
+        // Validate project before initializing
+        try {
+          const validation = await this.apiClient.validateProject();
+
+          if (!validation.success || !validation.status.exists) {
+            const error = new Error('[Tapko] Project not found. Please check your projectId.');
+            dispatchCustomEvent(CONFIG.EVENTS.ERROR, {
+              message: error.message,
+              type: 'PROJECT_NOT_FOUND',
+              validation
+            });
+            throw error;
+          }
+
+          if (!validation.status.isCollectingFeedback) {
+            console.warn('[Tapko] Project is not currently collecting feedback. Widget is disabled.');
+            this.isDisabled = true;
+            // dispatchCustomEvent(CONFIG.EVENTS.ERROR, {
+            //   message: 'Project is not collecting feedback',
+            //   type: 'PROJECT_DISABLED',
+            //   validation
+            // });
+            // Don't return, allow initialization in disabled state
+          }
+
+          this.projectData = validation.data;
+
+          // Verify URL secret key if security is enabled
+          const security = validation.data?.security;
+
+          if (security && security.is_url_secret_enabled === true) {
+              const SESSION_KEY = 'tapko_url_secret_validated';
+              const urlSecretKey = getUrlParam('tapko_url_secret_key');
+              const sessionValidated = sessionStorage.getItem(SESSION_KEY);
+
+              console.log('[Tapko Security] URL secret key check initiated', {
+                page: window.location.pathname,
+                urlParamPresent: !!urlSecretKey,
+                sessionAlreadyValidated: sessionValidated === 'true'
+              });
+
+              if (urlSecretKey) {
+                // Validate against the expected key
+                if (urlSecretKey !== security.url_secret_key) {
+                  console.error('[Tapko Security] given urlSecretKey :'+ urlSecretKey + ' required url_secret_key : '+ security.url_secret_key );
+                  console.error('[Tapko Security] Invalid URL secret key provided');
+                  // Clear any previously stored session validation since a wrong key was supplied
+                  sessionStorage.removeItem(SESSION_KEY);
+                  console.warn('[Tapko Security] Session validation cleared due to invalid key attempt');
+                  const error = new Error('[Tapko] Invalid URL secret key.');
+                  dispatchCustomEvent(CONFIG.EVENTS.ERROR, {
+                    message: error.message,
+                    type: 'URL_SECRET_KEY_INVALID',
+                    validation
+                  });
+                  throw error;
+                }
+                // Key is valid — persist for subsequent page navigations within this session
+                sessionStorage.setItem(SESSION_KEY, 'true');
+                console.log('[Tapko Security] URL secret key validated successfully — session marked as validated');
+              } else if (sessionValidated === 'true') {
+                // No URL param but session was already validated on a prior page
+                console.log('[Tapko Security] No URL param on this page — access granted via session validation (set on a prior page)');
+              } else {
+                // No URL param and no prior session validation
+                console.error('[Tapko Security] URL secret key is required but missing from URL parameters');
+                const error = new Error('[Tapko] URL secret key is required but not provided in URL parameters.');
+                dispatchCustomEvent(CONFIG.EVENTS.ERROR, {
+                  message: error.message,
+                  type: 'URL_SECRET_KEY_MISSING',
+                  validation
+                });
+                throw error;
+              }
+          }
+        } catch (error) {
+          // Re-throw critical errors that should stop initialization
+          if (error.message.includes('Project not found') ||
+              error.message.includes('URL secret key')) {
+            throw error;
+          }
+          console.warn('[Tapko] Failed to validate project:', error.message);
+        }
+      }
+
+      // Cache config + project data in sessionStorage so subsequent pages can auto-restore
       try {
-        const validation = await this.apiClient.validateProject();
-
-        if (!validation.success || !validation.status.exists) {
-          const error = new Error('[Tapko] Project not found. Please check your projectId.');
-          dispatchCustomEvent(CONFIG.EVENTS.ERROR, {
-            message: error.message,
-            type: 'PROJECT_NOT_FOUND',
-            validation
-          });
-          throw error;
-        }
-
-        if (!validation.status.isCollectingFeedback) {
-          console.warn('[Tapko] Project is not currently collecting feedback. Widget is disabled.');
-          this.isDisabled = true;
-          // dispatchCustomEvent(CONFIG.EVENTS.ERROR, {
-          //   message: 'Project is not collecting feedback',
-          //   type: 'PROJECT_DISABLED',
-          //   validation
-          // });
-          // Don't return, allow initialization in disabled state
-        }
-
-        this.projectData = validation.data;
-
-        // Verify URL secret key if security is enabled
-        const security = validation.data?.security;
-
-        if (security && security.is_url_secret_enabled === true) {
-            const urlSecretKey = getUrlParam('tapko_url_secret_key');
-
-            if (!urlSecretKey) {
-              console.error('[Tapko Security] URL secret key is required but missing from URL parameters');
-              const error = new Error('[Tapko] URL secret key is required but not provided in URL parameters.');
-              dispatchCustomEvent(CONFIG.EVENTS.ERROR, {
-                message: error.message,
-                type: 'URL_SECRET_KEY_MISSING',
-                validation
-              });
-              throw error;
-            }
-
-            if (urlSecretKey !== security.url_secret_key) {
-              console.error('[Tapko Security] Invalid URL secret key provided');
-              const error = new Error('[Tapko] Invalid URL secret key.');
-              dispatchCustomEvent(CONFIG.EVENTS.ERROR, {
-                message: error.message,
-                type: 'URL_SECRET_KEY_INVALID',
-                validation
-              });
-              throw error;
-            }
-        }
-      } catch (error) {
-        // Re-throw critical errors that should stop initialization
-        if (error.message.includes('Project not found') ||
-            error.message.includes('URL secret key')) {
-          throw error;
-        }
-        console.warn('[Tapko] Failed to validate project:', error.message);
+        sessionStorage.setItem('tapko_session_config', JSON.stringify({
+          projectId: this.config.projectId,
+          apiKey: this.config.apiKey,
+          userId: this.config.userId,
+          projectData: this.projectData,
+          isDisabled: this.isDisabled
+        }));
+      } catch (e) {
+        // sessionStorage unavailable (private browsing restrictions etc.) — non-fatal
       }
 
       // Create shadow DOM BEFORE injecting styles
@@ -893,6 +932,11 @@ import debugLogger from './utils/DebugLogger.js';
       this.shadowStyleManager = null;
       this.eventBridge = null;
 
+      // Clear session cache so subsequent pages don't auto-restore a destroyed widget
+      try {
+        sessionStorage.removeItem('tapko_session_config');
+      } catch (e) { /* non-fatal */ }
+
       this.isInitialized = false;
       console.log('[Tapko] Widget destroyed');
     }
@@ -1197,6 +1241,56 @@ import debugLogger from './utils/DebugLogger.js';
         console.error('[Tapko] Auto-init failed:', error);
       });
     }
+  } else {
+    // No snippet on this page — check if a prior page cached the config in this session.
+    // Wait for DOMContentLoaded so document.body exists before init tries to appendChild.
+    const restoreFromSession = () => {
+      try {
+        const cached = sessionStorage.getItem('tapko_session_config');
+        if (cached) {
+          const { projectId, apiKey, userId, projectData, isDisabled } = JSON.parse(cached);
+          if (projectId) {
+            window[CONFIG.NAMESPACE].init({
+              projectId, apiKey, userId,
+              _cachedProjectData: projectData,
+              _isDisabled: isDisabled
+            }).catch(error => {
+              console.error('[Tapko] Session restore failed:', error);
+              sessionStorage.removeItem('tapko_session_config');
+            });
+          }
+        }
+      } catch (e) {
+        sessionStorage.removeItem('tapko_session_config');
+      }
+    };
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', restoreFromSession);
+    } else {
+      restoreFromSession();
+    }
   }
+
+  // Re-attach widget when browser restores a bfcache page (Back/Forward navigation)
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted && !tapko.isInitialized) {
+      try {
+        const cached = sessionStorage.getItem('tapko_session_config');
+        if (cached) {
+          const { projectId, apiKey, userId, projectData, isDisabled } = JSON.parse(cached);
+          if (projectId) {
+            window[CONFIG.NAMESPACE].init({
+              projectId, apiKey, userId,
+              _cachedProjectData: projectData,
+              _isDisabled: isDisabled
+            }).catch(error => {
+              console.error('[Tapko] bfcache restore failed:', error);
+            });
+          }
+        }
+      } catch (e) { /* non-fatal */ }
+    }
+  });
 
 })(window, document);

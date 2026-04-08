@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Acme — Dashboard (SPA pushState)</title>
+  <link rel="stylesheet" href="shared.css">
+  <style>
+    .spa-tabs {
+      display: flex;
+      gap: 0.25rem;
+      border-bottom: 2px solid #e2e8f0;
+      margin-bottom: 2rem;
+    }
+
+    .spa-tab {
+      padding: 0.6rem 1.1rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #64748b;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+    }
+
+    .spa-tab.active {
+      color: #4f46e5;
+      border-bottom-color: #4f46e5;
+    }
+
+    .spa-tab:hover {
+      color: #0f172a;
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    .stat-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+
+    .stat-box {
+      background: white;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 1.25rem;
+    }
+
+    .stat-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 0.5rem;
+    }
+
+    .stat-value {
+      font-size: 1.75rem;
+      font-weight: 800;
+      color: #0f172a;
+    }
+
+    .stat-change {
+      font-size: 0.75rem;
+      color: #22c55e;
+      font-weight: 600;
+      margin-top: 0.25rem;
+    }
+
+    .task-list {
+      list-style: none;
+      background: white;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .task-list li {
+      padding: 0.9rem 1.25rem;
+      border-bottom: 1px solid #f1f5f9;
+      font-size: 0.875rem;
+      color: #374151;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .task-list li:last-child {
+      border-bottom: none;
+    }
+
+    .task-status {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .status-done { background: #22c55e; }
+    .status-in-progress { background: #f59e0b; }
+    .status-todo { background: #94a3b8; }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <a href="index.html" class="logo">Ac<span>me</span></a>
+    <ul class="nav-links">
+      <li><a href="index.html">Home</a></li>
+      <li><button class="active" onclick="goTo('/dashboard', 'overview')">SPA (pushState)</button></li>
+      <li><a href="page-replacestate.html">SPA (replaceState)</a></li>
+      <li><a href="page-hash.html">Hash nav</a></li>
+      <li><a href="page-anchor.html">Anchor links</a></li>
+    </ul>
+    <span class="nav-badge">Navigation test site</span>
+  </nav>
+
+  <div class="container">
+    <div class="section-label">SPA — history.pushState</div>
+    <h2 class="section-title" id="view-title">Dashboard</h2>
+    <p class="section-sub">This page uses <code>history.pushState</code> to navigate between views without a full page reload. The URL changes but no network request is made.</p>
+
+    <!-- SPA tab bar -->
+    <div class="spa-tabs">
+      <button class="spa-tab active" id="tab-overview" onclick="goTo('/dashboard', 'overview')">Overview</button>
+      <button class="spa-tab" id="tab-projects" onclick="goTo('/dashboard/projects', 'projects')">Projects</button>
+      <button class="spa-tab" id="tab-team" onclick="goTo('/dashboard/team', 'team')">Team</button>
+      <button class="spa-tab" id="tab-settings" onclick="goTo('/dashboard/settings', 'settings')">Settings</button>
+    </div>
+
+    <!-- Overview view -->
+    <div class="tab-content active" id="view-overview">
+      <div class="stat-row">
+        <div class="stat-box">
+          <div class="stat-label">Open tasks</div>
+          <div class="stat-value">24</div>
+          <div class="stat-change">+3 this week</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Completed</div>
+          <div class="stat-value">118</div>
+          <div class="stat-change">+12 this week</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Team members</div>
+          <div class="stat-value">8</div>
+          <div class="stat-change">All active</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Velocity</div>
+          <div class="stat-value">91%</div>
+          <div class="stat-change">+4% vs last sprint</div>
+        </div>
+      </div>
+
+      <h3 style="margin-bottom: 1rem; font-size: 1rem; color: #0f172a;">Recent tasks</h3>
+      <ul class="task-list">
+        <li><span class="task-status status-done"></span> Set up CI pipeline for staging</li>
+        <li><span class="task-status status-in-progress"></span> Migrate auth service to JWT</li>
+        <li><span class="task-status status-in-progress"></span> Design system audit</li>
+        <li><span class="task-status status-todo"></span> Write API documentation</li>
+        <li><span class="task-status status-todo"></span> Load testing for v2 release</li>
+      </ul>
+    </div>
+
+    <!-- Projects view -->
+    <div class="tab-content" id="view-projects">
+      <div class="grid">
+        <div class="card">
+          <div class="card-icon">🚀</div>
+          <h3>Platform v2</h3>
+          <p>Major release with new editor, real-time sync, and redesigned dashboard. On track for Q2.</p>
+        </div>
+        <div class="card">
+          <div class="card-icon">📱</div>
+          <h3>Mobile App</h3>
+          <p>iOS and Android rewrite in React Native. Currently in beta with 200 testers.</p>
+        </div>
+        <div class="card">
+          <div class="card-icon">🔗</div>
+          <h3>Integration Hub</h3>
+          <p>New marketplace for third-party integrations. GitHub, Jira, and Figma launch first.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Team view -->
+    <div class="tab-content" id="view-team">
+      <ul class="task-list">
+        <li><span class="task-status status-done"></span> <strong>Alice Chen</strong> — Engineering Lead</li>
+        <li><span class="task-status status-done"></span> <strong>Marcus Webb</strong> — Backend</li>
+        <li><span class="task-status status-done"></span> <strong>Sofia Reyes</strong> — Frontend</li>
+        <li><span class="task-status status-in-progress"></span> <strong>James Park</strong> — Design</li>
+        <li><span class="task-status status-in-progress"></span> <strong>Priya Nair</strong> — Product</li>
+        <li><span class="task-status status-todo"></span> <strong>Role open</strong> — DevOps Engineer</li>
+      </ul>
+    </div>
+
+    <!-- Settings view -->
+    <div class="tab-content" id="view-settings">
+      <div class="prose">
+        <h2>Workspace settings</h2>
+        <p>Configure your workspace name, billing, and notification preferences from this panel.</p>
+        <h2>Integrations</h2>
+        <p>Connect Acme to your existing tools. Changes take effect immediately for all workspace members.</p>
+        <h2>Security</h2>
+        <p>Manage SSO, two-factor authentication requirements, and session policies for your organization.</p>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    &copy; 2026 Acme Inc. — Navigation test site for Tapko widget secret key persistence
+  </footer>
+
+  <script>
+    const tabs = ['overview', 'projects', 'team', 'settings'];
+    const paths = {
+      overview: '/dashboard',
+      projects: '/dashboard/projects',
+      team: '/dashboard/team',
+      settings: '/dashboard/settings'
+    };
+    const titles = {
+      overview: 'Dashboard',
+      projects: 'Projects',
+      team: 'Team',
+      settings: 'Settings'
+    };
+
+    function goTo(path, view) {
+      history.pushState({ view }, '', path);
+      showView(view);
+    }
+
+    function showView(view) {
+      tabs.forEach(t => {
+        document.getElementById('tab-' + t).classList.toggle('active', t === view);
+        document.getElementById('view-' + t).classList.toggle('active', t === view);
+      });
+      document.getElementById('view-title').textContent = titles[view] || view;
+    }
+
+    window.addEventListener('popstate', (e) => {
+      if (e.state && e.state.view) showView(e.state.view);
+    });
+  </script>
+
+</body>
+</html>
