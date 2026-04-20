@@ -85,6 +85,9 @@ const buildOptions = {
     'process.env.FEEDBACK_URL': process.env.FEEDBACK_URL
       ? JSON.stringify(process.env.FEEDBACK_URL)
       : 'undefined',
+    'process.env.RENDERER_URL': process.env.RENDERER_URL
+      ? JSON.stringify(process.env.RENDERER_URL)
+      : 'undefined',
     'process.env.NODE_ENV': JSON.stringify(
       isProduction ? 'production' : 'development'
     )

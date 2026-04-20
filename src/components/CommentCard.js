@@ -15,7 +15,7 @@ import { RecordingManager } from '../managers/RecordingManager.js';
 import { logManager } from '../managers/LogManager.js';
 import { networkLogManager } from '../managers/NetworkLogManager.js';
 import debugLogger from '../utils/DebugLogger.js';
-import { dataURLToBlob, captureViewportScreenshot, generateThumbnail } from '../utils/screenshot.js';
+import { dataURLToBlob, captureScreenshot, generateThumbnail } from '../utils/screenshot.js';
 import {
   createElement,
   removeElement,
@@ -339,7 +339,7 @@ class CommentCard {
         try {
           debugLogger.info('Calling captureViewportScreenshot');
           // Capture screenshot of current viewport
-          const screenshotData = await captureViewportScreenshot({ shadowRoot: this.shadowRoot });
+          const screenshotData = await captureScreenshot({ shadowRoot: this.shadowRoot });
           debugLogger.info('Screenshot capture returned', {
             hasDataURL: !!screenshotData.dataURL,
             dataURLLength: screenshotData.dataURL?.length
@@ -1144,7 +1144,7 @@ class CommentCard {
     await new Promise(resolve => setTimeout(resolve, 50));
 
     try {
-      const screenshotData = await captureViewportScreenshot({
+      const screenshotData = await captureScreenshot({
         shadowRoot: this.shadowRoot,
         keepWidgetVisible: false,
         widgetOverlay
