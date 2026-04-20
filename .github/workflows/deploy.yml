@@ -28,6 +28,7 @@ jobs:
           NODE_ENV: production
           API_URL: ${{ secrets.API_URL }}
           FEEDBACK_URL: ${{ secrets.PROD_FEEDBACK_URL }}
+          RENDERER_URL: ${{ secrets.PROD_RENDERER_URL }}
         run: npm run build
 
       - name: Configure AWS credentials
