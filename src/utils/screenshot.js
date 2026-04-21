@@ -502,8 +502,10 @@ async function _inlineCSSUrls(css, baseUrl) {
  * the HTML to the configured server-side renderer.
  *
  * Returns { dataURL, metadata } matching the shape of captureViewportScreenshot.
+ * @param {Object} options - Options forwarded from captureScreenshot
+ * @param {Object} [options.widgetOverlay] - Pin and card overlay data
  */
-async function captureDOMScreenshot() {
+async function captureDOMScreenshot(options = {}) {
   const timingStart = performance.now();
 
   // 1. Deep clone the full document
@@ -587,17 +589,25 @@ async function captureDOMScreenshot() {
   html = html.replace(/>\s+</g, '><').trim();
 
   // 4. POST to renderer
+  const { widgetOverlay } = options;
+  const requestBody = {
+    href: location.href,
+    html,
+    format: 'webp',
+    width: window.innerWidth,
+    height: window.innerHeight,
+    devicePixelRatio: window.devicePixelRatio || 1
+  };
+
+  if (widgetOverlay) {
+    requestBody.pin = { x: widgetOverlay.pinX, y: widgetOverlay.pinY };
+    requestBody.comment = widgetOverlay.cardText ?? null;
+  }
+
   const response = await fetch(CONFIG.API.rendererUrl + '/render', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      href: location.href,
-      html,
-      format: 'webp',
-      width: window.innerWidth,
-      height: window.innerHeight,
-      devicePixelRatio: window.devicePixelRatio || 1
-    })
+    body: JSON.stringify(requestBody)
   });
 
   if (!response.ok) {
@@ -643,7 +653,7 @@ async function captureScreenshot(options = {}) {
     // browser silently blocks getDisplayMedia (common in iframes, some mobile browsers)
     if (CONFIG.API.rendererUrl) {
       console.warn('[Tapko] Screen capture failed, falling back to DOM serialization:', err.message);
-      return await captureDOMScreenshot();
+      return await captureDOMScreenshot(options);
     }
     throw err;
   }
