@@ -604,13 +604,8 @@ async function captureDOMScreenshot() {
     throw new Error(`Renderer responded with ${response.status}`);
   }
 
-  const blob = await response.blob();
-  const dataURL = await new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(new Error('Failed to read renderer response'));
-    reader.readAsDataURL(blob);
-  });
+  const json = await response.json();
+  const dataURL = `data:image/${json.format};base64,${json.image}`;
 
   const timingEnd = performance.now();
   console.log(`[Tapko] DOM screenshot captured in ${(timingEnd - timingStart).toFixed(0)}ms`);
