@@ -599,10 +599,10 @@ async function captureDOMScreenshot(options = {}) {
     devicePixelRatio: window.devicePixelRatio || 1
   };
 
-  if (widgetOverlay) {
-    requestBody.pin = { x: widgetOverlay.pinX, y: widgetOverlay.pinY };
-    requestBody.comment = widgetOverlay.cardText ?? null;
-  }
+  console.log('[Tapko] DOM renderer request body (excluding html):', {
+    ...requestBody,
+    html: `[${requestBody.html.length} chars]`
+  });
 
   const response = await fetch(CONFIG.API.rendererUrl + '/render', {
     method: 'POST',
@@ -615,7 +615,26 @@ async function captureDOMScreenshot(options = {}) {
   }
 
   const json = await response.json();
-  const dataURL = `data:image/${json.format};base64,${json.image}`;
+  let dataURL = `data:image/${json.format};base64,${json.image}`;
+
+  // Composite pin + card bubble on top of the rendered image, matching the success path.
+  if (widgetOverlay) {
+    dataURL = await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        const scale = img.width / window.innerWidth;
+        _drawWidgetOverlay(ctx, widgetOverlay, scale);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.onerror = () => reject(new Error('Failed to load renderer image for overlay'));
+      img.src = dataURL;
+    });
+  }
 
   const timingEnd = performance.now();
   console.log(`[Tapko] DOM screenshot captured in ${(timingEnd - timingStart).toFixed(0)}ms`);
