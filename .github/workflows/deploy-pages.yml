@@ -1,0 +1,167 @@
+name: Deploy Examples to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies and build widget
+        env:
+          NODE_ENV: production
+          API_URL: ${{ secrets.API_URL }}
+          FEEDBACK_URL: ${{ secrets.PROD_FEEDBACK_URL }}
+          RENDERER_URL: ${{ secrets.PROD_RENDERER_URL }}
+        run: |
+          npm ci
+          npm run build
+
+      - name: Assemble deployment directory
+        run: |
+          mkdir -p _site
+
+          # Copy full examples/ tree
+          cp -r examples/. _site/
+
+          # Rename examples/index.html so the generated index can occupy index.html
+          mv _site/index.html _site/widget-demo.html
+
+          # Copy built dist/ into _site/dist/ so root-level files can reference widget
+          cp -r dist/. _site/dist/
+
+          # Rewrite ../dist/ -> dist/ in root-level HTML files
+          # (../dist/ would resolve outside the Pages artifact root)
+          for f in _site/widget-demo.html \
+                   _site/demo-example.html \
+                   _site/analytics-test.html \
+                   _site/click-precision-test.html \
+                   _site/scroll-test.html \
+                   _site/url-secret-test.html; do
+            sed -i 's|src="\.\./dist/tapko-widget\.js"|src="dist/tapko-widget.js"|g' "$f"
+          done
+
+      - name: Generate examples index page
+        run: |
+          cat > _site/index.html << 'HTMLEOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Tapko Widget — Examples</title>
+            <style>
+              *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+              body {
+                font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+                background: linear-gradient(135deg, #dae2e0 0%, #fefdff 100%);
+                min-height: 100vh;
+                padding: 48px 24px;
+              }
+              .container { max-width: 860px; margin: 0 auto; }
+              h1 { font-size: 2.25rem; font-weight: 700; color: #1f2937; margin-bottom: 8px; }
+              .subtitle { font-size: 0.95rem; color: #6b7280; margin-bottom: 40px; }
+              h2 {
+                font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em;
+                text-transform: uppercase; color: #9ca3af; margin: 32px 0 12px;
+              }
+              ul { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+              li a {
+                display: flex; align-items: center; gap: 12px;
+                padding: 14px 20px; background: white; border: 1px solid #e5e7eb;
+                border-radius: 12px; text-decoration: none; color: #111827;
+                font-weight: 500; font-size: 0.9rem;
+                transition: border-color 0.15s, box-shadow 0.15s;
+              }
+              li a:hover { border-color: #c6b8ff; box-shadow: 0 4px 16px rgba(99,102,241,0.1); }
+              .badge {
+                margin-left: auto; flex-shrink: 0; font-size: 0.7rem;
+                font-weight: 600; padding: 3px 8px; border-radius: 6px;
+              }
+              .live { background: #d1fae5; color: #065f46; }
+              .prod { background: #dbeafe; color: #1e40af; }
+              .dev  { background: #ede9fe; color: #5b21b6; }
+              .warn { background: #fef3c7; color: #92400e; }
+              .warning-box {
+                margin-top: 40px; background: #fffbeb; border: 1px solid #fcd34d;
+                border-radius: 12px; padding: 16px 20px; font-size: 0.85rem;
+                color: #78350f; line-height: 1.6;
+              }
+              .warning-box strong { display: block; margin-bottom: 4px; font-size: 0.9rem; }
+              code { background: #f3f4f6; padding: 1px 5px; border-radius: 4px; font-size: 0.8rem; color: #374151; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <h1>Tapko Widget</h1>
+              <p class="subtitle">Example pages and integration tests — source at <code>examples/</code>, deployed from <code>main</code></p>
+
+              <h2>Single-Page Tests</h2>
+              <ul>
+                <li><a href="widget-demo.html">Widget Demo<span class="badge live">dist bundle</span></a></li>
+                <li><a href="demo-example.html">Demo Example<span class="badge live">dist bundle</span></a></li>
+                <li><a href="analytics-test.html">Analytics Test<span class="badge live">dist bundle</span></a></li>
+                <li><a href="click-precision-test.html">Click Precision Test<span class="badge live">dist bundle</span></a></li>
+                <li><a href="scroll-test.html">Scroll Test<span class="badge live">dist bundle</span></a></li>
+                <li><a href="url-secret-test.html">URL Secret Test<span class="badge live">dist bundle</span></a></li>
+                <li><a href="hosted-prod-test.html">Hosted Prod Test<span class="badge prod">S3 prod</span></a></li>
+              </ul>
+
+              <h2>Multi-Page Suites</h2>
+              <ul>
+                <li><a href="hosted-dev-test/">Hosted Dev Test<span class="badge dev">S3 dev</span></a></li>
+                <li><a href="hosted-dev-test%20copy/">Hosted Dev Test (copy)<span class="badge dev">S3 dev</span></a></li>
+                <li><a href="local-testing/">Local Testing<span class="badge warn">requires local widget</span></a></li>
+                <li><a href="secret-key-nav-test/">Secret Key Nav Test<span class="badge warn">requires local widget</span></a></li>
+              </ul>
+
+              <div class="warning-box">
+                <strong>About "requires local widget" entries</strong>
+                These pages load the widget from <code>http://localhost:5500/dist/tapko-widget.js</code>.
+                They will not function unless you are running the dev server locally at that address.
+                All other pages use either the built-in <code>dist/</code> bundle or a live S3 CDN URL.
+              </div>
+            </div>
+          </body>
+          </html>
+          HTMLEOF
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

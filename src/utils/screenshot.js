@@ -13,6 +13,7 @@
 
 import { ScreenshotPermissionOverlay } from '../components/ScreenshotPermissionOverlay.js';
 import debugLogger from './DebugLogger.js';
+import { CONFIG } from '../config.js';
 
 // CRITICAL MEMORY FIX: Rate limiter to prevent rapid consecutive captures
 // This allows time for GPU memory to be released between captures
@@ -451,7 +452,234 @@ function dataURLToBlob(dataURL) {
   return new Blob([u8arr], { type: mime });
 }
 
+/**
+ * Fetch a URL and return a base64 data-URI, or null on failure / size limit.
+ */
+async function _fetchAsDataURI(url, maxBytes = 512 * 1024) {
+  try {
+    const res = await fetch(url, { mode: 'cors', credentials: 'omit' });
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    if (blob.size > maxBytes) return null;
+    return new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Inline all url() references inside a CSS string. Returns the modified CSS.
+ */
+async function _inlineCSSUrls(css, baseUrl) {
+  const urlPattern = /url\(\s*["']?([^"')]+)["']?\s*\)/g;
+  const matches = [...css.matchAll(urlPattern)];
+  const replacements = await Promise.allSettled(
+    matches.map(async m => {
+      const original = m[0];
+      const href = m[1];
+      if (href.startsWith('data:')) return { original, replacement: original };
+      const absolute = new URL(href, baseUrl).href;
+      const dataURI = await _fetchAsDataURI(absolute);
+      return { original, replacement: dataURI ? `url("${dataURI}")` : original };
+    })
+  );
+  let result = css;
+  for (const r of replacements) {
+    if (r.status === 'fulfilled' && r.value.replacement !== r.value.original) {
+      result = result.replace(r.value.original, r.value.replacement);
+    }
+  }
+  return result;
+}
+
+/**
+ * Capture screenshot by serializing the DOM, inlining assets, and sending
+ * the HTML to the configured server-side renderer.
+ *
+ * Returns { dataURL, metadata } matching the shape of captureViewportScreenshot.
+ * @param {Object} options - Options forwarded from captureScreenshot
+ * @param {Object} [options.widgetOverlay] - Pin and card overlay data
+ */
+async function captureDOMScreenshot(options = {}) {
+  const timingStart = performance.now();
+
+  // 1. Deep clone the full document
+  const clone = document.documentElement.cloneNode(true);
+
+  // 2a. Remove the Tapko widget itself
+  clone.querySelector('#tapko-widget-shadow-host')?.remove();
+
+  // 2b. Remove scripts and noscript elements
+  clone.querySelectorAll('script, noscript').forEach(el => el.remove());
+
+  // 2c. Mask sensitive elements
+  clone.querySelectorAll('.mk-mask, [data-mk-mask], .mk-exclude, [data-mk-exclude]').forEach(el => el.remove());
+
+  // 2d. Fix scroll position so renderer paints the correct area
+  const scrollX = window.scrollX || window.pageXOffset;
+  const scrollY = window.scrollY || window.pageYOffset;
+  clone.style.cssText += `; scroll-behavior: auto !important;`;
+  const bodyClone = clone.querySelector('body');
+  if (bodyClone) {
+    bodyClone.style.setProperty('overflow', 'visible', 'important');
+    bodyClone.style.marginTop = `-${scrollY}px`;
+    bodyClone.style.marginLeft = `-${scrollX}px`;
+  }
+
+  // 2e. Inline <img> srcs as base64
+  const imgEls = [...clone.querySelectorAll('img[src]')];
+  await Promise.allSettled(imgEls.map(async img => {
+    const src = img.getAttribute('src');
+    if (!src || src.startsWith('data:')) return;
+    const absolute = new URL(src, location.href).href;
+    const dataURI = await _fetchAsDataURI(absolute);
+    if (dataURI) img.setAttribute('src', dataURI);
+  }));
+
+  // 2f. Inline <link rel="stylesheet"> — fetch CSS and inline url() refs
+  const linkEls = [...clone.querySelectorAll('link[rel="stylesheet"][href]')];
+  await Promise.allSettled(linkEls.map(async link => {
+    const href = link.getAttribute('href');
+    if (!href) return;
+    try {
+      const absolute = new URL(href, location.href).href;
+      const res = await fetch(absolute, { mode: 'cors', credentials: 'omit' });
+      if (!res.ok) return;
+      let css = await res.text();
+      css = await _inlineCSSUrls(css, absolute);
+      const style = document.createElement('style');
+      style.textContent = css;
+      link.replaceWith(style);
+    } catch { /* leave original link if fetch fails */ }
+  }));
+
+  // 2g. Inline background-image style attributes
+  const styledEls = [...clone.querySelectorAll('[style]')];
+  await Promise.allSettled(styledEls.map(async el => {
+    const style = el.getAttribute('style');
+    if (!style || !style.includes('url(')) return;
+    const inlined = await _inlineCSSUrls(style, location.href);
+    el.setAttribute('style', inlined);
+  }));
+
+  // 2h. Replace <canvas> with <img> snapshots from the live document
+  const canvasEls = [...clone.querySelectorAll('canvas')];
+  const liveCanvases = [...document.querySelectorAll('canvas')];
+  canvasEls.forEach((cloneCanvas, i) => {
+    const live = liveCanvases[i];
+    if (!live) return;
+    try {
+      const dataURI = live.toDataURL('image/png');
+      const img = document.createElement('img');
+      img.src = dataURI;
+      img.width = live.width;
+      img.height = live.height;
+      cloneCanvas.replaceWith(img);
+    } catch { /* tainted canvas — leave as-is */ }
+  });
+
+  // 3. Serialize and minify
+  const serializer = new XMLSerializer();
+  let html = serializer.serializeToString(clone);
+  html = html.replace(/>\s+</g, '><').trim();
+
+  // 4. POST to renderer
+  const { widgetOverlay } = options;
+  const requestBody = {
+    href: location.href,
+    html,
+    format: 'webp',
+    width: window.innerWidth,
+    height: window.innerHeight,
+    devicePixelRatio: window.devicePixelRatio || 1
+  };
+
+  console.log('[Tapko] DOM renderer request body (excluding html):', {
+    ...requestBody,
+    html: `[${requestBody.html.length} chars]`
+  });
+
+  const response = await fetch(CONFIG.API.rendererUrl + '/render', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(requestBody)
+  });
+
+  if (!response.ok) {
+    throw new Error(`Renderer responded with ${response.status}`);
+  }
+
+  const json = await response.json();
+  let dataURL = `data:image/${json.format};base64,${json.image}`;
+
+  // Composite pin + card bubble on top of the rendered image, matching the success path.
+  if (widgetOverlay) {
+    dataURL = await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        const scale = img.width / window.innerWidth;
+        _drawWidgetOverlay(ctx, widgetOverlay, scale);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.onerror = () => reject(new Error('Failed to load renderer image for overlay'));
+      img.src = dataURL;
+    });
+  }
+
+  const timingEnd = performance.now();
+  console.log(`[Tapko] DOM screenshot captured in ${(timingEnd - timingStart).toFixed(0)}ms`);
+
+  return {
+    dataURL,
+    metadata: {
+      scrollX,
+      scrollY,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      devicePixelRatio: window.devicePixelRatio || 1,
+      timestamp: new Date().toISOString(),
+      url: location.href,
+      userAgent: navigator.userAgent,
+      method: 'dom-serialization'
+    }
+  };
+}
+
+/**
+ * Orchestrator: tries DOM serialization (primary, no permission prompt) first.
+ * Falls back to Screen Capture API if RENDERER_URL is not configured or the
+ * renderer call fails for any reason.
+ *
+ * @param {Object} options - Passed through to captureViewportScreenshot (primary)
+ */
+async function captureScreenshot(options = {}) {
+  try {
+    // PRIMARY: existing screen capture via getDisplayMedia (no network cost)
+    return await captureViewportScreenshot(options);
+  } catch (err) {
+    // FALLBACK: DOM serialization + server-side renderer
+    // Triggered when the user denies/dismisses the permission prompt or the
+    // browser silently blocks getDisplayMedia (common in iframes, some mobile browsers)
+    if (CONFIG.API.rendererUrl) {
+      console.warn('[Tapko] Screen capture failed, falling back to DOM serialization:', err.message);
+      return await captureDOMScreenshot(options);
+    }
+    throw err;
+  }
+}
+
 export {
+  captureScreenshot,
   captureViewportScreenshot,
   generateThumbnail,
   dataURLToBlob,

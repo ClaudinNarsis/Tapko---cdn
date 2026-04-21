@@ -10,6 +10,7 @@ export const CONFIG = {
   // API Configuration
   API: {
     baseUrl: process.env.API_URL || 'https://5mjiz034ia.execute-api.ap-south-1.amazonaws.com/dev/api',
+    rendererUrl: process.env.RENDERER_URL || '',
     version: '',
     timeout: 20000,
     retries: 3
