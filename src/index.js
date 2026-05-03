@@ -759,8 +759,8 @@ import debugLogger from './utils/DebugLogger.js';
 
         // Remove from active when closed
         const originalClose = card.close.bind(card);
-        card.close = () => {
-          originalClose();
+        card.close = (...args) => {
+          originalClose(...args);
           if (this.activeCard === card) {
             this.activeCard = null;
           }
