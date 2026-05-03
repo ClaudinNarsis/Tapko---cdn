@@ -851,6 +851,36 @@ async function captureDOMScreenshot(options = {}) {
  * @param {Object} options - Passed through to captureViewportScreenshot (primary)
  */
 async function captureScreenshot(options = {}) {
+  const dpr = window.devicePixelRatio || 1;
+
+  // On HiDPI/Retina displays (DPR > 1) the getDisplayMedia path allocates GPU
+  // memory at physical-pixel resolution (viewport × DPR²), which commonly
+  // crashes the GPU process. Skip straight to the POST renderer path instead.
+  if (dpr > 1 && CONFIG.API.rendererUrl) {
+    console.log(`[Tapko] DPR=${dpr} > 1 — using DOM renderer directly`);
+    let captureOverlay = null;
+    if (options.shadowRoot) {
+      captureOverlay = new ScreenshotPermissionOverlay(options.shadowRoot);
+      captureOverlay.showCapturing();
+    }
+    try {
+      if (captureOverlay) captureOverlay.updateStatus('Analysing page…');
+      return await captureDOMScreenshot(options);
+    } catch (domErr) {
+      if (domErr.code === 'DOM_PAYLOAD_TOO_LARGE') {
+        console.warn('[Tapko] DOM screenshot skipped — payload too large after maximum reduction. Feedback will be submitted without a screenshot.');
+        return null;
+      }
+      console.warn('[Tapko] DOM screenshot failed:', domErr.message);
+      return null;
+    } finally {
+      if (captureOverlay) {
+        captureOverlay.hide();
+        captureOverlay = null;
+      }
+    }
+  }
+
   try {
     // PRIMARY: existing screen capture via getDisplayMedia (no network cost)
     return await captureViewportScreenshot(options);
