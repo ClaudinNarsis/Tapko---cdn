@@ -132,20 +132,9 @@ export function dispatchCustomEvent(eventName, detail = {}) {
     composed: true  // Allow event to cross shadow boundary
   });
 
-  // Always dispatch on window for analytics and public API
+  // Dispatch on window only — shadow root dispatch with bubbles+composed would
+  // propagate the event back to window a second time, causing double-fires.
   window.dispatchEvent(event);
-
-  // Also dispatch on shadow root if available
-  const shadowRoot = window.Tapko?._internal?.shadowRoot;
-  if (shadowRoot) {
-    shadowRoot.dispatchEvent(
-      new CustomEvent(eventName, {
-        detail,
-        bubbles: true,
-        composed: true
-      })
-    );
-  }
 
   return event;
 }
