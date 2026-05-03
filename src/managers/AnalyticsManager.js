@@ -179,7 +179,8 @@ class AnalyticsManager {
 
     window.addEventListener(CONFIG.EVENTS.DRAWING_COMPLETED, (e) => {
       this.trackEvent('drawing_completed', {
-        has_data: !!(e.detail?.drawingData)
+        has_data: !!(e.detail?.hasAnnotations),
+        annotation_count: e.detail?.annotationCount || 0
       });
     });
 
