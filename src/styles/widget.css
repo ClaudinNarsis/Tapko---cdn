@@ -1412,6 +1412,17 @@
   }
 }
 
+/* Capturing-state variant of the permission icon (green tint) */
+.screenshot-permission-icon--capturing {
+  background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+}
+
+/* Status text shown below the spinner during fallback DOM capture */
+.screenshot-capturing-status {
+  color: #374151;
+  font-weight: 500;
+}
+
 /* ===========================================
    EXIT WARNING DIALOG
    =========================================== */

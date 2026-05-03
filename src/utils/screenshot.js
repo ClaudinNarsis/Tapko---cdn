@@ -860,8 +860,20 @@ async function captureScreenshot(options = {}) {
     // browser silently blocks getDisplayMedia (common in iframes, some mobile browsers)
     if (CONFIG.API.rendererUrl) {
       console.warn('[Tapko] Screen capture failed, falling back to DOM serialization:', err.message);
+
+      // Show a blocking "Capturing Screenshot…" overlay so the user knows what is
+      // happening during the 5–20 s DOM-serialization + server-render window.
+      // We reuse ScreenshotPermissionOverlay (already imported for the primary path).
+      let fallbackOverlay = null;
+      if (options.shadowRoot) {
+        fallbackOverlay = new ScreenshotPermissionOverlay(options.shadowRoot);
+        fallbackOverlay.showCapturing();
+      }
+
       try {
-        return await captureDOMScreenshot(options);
+        if (fallbackOverlay) fallbackOverlay.updateStatus('Analysing page…');
+        const result = await captureDOMScreenshot(options);
+        return result;
       } catch (domErr) {
         // If the payload is unresolvably large even after all reduction passes,
         // return null so the caller can proceed without a screenshot rather than
@@ -872,6 +884,11 @@ async function captureScreenshot(options = {}) {
         }
         console.warn('[Tapko] DOM screenshot failed:', domErr.message);
         return null;
+      } finally {
+        if (fallbackOverlay) {
+          fallbackOverlay.hide();
+          fallbackOverlay = null;
+        }
       }
     }
     throw err;
