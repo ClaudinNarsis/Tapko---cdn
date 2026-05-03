@@ -474,6 +474,8 @@ async function _fetchAsDataURI(url, maxBytes = 512 * 1024) {
 
 /**
  * Inline all url() references inside a CSS string. Returns the modified CSS.
+ * Skips web font resources — they add 200–400 KB each with no meaningful
+ * impact on the renderer output (Puppeteer falls back to system fonts).
  */
 async function _inlineCSSUrls(css, baseUrl) {
   const urlPattern = /url\(\s*["']?([^"')]+)["']?\s*\)/g;
@@ -483,6 +485,8 @@ async function _inlineCSSUrls(css, baseUrl) {
       const original = m[0];
       const href = m[1];
       if (href.startsWith('data:')) return { original, replacement: original };
+      // Skip web fonts — no layout value in a headless renderer
+      if (/\.(woff2?|ttf|eot|otf)(\?.*)?$/i.test(href)) return { original, replacement: original };
       const absolute = new URL(href, baseUrl).href;
       const dataURI = await _fetchAsDataURI(absolute);
       return { original, replacement: dataURI ? `url("${dataURI}")` : original };
@@ -497,6 +501,137 @@ async function _inlineCSSUrls(css, baseUrl) {
   return result;
 }
 
+// ---------------------------------------------------------------------------
+// Payload size utilities
+// ---------------------------------------------------------------------------
+
+/** Accurate UTF-8 byte count of a string (matches what the network sends). */
+function _measureBytes(str) {
+  return new TextEncoder().encode(str).length;
+}
+
+// Max serialized HTML size before triggering reduction (0.5 MB headroom below
+// API Gateway's hard 6 MB limit, leaving room for the JSON envelope).
+const PAYLOAD_LIMIT_BYTES = 5.5 * 1024 * 1024;
+
+// ---------------------------------------------------------------------------
+// DOM reduction helpers — all operate on the *cloned* node, never the live page
+// ---------------------------------------------------------------------------
+
+/** Strip all data-* attributes (zero visual impact, highest byte-reduction ROI). */
+function _stripDataAttributes(rootEl) {
+  rootEl.querySelectorAll('*').forEach(el => {
+    [...el.attributes]
+      .filter(a => a.name.startsWith('data-'))
+      .forEach(a => el.removeAttribute(a.name));
+  });
+}
+
+/**
+ * Remove elements that are provably hidden from the rendered output.
+ * Limited to inline-style detection — the clone has no layout engine so
+ * getComputedStyle() returns empty values on detached nodes.
+ */
+function _stripHiddenElements(rootEl) {
+  rootEl.querySelectorAll('[aria-hidden="true"], [hidden]').forEach(el => el.remove());
+  rootEl.querySelectorAll('[style]').forEach(el => {
+    const s = el.getAttribute('style') || '';
+    if (/display\s*:\s*none/i.test(s) || /visibility\s*:\s*hidden/i.test(s)) {
+      el.remove();
+    }
+  });
+}
+
+/**
+ * Remove <style> blocks that exceed maxBytes. Targets CSS frameworks and
+ * base64-encoded web fonts embedded via @font-face.
+ */
+function _stripLargeStyleBlocks(rootEl, maxBytes = 100 * 1024) {
+  rootEl.querySelectorAll('style').forEach(el => {
+    if (_measureBytes(el.textContent) > maxBytes) el.remove();
+  });
+}
+
+/**
+ * Remove elements whose document-absolute top edge is further than
+ * (scrollY + viewportHeight * (1 + buffer)) pixels from the top of the page.
+ *
+ * Only strips *below* the viewport — elements above can still affect layout
+ * (floats, flex/grid parents, sticky headers, CSS custom properties on ancestors).
+ * Elements far below the fold are outside the renderer's clip region and have
+ * no influence on the visible area.
+ *
+ * Positions are read from the data-tapko-rect-top attribute stamped onto the
+ * live DOM *before* cloning (where layout information is available).
+ *
+ * @param {Element} rootEl        - Cloned document root
+ * @param {number}  scrollY       - Current vertical scroll offset (px)
+ * @param {number}  viewportHeight - Current viewport height (px)
+ * @param {number}  buffer        - Extra viewport-heights of content to keep below
+ *                                  the fold (default 2 = keep 3× viewport heights)
+ */
+function _stripBelowViewport(rootEl, scrollY, viewportHeight, buffer = 2) {
+  const cutoff = scrollY + viewportHeight * (1 + buffer);
+  rootEl.querySelectorAll('body > *, body > * > *').forEach(el => {
+    const top = parseFloat(el.getAttribute('data-tapko-rect-top') || 'NaN');
+    if (!isNaN(top) && top > cutoff) el.remove();
+  });
+  // Clean up the temporary position attributes
+  rootEl.querySelectorAll('[data-tapko-rect-top]').forEach(el =>
+    el.removeAttribute('data-tapko-rect-top')
+  );
+}
+
+/**
+ * Re-serialise the (mutated) clone and return the minified HTML string.
+ * Extracted so the reduction loop can re-measure after each pass.
+ */
+function _serialiseClone(clone) {
+  const serializer = new XMLSerializer();
+  let html = serializer.serializeToString(clone);
+  return html.replace(/>\s+</g, '><').trim();
+}
+
+/**
+ * Apply DOM reduction strategies in order of ascending fidelity impact.
+ * Each level is cumulative — level N applies everything from levels 1..N.
+ *
+ * Level 1 — zero visual impact:
+ *   data-* attributes, aria-hidden/hidden/inline-display:none elements,
+ *   elements > 3 viewport heights below the fold
+ * Level 2 — minor impact (fonts / large framework CSS):
+ *   Tighten below-viewport buffer to 2×, strip <style> blocks > 100 KB
+ * Level 3 — moderate impact (unstyled render):
+ *   Tighten below-viewport buffer to 1×, remove all <style> blocks
+ * Level 4 — significant impact (no inlined images):
+ *   Remove all inlined <img src="data:…"> to drop base64 image weight
+ *
+ * @param {Element} clone         - The mutable document clone
+ * @param {number}  scrollY       - Vertical scroll position at capture time
+ * @param {number}  viewportHeight
+ * @param {number}  level         - Reduction level 1–4
+ * @returns {string} Re-serialised, minified HTML
+ */
+function _reducePayload(clone, scrollY, viewportHeight, level) {
+  if (level >= 1) {
+    _stripDataAttributes(clone);
+    _stripHiddenElements(clone);
+    _stripBelowViewport(clone, scrollY, viewportHeight, 2);
+  }
+  if (level >= 2) {
+    _stripBelowViewport(clone, scrollY, viewportHeight, 1);
+    _stripLargeStyleBlocks(clone, 100 * 1024);
+  }
+  if (level >= 3) {
+    _stripBelowViewport(clone, scrollY, viewportHeight, 0);
+    clone.querySelectorAll('style').forEach(el => el.remove());
+  }
+  if (level >= 4) {
+    clone.querySelectorAll('img[src^="data:"]').forEach(img => img.removeAttribute('src'));
+  }
+  return _serialiseClone(clone);
+}
+
 /**
  * Capture screenshot by serializing the DOM, inlining assets, and sending
  * the HTML to the configured server-side renderer.
@@ -508,21 +643,36 @@ async function _inlineCSSUrls(css, baseUrl) {
 async function captureDOMScreenshot(options = {}) {
   const timingStart = performance.now();
 
-  // 1. Deep clone the full document
-  const clone = document.documentElement.cloneNode(true);
-
-  // 2a. Remove the Tapko widget itself
-  clone.querySelector('#tapko-widget-shadow-host')?.remove();
-
-  // 2b. Remove scripts and noscript elements
-  clone.querySelectorAll('script, noscript').forEach(el => el.remove());
-
-  // 2c. Mask sensitive elements
-  clone.querySelectorAll('.mk-mask, [data-mk-mask], .mk-exclude, [data-mk-exclude]').forEach(el => el.remove());
-
-  // 2d. Fix scroll position so renderer paints the correct area
+  // 1. Capture scroll position before any DOM mutations
   const scrollX = window.scrollX || window.pageXOffset;
   const scrollY = window.scrollY || window.pageYOffset;
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+
+  // 2. Stamp document-absolute top positions onto elements BEFORE cloning.
+  //    The live DOM has layout; the clone will not. These are used by
+  //    _stripBelowViewport() to prune content far below the fold.
+  document.querySelectorAll('body > *, body > * > *').forEach(el => {
+    const rect = el.getBoundingClientRect();
+    el.setAttribute('data-tapko-rect-top', (rect.top + scrollY).toFixed(0));
+  });
+
+  // 3. Deep clone the full document, then immediately clean up the live DOM
+  const clone = document.documentElement.cloneNode(true);
+  document.querySelectorAll('[data-tapko-rect-top]').forEach(el =>
+    el.removeAttribute('data-tapko-rect-top')
+  );
+
+  // 4a. Remove the Tapko widget itself
+  clone.querySelector('#tapko-widget-shadow-host')?.remove();
+
+  // 4b. Remove scripts and noscript elements
+  clone.querySelectorAll('script, noscript').forEach(el => el.remove());
+
+  // 4c. Mask sensitive elements
+  clone.querySelectorAll('.mk-mask, [data-mk-mask], .mk-exclude, [data-mk-exclude]').forEach(el => el.remove());
+
+  // 4d. Fix scroll position so renderer paints the correct area
   clone.style.cssText += `; scroll-behavior: auto !important;`;
   const bodyClone = clone.querySelector('body');
   if (bodyClone) {
@@ -531,7 +681,7 @@ async function captureDOMScreenshot(options = {}) {
     bodyClone.style.marginLeft = `-${scrollX}px`;
   }
 
-  // 2e. Inline <img> srcs as base64
+  // 4e. Inline <img> srcs as base64 (existing 512 KB per-asset cap applies)
   const imgEls = [...clone.querySelectorAll('img[src]')];
   await Promise.allSettled(imgEls.map(async img => {
     const src = img.getAttribute('src');
@@ -541,7 +691,8 @@ async function captureDOMScreenshot(options = {}) {
     if (dataURI) img.setAttribute('src', dataURI);
   }));
 
-  // 2f. Inline <link rel="stylesheet"> — fetch CSS and inline url() refs
+  // 4f. Inline <link rel="stylesheet"> — skip files > 200 KB to avoid bloat
+  //     from CSS frameworks; strip comments from those we do inline.
   const linkEls = [...clone.querySelectorAll('link[rel="stylesheet"][href]')];
   await Promise.allSettled(linkEls.map(async link => {
     const href = link.getAttribute('href');
@@ -551,6 +702,8 @@ async function captureDOMScreenshot(options = {}) {
       const res = await fetch(absolute, { mode: 'cors', credentials: 'omit' });
       if (!res.ok) return;
       let css = await res.text();
+      if (_measureBytes(css) > 200 * 1024) return; // leave <link> tag, skip inlining
+      css = css.replace(/\/\*[\s\S]*?\*\//g, ''); // strip CSS comments
       css = await _inlineCSSUrls(css, absolute);
       const style = document.createElement('style');
       style.textContent = css;
@@ -558,23 +711,25 @@ async function captureDOMScreenshot(options = {}) {
     } catch { /* leave original link if fetch fails */ }
   }));
 
-  // 2g. Inline background-image style attributes
+  // 4g. Inline background-image style attributes — skip if result exceeds 100 KB
   const styledEls = [...clone.querySelectorAll('[style]')];
   await Promise.allSettled(styledEls.map(async el => {
     const style = el.getAttribute('style');
     if (!style || !style.includes('url(')) return;
     const inlined = await _inlineCSSUrls(style, location.href);
+    if (_measureBytes(inlined) > 100 * 1024) return; // too large, keep original
     el.setAttribute('style', inlined);
   }));
 
-  // 2h. Replace <canvas> with <img> snapshots from the live document
+  // 4h. Replace <canvas> with <img> snapshots — use JPEG and skip if > 500 KB
   const canvasEls = [...clone.querySelectorAll('canvas')];
   const liveCanvases = [...document.querySelectorAll('canvas')];
   canvasEls.forEach((cloneCanvas, i) => {
     const live = liveCanvases[i];
     if (!live) return;
     try {
-      const dataURI = live.toDataURL('image/png');
+      const dataURI = live.toDataURL('image/jpeg', 0.7);
+      if (dataURI.length > 500 * 1024) return; // skip oversized canvas snapshots
       const img = document.createElement('img');
       img.src = dataURI;
       img.width = live.width;
@@ -583,34 +738,67 @@ async function captureDOMScreenshot(options = {}) {
     } catch { /* tainted canvas — leave as-is */ }
   });
 
-  // 3. Serialize and minify
-  const serializer = new XMLSerializer();
-  let html = serializer.serializeToString(clone);
-  html = html.replace(/>\s+</g, '><').trim();
+  // 5. Serialize and minify
+  let html = _serialiseClone(clone);
 
-  // 4. POST to renderer
+  // 6. Measure payload and apply cascading reduction if needed
+  let payloadBytes = _measureBytes(html);
+  console.log(`[Tapko] DOM payload after inlining: ${(payloadBytes / 1024 / 1024).toFixed(2)} MB`);
+
+  let reductionLevel = 0;
+  while (payloadBytes > PAYLOAD_LIMIT_BYTES && reductionLevel < 4) {
+    reductionLevel++;
+    html = _reducePayload(clone, scrollY, viewportHeight, reductionLevel);
+    payloadBytes = _measureBytes(html);
+    console.warn(`[Tapko] Payload reduction level ${reductionLevel}: ${(payloadBytes / 1024 / 1024).toFixed(2)} MB`);
+  }
+
+  // Hard bail-out: if still over the limit after max reduction, propagate a
+  // typed error so captureScreenshot() can return null instead of throwing.
+  if (payloadBytes > PAYLOAD_LIMIT_BYTES) {
+    const err = new Error('DOM screenshot payload exceeds limit after maximum reduction');
+    err.code = 'DOM_PAYLOAD_TOO_LARGE';
+    throw err;
+  }
+
+  // 7. POST to renderer — retry with escalated reduction on 413/403
   const { widgetOverlay } = options;
-  const requestBody = {
+  const buildRequestBody = (h) => ({
     href: location.href,
-    html,
+    html: h,
     format: 'webp',
-    width: window.innerWidth,
-    height: window.innerHeight,
+    width: viewportWidth,
+    height: viewportHeight,
     devicePixelRatio: window.devicePixelRatio || 1
-  };
-
-  console.log('[Tapko] DOM renderer request body (excluding html):', {
-    ...requestBody,
-    html: `[${requestBody.html.length} chars]`
   });
 
-  const response = await fetch(CONFIG.API.rendererUrl + '/render', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(requestBody)
-  });
+  let response;
+  const MAX_RETRIES = 2;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const requestBody = buildRequestBody(html);
+    console.log(`[Tapko] DOM renderer POST attempt ${attempt + 1} (${(payloadBytes / 1024 / 1024).toFixed(2)} MB)`);
 
-  if (!response.ok) {
+    response = await fetch(CONFIG.API.rendererUrl + '/render', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody)
+    });
+
+    if (response.ok) break;
+
+    // On 413 (Payload Too Large) or 403 (API Gateway size rejection), escalate
+    // reduction and retry rather than failing immediately.
+    if ((response.status === 413 || response.status === 403) && attempt < MAX_RETRIES) {
+      reductionLevel++;
+      console.warn(`[Tapko] Renderer returned ${response.status}, escalating to reduction level ${reductionLevel}`);
+      if (reductionLevel <= 4) {
+        html = _reducePayload(clone, scrollY, viewportHeight, reductionLevel);
+        payloadBytes = _measureBytes(html);
+        console.warn(`[Tapko] Post-retry reduction level ${reductionLevel}: ${(payloadBytes / 1024 / 1024).toFixed(2)} MB`);
+      }
+      continue;
+    }
+
     throw new Error(`Renderer responded with ${response.status}`);
   }
 
@@ -644,8 +832,8 @@ async function captureDOMScreenshot(options = {}) {
     metadata: {
       scrollX,
       scrollY,
-      viewportWidth: window.innerWidth,
-      viewportHeight: window.innerHeight,
+      viewportWidth,
+      viewportHeight,
       devicePixelRatio: window.devicePixelRatio || 1,
       timestamp: new Date().toISOString(),
       url: location.href,
@@ -672,7 +860,19 @@ async function captureScreenshot(options = {}) {
     // browser silently blocks getDisplayMedia (common in iframes, some mobile browsers)
     if (CONFIG.API.rendererUrl) {
       console.warn('[Tapko] Screen capture failed, falling back to DOM serialization:', err.message);
-      return await captureDOMScreenshot(options);
+      try {
+        return await captureDOMScreenshot(options);
+      } catch (domErr) {
+        // If the payload is unresolvably large even after all reduction passes,
+        // return null so the caller can proceed without a screenshot rather than
+        // blocking the entire feedback submission.
+        if (domErr.code === 'DOM_PAYLOAD_TOO_LARGE') {
+          console.warn('[Tapko] DOM screenshot skipped — payload too large after maximum reduction. Feedback will be submitted without a screenshot.');
+          return null;
+        }
+        console.warn('[Tapko] DOM screenshot failed:', domErr.message);
+        return null;
+      }
     }
     throw err;
   }

@@ -1150,9 +1150,11 @@ class CommentCard {
         widgetOverlay
       });
 
-      this.screenshot = screenshotData.dataURL;
-      this.screenshotMetadata = screenshotData.metadata;
-      this.thumbnail = await generateThumbnail(this.screenshot);
+      if (screenshotData) {
+        this.screenshot = screenshotData.dataURL;
+        this.screenshotMetadata = screenshotData.metadata;
+        this.thumbnail = await generateThumbnail(this.screenshot);
+      }
     } catch (e) {
       console.warn('[Tapko] Auto-screenshot failed:', e);
     } finally {
