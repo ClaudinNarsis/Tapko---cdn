@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tapko Widget QA Runner</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+
+    .header {
+      background: #1e293b;
+      border-bottom: 1px solid #334155;
+      padding: 1.5rem 2rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    .header h1 { font-size: 1.25rem; font-weight: 700; color: #f1f5f9; }
+    .header .badge {
+      background: #6366f1;
+      color: white;
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 0.2rem 0.6rem;
+      border-radius: 4px;
+      letter-spacing: 0.05em;
+    }
+
+    .build-section {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin: 1.5rem 2rem;
+    }
+    .build-section h2 { font-size: 0.875rem; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem; }
+    .step-list { display: flex; flex-direction: column; gap: 0.75rem; }
+    .step {
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+      padding: 0.875rem 1rem;
+      background: #0f172a;
+      border-radius: 8px;
+      border: 1px solid #1e293b;
+    }
+    .step-num {
+      width: 24px; height: 24px;
+      background: #334155;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.75rem; font-weight: 700; color: #94a3b8;
+      flex-shrink: 0;
+    }
+    .step-body { flex: 1; }
+    .step-body .label { font-size: 0.9rem; font-weight: 600; color: #f1f5f9; margin-bottom: 0.25rem; }
+    .step-body .cmd {
+      font-family: 'Monaco', 'Menlo', monospace;
+      font-size: 0.8rem;
+      background: #0a0f1e;
+      color: #7dd3fc;
+      padding: 0.4rem 0.75rem;
+      border-radius: 6px;
+      display: inline-block;
+      margin-top: 0.25rem;
+    }
+    .step-body .note { font-size: 0.8rem; color: #64748b; margin-top: 0.25rem; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 1rem;
+      padding: 0 2rem 2rem;
+    }
+
+    .test-card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      overflow: hidden;
+      transition: border-color 0.2s, transform 0.15s;
+    }
+    .test-card:hover { border-color: #6366f1; transform: translateY(-2px); }
+
+    .test-card-header {
+      padding: 1.25rem 1.25rem 0.75rem;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.75rem;
+    }
+    .test-card-title { font-size: 1rem; font-weight: 700; color: #f1f5f9; }
+    .test-card-tag {
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 0.2rem 0.6rem;
+      border-radius: 4px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .tag-existing { background: #1d4ed8; color: #bfdbfe; }
+    .tag-qa { background: #065f46; color: #a7f3d0; }
+    .tag-edge { background: #7c3aed; color: #ddd6fe; }
+
+    .test-card-checks {
+      padding: 0 1.25rem;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      margin-bottom: 1rem;
+    }
+    .test-card-checks li {
+      font-size: 0.8rem;
+      color: #94a3b8;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+    }
+    .test-card-checks li::before { content: '→'; color: #6366f1; font-weight: 700; flex-shrink: 0; }
+
+    .test-card-footer {
+      padding: 0.75rem 1.25rem;
+      border-top: 1px solid #334155;
+      display: flex;
+      gap: 0.5rem;
+    }
+    .btn-open {
+      display: inline-block;
+      background: #6366f1;
+      color: white;
+      text-decoration: none;
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      transition: background 0.2s;
+      flex: 1;
+      text-align: center;
+    }
+    .btn-open:hover { background: #4f46e5; }
+    .btn-open.secondary {
+      background: transparent;
+      border: 1px solid #475569;
+      color: #94a3b8;
+      flex: 0 0 auto;
+    }
+    .btn-open.secondary:hover { border-color: #6366f1; color: #a5b4fc; }
+
+    .section-title {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 1.5rem 2rem 0.75rem;
+    }
+
+    .checklist-section {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin: 0 2rem 2rem;
+    }
+    .checklist-section h2 { font-size: 0.875rem; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem; }
+    .checklist { list-style: none; display: flex; flex-direction: column; gap: 0.5rem; }
+    .checklist li {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      font-size: 0.875rem;
+      color: #cbd5e1;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid #0f172a;
+    }
+    .checklist li:last-child { border-bottom: none; }
+    .checklist li input[type="checkbox"] { margin-top: 2px; flex-shrink: 0; accent-color: #6366f1; width: 16px; height: 16px; }
+    .checklist .sub { color: #64748b; font-size: 0.8rem; margin-top: 0.2rem; }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <h1>Tapko Widget QA Runner</h1>
+    <span class="badge">LOCAL DEV</span>
+  </div>
+
+  <!-- Build steps -->
+  <div class="build-section">
+    <h2>Before Testing — Build Steps</h2>
+    <div class="step-list">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <div class="label">Build the widget</div>
+          <div class="cmd">npm run build</div>
+          <div class="note">Compiles src/ → dist/tapko-widget.js via esbuild</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <div class="label">Start the local dev server (serves dist/ on port 5501)</div>
+          <div class="cmd">npx serve -l 5501 .</div>
+          <div class="note">All test pages load the widget from http://localhost:8080/dist/tapko-widget.js</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <div class="label">Open this runner from the same server</div>
+          <div class="cmd">http://localhost:8080/examples/local-testing/qa-runner.html</div>
+          <div class="note">Open individual test pages using the links below</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Existing pages -->
+  <div class="section-title">Existing Test Pages</div>
+  <div class="grid">
+
+    <div class="test-card">
+      <div class="test-card-header">
+        <div class="test-card-title">Homepage</div>
+        <span class="test-card-tag tag-existing">EXISTING</span>
+      </div>
+      <ul class="test-card-checks">
+        <li>Widget init on full marketing page</li>
+        <li>Floating button renders bottom-right</li>
+        <li>Enter feedback mode, click hero section</li>
+        <li>Submit a comment on the CTA button</li>
+      </ul>
+      <div class="test-card-footer">
+        <a href="index.html" class="btn-open">Open Page</a>
+      </div>
+    </div>
+
+    <div class="test-card">
+      <div class="test-card-header">
+        <div class="test-card-title">Blog (Large DOM)</div>
+        <span class="test-card-tag tag-existing">EXISTING</span>
+      </div>
+      <ul class="test-card-checks">
+        <li>Widget handles ~7 MB inflated DOM on screenshot</li>
+        <li>Screenshot fallback / permission overlay fires</li>
+        <li>Comment submit on blog cards</li>
+        <li>Pin persistence across scroll</li>
+      </ul>
+      <div class="test-card-footer">
+        <a href="blog.html" class="btn-open">Open Page</a>
+      </div>
+    </div>
+
+    <div class="test-card">
+      <div class="test-card-header">
+        <div class="test-card-title">Blog Post</div>
+        <span class="test-card-tag tag-existing">EXISTING</span>
+      </div>
+      <ul class="test-card-checks">
+        <li>Comment on long-form article text</li>
+        <li>Pin placement on scrolled content</li>
+        <li>Weight/priority selector in comment card</li>
+      </ul>
+      <div class="test-card-footer">
+        <a href="blog-post.html" class="btn-open">Open Page</a>
+      </div>
+    </div>
+
+    <div class="test-card">
+      <div class="test-card-header">
+        <div class="test-card-title">Pricing</div>
+        <span class="test-card-tag tag-existing">EXISTING</span>
+      </div>
+      <ul class="test-card-checks">
+        <li>Comment on pricing cards</li>
+        <li>Widget doesn't overlap CTA buttons</li>
+        <li>Submit, then navigate away — pins persist</li>
+      </ul>
+      <div class="test-card-footer">
+        <a href="pricing.html" class="btn-open">Open Page</a>
+      </div>
+    </div>
+
+    <div class="test-card">
+      <div class="test-card-header">
+        <div class="test-card-title">Documentation</div>
+        <span class="test-card-tag tag-existing">EXISTING</span>
+      </div>
+      <ul class="test-card-checks">
+        <li>Comment on code blocks and headings</li>
+        <li>Widget renders in fixed-header layout</li>
+        <li>Drawing mode on docs diagrams</li>
+      </ul>
+      <div class="test-card-footer">
+        <a href="documentation.html" class="btn-open">Open Page</a>
+      </div>
+    </div>
+
+    <div class="test-card">
+      <div class="test-card-header">
+        <div class="test-card-title">Contact</div>
+        <span class="test-card-tag tag-existing">EXISTING</span>
+      </div>
+      <ul class="test-card-checks">
+        <li>Widget co-exists with native contact form</li>
+        <li>Click inside form fields — no accidental pins</li>
+        <li>Feedback mode only activates via entry button</li>
+      </ul>
+      <div class="test-card-footer">
+        <a href="contact.html" class="btn-open">Open Page</a>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- QA-specific pages -->
+  <div class="section-title">QA Test Pages (Widget-focused)</div>
+  <div class="grid">
+
+    <div class="test-card">
+      <div class="test-card-header">
+        <div class="test-card-title">Minimal Page</div>
+        <span class="test-card-tag tag-qa">QA</span>
+      </div>
+      <ul class="test-card-checks">
+        <li>Widget init on near-empty DOM</li>
+        <li>Comment submission end-to-end</li>
+        <li>Weight selector — all 5 priority levels</li>
+        <li>Comment card UI: placeholder, character limit, submit state</li>
+        <li>Close card without submitting</li>
+      </ul>
+      <div class="test-card-footer">
+        <a href="qa-tests/qa-minimal.html" class="btn-open">Open Page</a>
+      </div>
+    </div>
+
+    <div class="test-card">
+      <div class="test-card-header">
+        <div class="test-card-title">Form-Heavy Page</div>
+        <span class="test-card-tag tag-qa">QA</span>
+      </div>
+      <ul class="test-card-checks">
+        <li>Widget doesn't steal focus from native inputs</li>
+        <li>Clicking inside form fields doesn't trigger pins</li>
+        <li>Widget entry button visible above sticky form bars</li>
+        <li>Comment on labels, headings adjacent to inputs</li>
+        <li>Submit comment while a native form is mid-fill</li>
+      </ul>
+      <div class="test-card-footer">
+        <a href="qa-tests/qa-form-page.html" class="btn-open">Open Page</a>
+      </div>
+    </div>
+
+    <div class="test-card">
+      <div class="test-card-header">
+        <div class="test-card-title">Edge Cases</div>
+        <span class="test-card-tag tag-edge">EDGE</span>
+      </div>
+      <ul class="test-card-checks">
+        <li>Very long comment text (1000+ chars)</li>
+        <li>Special characters: emoji, HTML entities, quotes</li>
+        <li>RTL text direction content</li>
+        <li>Comment on dark background sections</li>
+        <li>Rapid mode toggle (enter/exit 5× fast)</li>
+        <li>Dynamic content injected after init</li>
+        <li>Comment at viewport edge (top-left corner)</li>
+      </ul>
+      <div class="test-card-footer">
+        <a href="qa-tests/qa-edge-cases.html" class="btn-open">Open Page</a>
+      </div>
+    </div>
+
+    <div class="test-card">
+      <div class="test-card-header">
+        <div class="test-card-title">E-commerce Product Page</div>
+        <span class="test-card-tag tag-edge">EDGE</span>
+      </div>
+      <ul class="test-card-checks">
+        <li>Widget on image-heavy layout</li>
+        <li>Comment on product images, price, reviews section</li>
+        <li>Multiple comments on same page</li>
+        <li>Pin positions correct on sticky header</li>
+        <li>Submit comment on quantity picker / add-to-cart</li>
+      </ul>
+      <div class="test-card-footer">
+        <a href="qa-tests/qa-ecommerce.html" class="btn-open">Open Page</a>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Master checklist -->
+  <div class="section-title">Master QA Checklist</div>
+  <div class="checklist-section">
+    <h2>Run through each item — check off as you go</h2>
+    <ul class="checklist">
+
+      <li>
+        <input type="checkbox">
+        <div>
+          <div><strong>Widget initializes without console errors</strong></div>
+          <div class="sub">Open DevTools → Console. No errors on page load or Tapko.init()</div>
+        </div>
+      </li>
+
+      <li>
+        <input type="checkbox">
+        <div>
+          <div><strong>Floating entry button renders at correct position</strong></div>
+          <div class="sub">Default: bottom-right. Button is 44px, visible, not clipped by overflow</div>
+        </div>
+      </li>
+
+      <li>
+        <input type="checkbox">
+        <div>
+          <div><strong>Entering feedback mode shows 4% tint overlay</strong></div>
+          <div class="sub">Click entry button → overlay appears, cursor changes to crosshair</div>
+        </div>
+      </li>
+
+      <li>
+        <input type="checkbox">
+        <div>
+          <div><strong>Clicking in feedback mode opens comment card</strong></div>
+          <div class="sub">Click anywhere on page → CommentCard appears near click point, not off-screen</div>
+        </div>
+      </li>
+
+      <li>
+        <input type="checkbox">
+        <div>
+          <div><strong>Comment card UI — all elements present</strong></div>
+          <div class="sub">Text area, priority/weight selector, submit button, close button, screenshot indicator</div>
+        </div>
+      </li>
+
+      <li>
+        <input type="checkbox">
+        <div>
+          <div><strong>Priority/weight selector works — all levels</strong></div>
+          <div class="sub">Cycle through all 5 priority levels. Selection is visually reflected on the card</div>
+        </div>
+      </li>
+
+      <li>
+        <input type="checkbox">
+        <div>
+          <div><strong>Submitting a comment succeeds</strong></div>
+          <div class="sub">Type text → submit → card closes, pin appears at click location, no console errors</div>
+        </div>
+      </li>
+
+      <li>
+        <input type="checkbox">
+        <div>
+          <div><strong>Pin persists on page (doesn't disappear after submission)</strong></div>
+          <div class="sub">Pin marker remains visible at the correct coordinates after card closes</div>
+        </div>
+      </li>
+
+      <li>
+        <input type="checkbox">
+        <div>
+          <div><strong>Multiple comments on same page</strong></div>
+          <div class="sub">Submit 3+ comments. Each gets its own pin, no overlap or z-index bugs</div>
+        </div>
+      </li>
+
+      <li>
+        <input type="checkbox">
+        <div>
+          <div><strong>Closing card without submitting</strong></div>
+          <div class="sub">Open comment card, press close/Escape — card dismisses, no pin left, no error</div>
+        </div>
+      </li>
+
+      <li>
+        <input type="checkbox">
+        <div>
+          <div><strong>Exiting feedback mode restores normal cursor/interaction</strong></div>
+          <div class="sub">Click exit / press Escape — overlay gone, page links and buttons work again</div>
+        </div>
+      </li>
+
+      <li>
+        <input type="checkbox">
+        <div>
+          <div><strong>Drawing mode activates and draws correctly</strong></div>
+          <div class="sub">Enable drawing mode via widget UI → draw a shape → shape persists on submit</div>
+        </div>
+      </li>
+
+      <li>
+        <input type="checkbox">
+        <div>
+          <div><strong>Offline / failed submission goes to queue</strong></div>
+          <div class="sub">DevTools → Network → set Offline → submit comment → check QueueViewerModal shows it</div>
+        </div>
+      </li>
+
+      <li>
+        <input type="checkbox">
+        <div>
+          <div><strong>Comment card stays within viewport</strong></div>
+          <div class="sub">Click near bottom-right corner — card repositions to stay on screen</div>
+        </div>
+      </li>
+
+      <li>
+        <input type="checkbox">
+        <div>
+          <div><strong>Widget on mobile viewport (375px wide)</strong></div>
+          <div class="sub">DevTools → toggle device toolbar → 375×812 → widget visible, usable, not clipped</div>
+        </div>
+      </li>
+
+      <li>
+        <input type="checkbox">
+        <div>
+          <div><strong>No z-index conflicts with page content</strong></div>
+          <div class="sub">Widget overlays appear above all page elements including sticky headers, modals</div>
+        </div>
+      </li>
+
+      <li>
+        <input type="checkbox">
+        <div>
+          <div><strong>Shadow DOM styles don't leak into host page</strong></div>
+          <div class="sub">Widget styles don't affect host page fonts, colors, or layout</div>
+        </div>
+      </li>
+
+      <li>
+        <input type="checkbox">
+        <div>
+          <div><strong>destroy() cleans up completely</strong></div>
+          <div class="sub">Run window.Tapko.destroy() in console → all widget elements removed, no errors</div>
+        </div>
+      </li>
+
+    </ul>
+  </div>
+
+</body>
+</html>
