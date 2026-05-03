@@ -487,8 +487,6 @@ class CommentCard {
         this.restore();
       }, { dataURL: this.screenshotDataURL || this.screenshot, metadata: this.screenshotMetadata }, this.annotationData);
     }
-
-    dispatchCustomEvent(CONFIG.EVENTS.DRAWING_STARTED);
   }
 
   /**
@@ -843,7 +841,7 @@ class CommentCard {
 
     // 8. Close card after brief confirmation display
     setTimeout(() => {
-      this.close();
+      this.close(true);
     }, 1500);
 
     // 9. Trigger queue processing (async, non-blocking)
@@ -1205,7 +1203,9 @@ class CommentCard {
 
             const resizedDataURL = canvas.toDataURL('image/jpeg', 0.9);
 
-            // Clean up to prevent memory leak
+            // Clear handlers before nulling src to avoid spurious onerror fires
+            img.onload = null;
+            img.onerror = null;
             canvas.width = 0;
             canvas.height = 0;
             img.src = '';
@@ -1213,7 +1213,9 @@ class CommentCard {
             debugLogger.endOperation('Resize screenshot for annotation', { success: true });
             resolve(resizedDataURL);
           } else {
-            // Clean up image even when not resizing
+            // Clear handlers before nulling src to avoid spurious onerror fires
+            img.onload = null;
+            img.onerror = null;
             img.src = '';
 
             debugLogger.endOperation('Resize screenshot for annotation', { success: true, resized: false });
@@ -1297,7 +1299,7 @@ class CommentCard {
     }
 
     // Auto-close after 3 seconds
-    setTimeout(() => this.close(), 3000);
+    setTimeout(() => this.close(true), 3000);
   }
 
   /**
@@ -1322,8 +1324,9 @@ class CommentCard {
 
   /**
    * Close comment card
+   * @param {boolean} wasSubmitted - Whether the card was closed after a successful submit
    */
-  close() {
+  close(wasSubmitted = false) {
     // Stop recording if active
     if (this.recordingManager && this.recordingManager.isRecording) {
       this.recordingManager.cancelRecording();
@@ -1346,7 +1349,7 @@ class CommentCard {
     removeElement(this.card, true);
 
     // Dispatch event
-    dispatchCustomEvent(CONFIG.EVENTS.COMMENT_CLOSED);
+    dispatchCustomEvent(CONFIG.EVENTS.COMMENT_CLOSED, { wasSubmitted });
   }
 
   /**

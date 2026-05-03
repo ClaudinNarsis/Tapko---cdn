@@ -93,7 +93,7 @@ class DrawingCanvas {
     this.canvas.style.width = `${canvasWidth}px`;
     this.canvas.style.height = `${canvasHeight}px`;
 
-    this.ctx = this.canvas.getContext('2d');
+    this.ctx = this.canvas.getContext('2d', { willReadFrequently: true });
     this.ctx.scale(dpr, dpr);
 
     if (screenshotData && screenshotData.dataURL) {
@@ -1045,6 +1045,8 @@ class DrawingCanvas {
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.onload = () => {
+        img.onload = null;
+        img.onerror = null;
         try {
           this._drawImageToCanvas(img);
           this.screenshotImage = img;
@@ -1062,6 +1064,8 @@ class DrawingCanvas {
         }
       };
       img.onerror = (err) => {
+        img.onload = null;
+        img.onerror = null;
         debugLogger.error('Failed to load screenshot image', { error: err });
         console.error('[Tapko] Failed to load screenshot image for background:', err);
         debugLogger.endOperation('Draw screenshot background to canvas', { success: false, error: 'Image load failed' });

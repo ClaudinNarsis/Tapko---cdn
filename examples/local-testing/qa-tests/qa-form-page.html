@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QA: Form-Heavy Page — Tapko Widget</title>
+
+  <script src="http://localhost:8080/dist/tapko-widget.js"></script>
+  <script>
+    (async () => {
+      try {
+        await Tapko.init({
+          projectId: '7db2edc7-7edb-41d8-b5ac-107726a36400',
+          apiKey: 'your-api-key',
+          userId: 'qa-test-user-forms'
+        });
+        console.log('[QA] Tapko initialized on form page.');
+      } catch (err) {
+        console.error('[QA] Init failed:', err);
+      }
+    })();
+  </script>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8fafc; color: #1e293b; }
+
+    .qa-banner {
+      background: #eff6ff;
+      border-bottom: 2px solid #3b82f6;
+      padding: 0.75rem 2rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #1d4ed8;
+    }
+
+    .sticky-header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: white;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 0.75rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    .sticky-header .logo { font-weight: 800; font-size: 1.1rem; color: #6366f1; }
+    .sticky-header .save-btn {
+      background: #6366f1; color: white; border: none;
+      padding: 0.5rem 1.25rem; border-radius: 6px;
+      font-weight: 600; cursor: pointer; font-size: 0.875rem;
+    }
+
+    .container { max-width: 900px; margin: 0 auto; padding: 2rem; }
+    h1 { font-size: 1.75rem; font-weight: 800; margin-bottom: 0.5rem; }
+    h2 { font-size: 1.1rem; font-weight: 700; margin: 2rem 0 1rem; color: #374151; }
+    .subtitle { color: #64748b; margin-bottom: 2rem; font-size: 0.9rem; }
+
+    .form-section {
+      background: white; border: 1px solid #e2e8f0;
+      border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem;
+    }
+    .form-section h3 {
+      font-size: 1rem; font-weight: 700; margin-bottom: 1.25rem;
+      padding-bottom: 0.75rem; border-bottom: 1px solid #f1f5f9; color: #374151;
+    }
+
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .form-group { display: flex; flex-direction: column; gap: 0.375rem; }
+    .form-group.full { grid-column: 1 / -1; }
+
+    label { font-size: 0.8rem; font-weight: 600; color: #374151; }
+    label .req { color: #ef4444; }
+
+    input[type="text"], input[type="email"], input[type="tel"],
+    input[type="url"], input[type="number"], input[type="password"],
+    select, textarea {
+      padding: 0.625rem 0.875rem; border: 1.5px solid #e2e8f0;
+      border-radius: 8px; font-size: 0.875rem; color: #1e293b;
+      background: white; transition: border-color 0.2s, box-shadow 0.2s;
+      font-family: inherit; width: 100%;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none; border-color: #6366f1;
+      box-shadow: 0 0 0 3px rgba(99,102,241,0.1);
+    }
+    textarea { resize: vertical; min-height: 100px; }
+
+    .radio-group, .checkbox-group { display: flex; flex-direction: column; gap: 0.5rem; }
+    .radio-option, .checkbox-option {
+      display: flex; align-items: center; gap: 0.625rem;
+      font-size: 0.875rem; color: #374151; cursor: pointer;
+    }
+    .radio-option input, .checkbox-option input {
+      width: 16px; height: 16px; accent-color: #6366f1; flex-shrink: 0;
+    }
+
+    .rating-group { display: flex; gap: 0.5rem; }
+    .rating-btn {
+      width: 40px; height: 40px; border: 1.5px solid #e2e8f0;
+      border-radius: 8px; background: white; cursor: pointer;
+      font-size: 0.875rem; font-weight: 600; color: #64748b; transition: all 0.2s;
+    }
+    .rating-btn:hover, .rating-btn.active {
+      border-color: #6366f1; background: #eef2ff; color: #6366f1;
+    }
+
+    .slider-group { display: flex; align-items: center; gap: 1rem; }
+    input[type="range"] { flex: 1; accent-color: #6366f1; }
+    .slider-value { font-size: 0.875rem; font-weight: 700; color: #6366f1; width: 30px; text-align: right; }
+
+    .form-actions {
+      display: flex; gap: 0.75rem; justify-content: flex-end;
+      margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid #f1f5f9;
+    }
+    .btn-cancel {
+      background: white; border: 1.5px solid #e2e8f0; color: #64748b;
+      padding: 0.625rem 1.25rem; border-radius: 8px; cursor: pointer;
+      font-size: 0.875rem; font-weight: 600;
+    }
+    .btn-submit {
+      background: #6366f1; color: white; border: none;
+      padding: 0.625rem 1.5rem; border-radius: 8px; cursor: pointer;
+      font-size: 0.875rem; font-weight: 600;
+    }
+
+    .note-box {
+      background: #fef3c7; border: 1px solid #fcd34d; border-radius: 8px;
+      padding: 0.875rem 1rem; font-size: 0.8rem; color: #92400e; margin-bottom: 1.5rem;
+    }
+    .note-box strong { display: block; margin-bottom: 0.25rem; }
+
+    .test-checklist {
+      background: #1e293b; border-radius: 12px; padding: 1.5rem; margin-top: 2rem;
+    }
+    .test-checklist h3 { color: #94a3b8; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem; }
+    .test-checklist ul { list-style: none; display: flex; flex-direction: column; gap: 0.5rem; }
+    .test-checklist li { display: flex; gap: 0.75rem; align-items: flex-start; font-size: 0.8rem; color: #cbd5e1; }
+    .test-checklist li input { flex-shrink: 0; margin-top: 2px; accent-color: #6366f1; }
+  </style>
+</head>
+<body>
+
+  <div class="qa-banner">QA TEST — Form-Heavy Page | Tests widget co-existence with native HTML forms</div>
+
+  <div class="sticky-header">
+    <div class="logo">Tapko</div>
+    <div style="font-size:0.8rem;color:#64748b;">Settings · Profile · Preferences</div>
+    <button class="save-btn">Save Changes</button>
+  </div>
+
+  <div class="container">
+    <h1>Account Settings</h1>
+    <p class="subtitle">Form-heavy layout — testing widget co-existence with native inputs.</p>
+
+    <div class="note-box">
+      <strong>QA focus for this page:</strong>
+      Enter feedback mode and click <em>inside</em> native form fields — the widget should NOT place a pin there.
+      Click on labels, headings, or sections outside inputs to place comments normally.
+    </div>
+
+    <div class="form-section">
+      <h3>Personal Information</h3>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>First Name <span class="req">*</span></label>
+          <input type="text" placeholder="Jane" value="Jane">
+        </div>
+        <div class="form-group">
+          <label>Last Name <span class="req">*</span></label>
+          <input type="text" placeholder="Smith" value="Smith">
+        </div>
+        <div class="form-group">
+          <label>Email Address <span class="req">*</span></label>
+          <input type="email" placeholder="jane@example.com" value="jane@example.com">
+        </div>
+        <div class="form-group">
+          <label>Phone Number</label>
+          <input type="tel" placeholder="+1 (555) 000-0000">
+        </div>
+        <div class="form-group">
+          <label>Company Website</label>
+          <input type="url" placeholder="https://example.com">
+        </div>
+        <div class="form-group">
+          <label>Job Title</label>
+          <input type="text" placeholder="Product Manager">
+        </div>
+        <div class="form-group full">
+          <label>Bio</label>
+          <textarea placeholder="Tell us about yourself…">I build products at the intersection of design and engineering.</textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <h3>Notification Preferences</h3>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Email Frequency</label>
+          <div class="radio-group">
+            <label class="radio-option"><input type="radio" name="freq" value="realtime" checked> Real-time</label>
+            <label class="radio-option"><input type="radio" name="freq" value="daily"> Daily digest</label>
+            <label class="radio-option"><input type="radio" name="freq" value="weekly"> Weekly summary</label>
+            <label class="radio-option"><input type="radio" name="freq" value="none"> None</label>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Notify me about</label>
+          <div class="checkbox-group">
+            <label class="checkbox-option"><input type="checkbox" checked> New comments on my projects</label>
+            <label class="checkbox-option"><input type="checkbox" checked> Comment replies and mentions</label>
+            <label class="checkbox-option"><input type="checkbox"> Weekly analytics reports</label>
+            <label class="checkbox-option"><input type="checkbox"> Product changelog updates</label>
+            <label class="checkbox-option"><input type="checkbox" checked> Security alerts</label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <h3>Widget Preferences</h3>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Default comment priority</label>
+          <div class="rating-group">
+            <button class="rating-btn">1</button>
+            <button class="rating-btn">2</button>
+            <button class="rating-btn active">3</button>
+            <button class="rating-btn">4</button>
+            <button class="rating-btn">5</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Screenshot quality (1–10)</label>
+          <div class="slider-group">
+            <input type="range" min="1" max="10" value="7" id="qualitySlider"
+              oninput="document.getElementById('qualityVal').textContent=this.value">
+            <span class="slider-value" id="qualityVal">7</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Timezone</label>
+          <select>
+            <option>UTC-08:00 Pacific Time</option>
+            <option>UTC-05:00 Eastern Time</option>
+            <option selected>UTC+00:00 London</option>
+            <option>UTC+05:30 India Standard Time</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Language</label>
+          <select>
+            <option selected>English (US)</option>
+            <option>English (UK)</option>
+            <option>Español</option>
+            <option>Français</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <h3>Change Password</h3>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Current Password</label>
+          <input type="password" placeholder="••••••••">
+        </div>
+        <div class="form-group">
+          <label>New Password</label>
+          <input type="password" placeholder="••••••••">
+        </div>
+        <div class="form-group full">
+          <label>Confirm New Password</label>
+          <input type="password" placeholder="••••••••">
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn-cancel">Cancel</button>
+      <button class="btn-submit">Save Changes</button>
+    </div>
+
+    <div class="test-checklist">
+      <h3>Tests for this page</h3>
+      <ul>
+        <li><input type="checkbox"> Widget button visible above sticky header (no z-index clash)</li>
+        <li><input type="checkbox"> Enter feedback mode — overlay appears without stealing form focus</li>
+        <li><input type="checkbox"> Click inside a text input — NO pin placed (input should be excluded)</li>
+        <li><input type="checkbox"> Click inside textarea — NO pin placed</li>
+        <li><input type="checkbox"> Click inside select dropdown — NO pin placed</li>
+        <li><input type="checkbox"> Click on section heading "Personal Information" — pin placed correctly</li>
+        <li><input type="checkbox"> Click on a label ("First Name") — pin placed on the label element</li>
+        <li><input type="checkbox"> Submit a comment on "Notification Preferences" heading</li>
+        <li><input type="checkbox"> After exiting feedback mode — all form inputs still accept keyboard input normally</li>
+        <li><input type="checkbox"> Rating buttons still respond to clicks after widget feedback mode cycle</li>
+        <li><input type="checkbox"> Slider still responds to drag after widget interaction</li>
+        <li><input type="checkbox"> Radio and checkbox inputs still work after feedback mode cycle</li>
+        <li><input type="checkbox"> Submit a Tapko comment while a native input has focus — no conflict</li>
+      </ul>
+    </div>
+  </div>
+
+  <script>
+    document.querySelectorAll('.rating-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        btn.closest('.rating-group').querySelectorAll('.rating-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+  </script>
+</body>
+</html>

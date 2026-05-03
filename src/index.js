@@ -62,6 +62,7 @@ import debugLogger from './utils/DebugLogger.js';
       this.config = { ...CONFIG.DEFAULTS };
       this.apiClient = null;
       this.isInitialized = false;
+      this._isInitializing = false;
       this.isDisabled = false;
       this.projectData = null;
 
@@ -348,13 +349,17 @@ import debugLogger from './utils/DebugLogger.js';
      * Initialize the widget
      */
     async init(options = {}) {
-      if (this.isInitialized) {
+      if (this.isInitialized || this._isInitializing) {
         console.warn('[Tapko] Already initialized');
         return;
       }
+      // Guard against concurrent init calls (race between explicit init and
+      // session-restore DOMContentLoaded handler while async awaits are in flight)
+      this._isInitializing = true;
 
       // Validate required options
       if (!options.projectId) {
+        this._isInitializing = false;
         throw new Error('[Tapko] projectId is required');
       }
 
@@ -453,6 +458,7 @@ import debugLogger from './utils/DebugLogger.js';
           // Re-throw critical errors that should stop initialization
           if (error.message.includes('Project not found') ||
               error.message.includes('URL secret key')) {
+            this._isInitializing = false;
             throw error;
           }
           console.warn('[Tapko] Failed to validate project:', error.message);
@@ -498,6 +504,7 @@ import debugLogger from './utils/DebugLogger.js';
       this._setupEscapeHandler();
 
       this.isInitialized = true;
+      this._isInitializing = false;
 
       // Dispatch initialized event
       dispatchCustomEvent(CONFIG.EVENTS.INITIALIZED, {
@@ -752,8 +759,8 @@ import debugLogger from './utils/DebugLogger.js';
 
         // Remove from active when closed
         const originalClose = card.close.bind(card);
-        card.close = () => {
-          originalClose();
+        card.close = (...args) => {
+          originalClose(...args);
           if (this.activeCard === card) {
             this.activeCard = null;
           }
