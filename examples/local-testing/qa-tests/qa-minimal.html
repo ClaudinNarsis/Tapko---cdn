@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QA: Minimal Page — Tapko Widget</title>
+
+  <!-- Tapko Widget -->
+  <script src="http://localhost:5501/dist/tapko-widget.js"></script>
+  <script>
+    (async () => {
+      try {
+        await Tapko.init({
+          projectId: '7db2edc7-7edb-41d8-b5ac-107726a36400',
+          apiKey: 'your-api-key',
+          userId: 'qa-test-user-minimal'
+        });
+        console.log('[QA] Tapko initialized. Version:', Tapko.getVersion());
+      } catch (err) {
+        console.error('[QA] Init failed:', err);
+      }
+    })();
+  </script>
+
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 2rem;
+      background: #f8fafc;
+      color: #1e293b;
+    }
+    .qa-banner {
+      background: #dcfce7;
+      border: 1px solid #86efac;
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      margin-bottom: 2rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #166534;
+    }
+    h1 { font-size: 2rem; margin-bottom: 0.5rem; }
+    h2 { font-size: 1.25rem; margin: 2rem 0 1rem; color: #374151; }
+    p { line-height: 1.7; color: #64748b; margin-bottom: 1rem; }
+    .target-zone {
+      background: white;
+      border: 2px dashed #6366f1;
+      border-radius: 12px;
+      padding: 2rem;
+      margin: 1rem 0;
+      text-align: center;
+      color: #6366f1;
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+    .target-zone .label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; display: block; margin-bottom: 0.5rem; }
+    .api-controls {
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin: 2rem 0;
+    }
+    .api-controls h3 { color: #94a3b8; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem; }
+    .btn-row { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+    .api-btn {
+      background: #334155;
+      color: #e2e8f0;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-family: 'Monaco', 'Menlo', monospace;
+      transition: background 0.2s;
+    }
+    .api-btn:hover { background: #475569; }
+    .output {
+      background: #0f172a;
+      color: #7dd3fc;
+      font-family: 'Monaco', 'Menlo', monospace;
+      font-size: 0.8rem;
+      padding: 1rem;
+      border-radius: 8px;
+      margin-top: 1rem;
+      min-height: 60px;
+      white-space: pre-wrap;
+    }
+    .test-checklist {
+      background: white;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin: 2rem 0;
+    }
+    .test-checklist h3 { font-size: 0.9rem; font-weight: 700; color: #374151; margin-bottom: 1rem; }
+    .test-checklist ul { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+    .test-checklist li { display: flex; gap: 0.75rem; align-items: flex-start; font-size: 0.875rem; color: #64748b; }
+    .test-checklist li input { flex-shrink: 0; margin-top: 2px; accent-color: #6366f1; }
+  </style>
+</head>
+<body>
+  <div class="qa-banner">QA TEST — Minimal Page | Widget loads from localhost:5501</div>
+
+  <h1>Minimal Page</h1>
+  <p>Near-empty DOM. Tests widget init, comment submission, weight selector, and card UI basics.</p>
+
+  <!-- Click target zones -->
+  <h2>Click Target Zones</h2>
+  <p>Enter feedback mode (click the widget button bottom-right), then click each zone below to open a comment card.</p>
+
+  <div class="target-zone">
+    <span class="label">Zone A — Top area</span>
+    Click here to place a comment pin
+  </div>
+
+  <div class="target-zone" style="background: #fef3c7; border-color: #f59e0b; color: #92400e;">
+    <span class="label">Zone B — Middle area</span>
+    Click here to place a comment pin (add a high-priority comment)
+  </div>
+
+  <div class="target-zone" style="background: #fce7f3; border-color: #ec4899; color: #9d174d;">
+    <span class="label">Zone C — Lower area</span>
+    Click here to test closing card without submitting (press Escape or × button)
+  </div>
+
+  <!-- API Controls -->
+  <div class="api-controls">
+    <h3>Widget API Controls (run in browser console or click)</h3>
+    <div class="btn-row">
+      <button class="api-btn" onclick="runApi('enterFeedbackMode')">enterFeedbackMode()</button>
+      <button class="api-btn" onclick="runApi('exitFeedbackMode')">exitFeedbackMode()</button>
+      <button class="api-btn" onclick="runApi('getVersion')">getVersion()</button>
+      <button class="api-btn" onclick="runApi('isReady')">isReady()</button>
+      <button class="api-btn" onclick="runApi('getQueueStats')">getQueueStats()</button>
+      <button class="api-btn" onclick="runApi('showQueueViewer')">showQueueViewer()</button>
+      <button class="api-btn" onclick="runApi('getProjectStatus')">getProjectStatus()</button>
+      <button class="api-btn" onclick="runApi('closeAll')">closeAll()</button>
+      <button class="api-btn" onclick="runApi('destroy')" style="background:#7f1d1d; color:#fca5a5;">destroy()</button>
+    </div>
+    <div class="output" id="apiOutput">// API output will appear here</div>
+  </div>
+
+  <!-- Checklist -->
+  <div class="test-checklist">
+    <h3>Tests for this page</h3>
+    <ul>
+      <li><input type="checkbox"> Widget entry button appears bottom-right with no console errors</li>
+      <li><input type="checkbox"> Tapko.isReady() returns true (use API button above)</li>
+      <li><input type="checkbox"> Entering feedback mode shows 4% overlay</li>
+      <li><input type="checkbox"> Clicking Zone A opens comment card</li>
+      <li><input type="checkbox"> Weight selector visible — cycle through all 5 priority levels</li>
+      <li><input type="checkbox"> Type text and submit — card closes, pin appears</li>
+      <li><input type="checkbox"> Zone B: submit a high-priority comment — pin has correct visual indicator</li>
+      <li><input type="checkbox"> Zone C: open card and close without submitting — no pin left</li>
+      <li><input type="checkbox"> getQueueStats() — returns stats object (not undefined)</li>
+      <li><input type="checkbox"> destroy() — all widget DOM removed cleanly</li>
+    </ul>
+  </div>
+
+  <script>
+    async function runApi(method) {
+      const output = document.getElementById('apiOutput');
+      try {
+        const result = await Tapko[method]();
+        const text = JSON.stringify(result, null, 2) ?? 'undefined';
+        output.textContent = `Tapko.${method}() →\n${text}`;
+        console.log(`[QA] Tapko.${method}() →`, result);
+      } catch (err) {
+        output.textContent = `Tapko.${method}() threw:\n${err.message}`;
+        console.error(`[QA] Tapko.${method}() error:`, err);
+      }
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QA: E-commerce Product Page — Tapko Widget</title>
+
+  <script src="http://localhost:5501/dist/tapko-widget.js"></script>
+  <script>
+    (async () => {
+      try {
+        await Tapko.init({
+          projectId: '7db2edc7-7edb-41d8-b5ac-107726a36400',
+          apiKey: 'your-api-key',
+          userId: 'qa-test-user-ecommerce'
+        });
+        console.log('[QA] Tapko initialized on e-commerce page.');
+      } catch (err) {
+        console.error('[QA] Init failed:', err);
+      }
+    })();
+  </script>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8fafc; color: #1e293b; }
+
+    .qa-banner {
+      background: #fef3c7;
+      border-bottom: 2px solid #f59e0b;
+      padding: 0.6rem 2rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #92400e;
+    }
+
+    /* Sticky product nav */
+    .product-nav {
+      position: sticky;
+      top: 0;
+      z-index: 200;
+      background: white;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 0.75rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+    .product-nav .brand { font-weight: 800; font-size: 1.1rem; letter-spacing: -0.02em; }
+    .product-nav .nav-links { display: flex; gap: 1.5rem; font-size: 0.875rem; color: #64748b; }
+    .product-nav .nav-links a { text-decoration: none; color: inherit; }
+    .cart-btn {
+      background: #1e293b; color: white; border: none;
+      padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer;
+      font-size: 0.875rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem;
+    }
+
+    .container { max-width: 1100px; margin: 0 auto; padding: 2rem; }
+
+    /* Product hero */
+    .product-hero {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 3rem;
+      margin-bottom: 3rem;
+    }
+    @media (max-width: 768px) { .product-hero { grid-template-columns: 1fr; } }
+
+    /* Image gallery */
+    .image-gallery { display: flex; flex-direction: column; gap: 0.75rem; }
+    .main-image {
+      aspect-ratio: 1;
+      border-radius: 16px;
+      overflow: hidden;
+      position: relative;
+    }
+    .main-image-inner {
+      width: 100%; height: 100%;
+      background: linear-gradient(135deg, #6366f1 0%, #a78bfa 50%, #ec4899 100%);
+      display: flex; align-items: center; justify-content: center;
+      color: white; font-size: 4rem;
+    }
+    .image-badge {
+      position: absolute; top: 1rem; left: 1rem;
+      background: #ef4444; color: white;
+      font-size: 0.75rem; font-weight: 700;
+      padding: 0.25rem 0.625rem; border-radius: 4px;
+    }
+    .thumb-row { display: flex; gap: 0.75rem; }
+    .thumb {
+      width: 72px; height: 72px; border-radius: 8px; cursor: pointer;
+      border: 2px solid transparent; transition: border-color 0.2s; overflow: hidden; flex-shrink: 0;
+    }
+    .thumb.active { border-color: #6366f1; }
+    .thumb-inner {
+      width: 100%; height: 100%;
+      display: flex; align-items: center; justify-content: center; font-size: 1.5rem;
+    }
+
+    /* Product info */
+    .product-info { display: flex; flex-direction: column; gap: 1.25rem; }
+    .brand-tag { font-size: 0.8rem; font-weight: 700; color: #6366f1; text-transform: uppercase; letter-spacing: 0.05em; }
+    .product-title { font-size: 2rem; font-weight: 800; line-height: 1.2; color: #0f172a; }
+    .rating-row { display: flex; align-items: center; gap: 0.75rem; }
+    .stars { color: #f59e0b; font-size: 1.1rem; }
+    .rating-count { font-size: 0.875rem; color: #64748b; }
+    .price-row { display: flex; align-items: baseline; gap: 0.75rem; }
+    .price { font-size: 2.25rem; font-weight: 800; color: #0f172a; }
+    .price-original { font-size: 1.25rem; color: #94a3b8; text-decoration: line-through; }
+    .price-save { font-size: 0.875rem; font-weight: 700; color: #16a34a; background: #dcfce7; padding: 0.2rem 0.5rem; border-radius: 4px; }
+    .divider { height: 1px; background: #f1f5f9; }
+    .option-label { font-size: 0.8rem; font-weight: 700; color: #374151; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.5rem; }
+    .color-swatches { display: flex; gap: 0.625rem; }
+    .swatch {
+      width: 32px; height: 32px; border-radius: 50%; cursor: pointer;
+      border: 2px solid transparent; transition: all 0.2s;
+    }
+    .swatch.active { border-color: #1e293b; transform: scale(1.1); }
+    .size-btns { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .size-btn {
+      padding: 0.4rem 0.875rem; border: 1.5px solid #e2e8f0;
+      border-radius: 8px; background: white; cursor: pointer;
+      font-size: 0.875rem; font-weight: 600; color: #374151; transition: all 0.2s;
+    }
+    .size-btn.active { border-color: #1e293b; background: #1e293b; color: white; }
+    .size-btn.sold-out { opacity: 0.4; cursor: not-allowed; text-decoration: line-through; }
+    .qty-row { display: flex; align-items: center; gap: 0.5rem; }
+    .qty-btn {
+      width: 36px; height: 36px; border: 1.5px solid #e2e8f0;
+      border-radius: 8px; background: white; cursor: pointer;
+      font-size: 1.1rem; font-weight: 600; color: #374151;
+      display: flex; align-items: center; justify-content: center; transition: all 0.2s;
+    }
+    .qty-btn:hover { border-color: #6366f1; color: #6366f1; }
+    .qty-display { width: 48px; text-align: center; font-size: 1rem; font-weight: 700; }
+    .add-to-cart {
+      background: #1e293b; color: white; border: none;
+      padding: 1rem; border-radius: 12px; cursor: pointer;
+      font-size: 1rem; font-weight: 700; width: 100%; transition: background 0.2s;
+    }
+    .add-to-cart:hover { background: #0f172a; }
+    .wishlist-btn {
+      background: white; color: #64748b; border: 1.5px solid #e2e8f0;
+      padding: 1rem; border-radius: 12px; cursor: pointer;
+      font-size: 0.875rem; font-weight: 600; width: 100%; transition: all 0.2s;
+    }
+    .btn-group { display: flex; flex-direction: column; gap: 0.625rem; }
+    .trust-row { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+    .trust-item { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; color: #64748b; }
+
+    /* Reviews section */
+    .reviews-section { margin-bottom: 3rem; }
+    .section-title { font-size: 1.5rem; font-weight: 800; margin-bottom: 1.5rem; }
+    .review-card {
+      background: white; border: 1px solid #e2e8f0; border-radius: 12px;
+      padding: 1.25rem; margin-bottom: 1rem;
+    }
+    .review-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 0.75rem; }
+    .reviewer-info { display: flex; align-items: center; gap: 0.75rem; }
+    .avatar {
+      width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center;
+      justify-content: center; color: white; font-size: 0.875rem; font-weight: 700; flex-shrink: 0;
+    }
+    .reviewer-name { font-size: 0.9rem; font-weight: 700; }
+    .reviewer-meta { font-size: 0.75rem; color: #94a3b8; }
+    .verified { color: #16a34a; font-size: 0.75rem; font-weight: 600; display: flex; align-items: center; gap: 0.25rem; }
+    .review-body { font-size: 0.875rem; color: #374151; line-height: 1.6; }
+    .review-helpful { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.75rem; font-size: 0.75rem; color: #94a3b8; }
+    .helpful-btn { background: none; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.2rem 0.625rem; cursor: pointer; font-size: 0.75rem; color: #64748b; }
+
+    /* Related products */
+    .related-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+    @media (max-width: 768px) { .related-grid { grid-template-columns: repeat(2, 1fr); } }
+    .related-card {
+      background: white; border: 1px solid #e2e8f0; border-radius: 12px;
+      overflow: hidden; cursor: pointer; transition: all 0.2s;
+    }
+    .related-card:hover { box-shadow: 0 8px 24px rgba(0,0,0,0.1); transform: translateY(-2px); }
+    .related-image { height: 140px; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; }
+    .related-info { padding: 0.875rem; }
+    .related-name { font-size: 0.875rem; font-weight: 600; color: #1e293b; margin-bottom: 0.25rem; }
+    .related-price { font-size: 0.875rem; font-weight: 700; color: #6366f1; }
+
+    /* Test checklist */
+    .test-checklist { background: #1e293b; border-radius: 12px; padding: 1.5rem; margin-top: 2rem; }
+    .test-checklist h3 { color: #94a3b8; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem; }
+    .test-checklist ul { list-style: none; display: flex; flex-direction: column; gap: 0.5rem; }
+    .test-checklist li { display: flex; gap: 0.75rem; align-items: flex-start; font-size: 0.8rem; color: #cbd5e1; }
+    .test-checklist li input { flex-shrink: 0; margin-top: 2px; accent-color: #6366f1; }
+  </style>
+</head>
+<body>
+
+  <div class="qa-banner">QA TEST — E-commerce Product Page | Image-heavy, sticky nav, qty picker, reviews</div>
+
+  <nav class="product-nav">
+    <div class="brand">ShopFlow</div>
+    <div class="nav-links">
+      <a href="#">New Arrivals</a>
+      <a href="#">Men</a>
+      <a href="#">Women</a>
+      <a href="#">Sale</a>
+    </div>
+    <button class="cart-btn">🛒 Cart (2)</button>
+  </nav>
+
+  <div class="container">
+
+    <!-- Product hero -->
+    <div class="product-hero">
+
+      <!-- Image gallery -->
+      <div class="image-gallery">
+        <div class="main-image">
+          <div class="main-image-inner" id="mainImage">🎧</div>
+          <div class="image-badge">-30%</div>
+        </div>
+        <div class="thumb-row">
+          <div class="thumb active" onclick="setThumb(this, '🎧')"><div class="thumb-inner" style="background:linear-gradient(135deg,#6366f1,#a78bfa);">🎧</div></div>
+          <div class="thumb" onclick="setThumb(this, '🔊')"><div class="thumb-inner" style="background:linear-gradient(135deg,#0ea5e9,#38bdf8);">🔊</div></div>
+          <div class="thumb" onclick="setThumb(this, '🎵')"><div class="thumb-inner" style="background:linear-gradient(135deg,#f59e0b,#fbbf24);">🎵</div></div>
+          <div class="thumb" onclick="setThumb(this, '📦')"><div class="thumb-inner" style="background:linear-gradient(135deg,#10b981,#34d399);">📦</div></div>
+        </div>
+      </div>
+
+      <!-- Product details -->
+      <div class="product-info">
+        <div class="brand-tag">TapkoAudio</div>
+        <h1 class="product-title">Pro Studio Headphones X1</h1>
+        <div class="rating-row">
+          <div class="stars">★★★★★</div>
+          <div class="rating-count">4.8 (2,341 reviews)</div>
+        </div>
+        <div class="price-row">
+          <div class="price">$279</div>
+          <div class="price-original">$399</div>
+          <div class="price-save">Save $120</div>
+        </div>
+        <div class="divider"></div>
+        <div>
+          <div class="option-label">Colour</div>
+          <div class="color-swatches">
+            <div class="swatch active" style="background:#1e293b;" title="Midnight Black" onclick="setColor(this)"></div>
+            <div class="swatch" style="background:#e2e8f0;" title="Pearl White" onclick="setColor(this)"></div>
+            <div class="swatch" style="background:#6366f1;" title="Cosmic Purple" onclick="setColor(this)"></div>
+            <div class="swatch" style="background:#f59e0b;" title="Amber Gold" onclick="setColor(this)"></div>
+          </div>
+        </div>
+        <div>
+          <div class="option-label">Size</div>
+          <div class="size-btns">
+            <button class="size-btn sold-out">XS</button>
+            <button class="size-btn active">S</button>
+            <button class="size-btn">M</button>
+            <button class="size-btn">L</button>
+            <button class="size-btn">XL</button>
+          </div>
+        </div>
+        <div>
+          <div class="option-label">Quantity</div>
+          <div class="qty-row">
+            <button class="qty-btn" onclick="changeQty(-1)">−</button>
+            <div class="qty-display" id="qtyDisplay">1</div>
+            <button class="qty-btn" onclick="changeQty(1)">+</button>
+            <span style="font-size:0.75rem;color:#64748b;margin-left:0.5rem;">12 left in stock</span>
+          </div>
+        </div>
+        <div class="btn-group">
+          <button class="add-to-cart">Add to Cart</button>
+          <button class="wishlist-btn">♡ Save to Wishlist</button>
+        </div>
+        <div class="divider"></div>
+        <div class="trust-row">
+          <div class="trust-item">🚚 Free shipping over $50</div>
+          <div class="trust-item">↩ 30-day returns</div>
+          <div class="trust-item">🔒 Secure checkout</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Reviews -->
+    <div class="reviews-section">
+      <div class="section-title">Customer Reviews</div>
+
+      <div class="review-card">
+        <div class="review-header">
+          <div class="reviewer-info">
+            <div class="avatar" style="background:linear-gradient(135deg,#6366f1,#a78bfa);">AK</div>
+            <div>
+              <div class="reviewer-name">Alex Kim</div>
+              <div class="reviewer-meta">Verified Buyer · March 12, 2026</div>
+            </div>
+          </div>
+          <div class="verified">✓ Verified</div>
+        </div>
+        <div class="stars" style="font-size:0.875rem;margin-bottom:0.5rem;">★★★★★</div>
+        <div class="review-body">
+          Absolutely love these headphones. The sound quality is exceptional — crystal clear highs and deep, punchy bass without any muddiness. Wore them for 6 hours straight without any discomfort. The ANC (active noise cancellation) is genuinely impressive, blocking out my open office completely.
+        </div>
+        <div class="review-helpful">
+          Was this helpful?
+          <button class="helpful-btn">👍 Yes (24)</button>
+          <button class="helpful-btn">👎 No (2)</button>
+        </div>
+      </div>
+
+      <div class="review-card">
+        <div class="review-header">
+          <div class="reviewer-info">
+            <div class="avatar" style="background:linear-gradient(135deg,#f59e0b,#fbbf24);">SM</div>
+            <div>
+              <div class="reviewer-name">Sarah M.</div>
+              <div class="reviewer-meta">Verified Buyer · February 28, 2026</div>
+            </div>
+          </div>
+          <div class="verified">✓ Verified</div>
+        </div>
+        <div class="stars" style="font-size:0.875rem;margin-bottom:0.5rem;">★★★★☆</div>
+        <div class="review-body">
+          Great headphones overall. The build quality is premium and they look fantastic. My only minor complaint is the carrying case feels a bit flimsy for the price point. That said, the sound stage is incredible and the wireless range is consistent up to about 20 metres. Would definitely recommend.
+        </div>
+        <div class="review-helpful">
+          Was this helpful?
+          <button class="helpful-btn">👍 Yes (11)</button>
+          <button class="helpful-btn">👎 No (0)</button>
+        </div>
+      </div>
+
+      <div class="review-card">
+        <div class="review-header">
+          <div class="reviewer-info">
+            <div class="avatar" style="background:linear-gradient(135deg,#ef4444,#f97316);">JT</div>
+            <div>
+              <div class="reviewer-name">Jordan T.</div>
+              <div class="reviewer-meta">Verified Buyer · February 10, 2026</div>
+            </div>
+          </div>
+          <div class="verified">✓ Verified</div>
+        </div>
+        <div class="stars" style="font-size:0.875rem;margin-bottom:0.5rem;">★★★☆☆</div>
+        <div class="review-body">
+          Decent product but the app is buggy. Headphones themselves sound great but pairing them to the companion app on Android took me nearly 20 minutes. Customer support was helpful once I reached them. Hardware: 5 stars. Software: 2 stars.
+        </div>
+        <div class="review-helpful">
+          Was this helpful?
+          <button class="helpful-btn">👍 Yes (8)</button>
+          <button class="helpful-btn">👎 No (3)</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Related products -->
+    <div style="margin-bottom:3rem;">
+      <div class="section-title">You Might Also Like</div>
+      <div class="related-grid">
+        <div class="related-card">
+          <div class="related-image" style="background:linear-gradient(135deg,#0ea5e9,#38bdf8);">🎙️</div>
+          <div class="related-info">
+            <div class="related-name">Studio Mic Pro</div>
+            <div class="related-price">$149</div>
+          </div>
+        </div>
+        <div class="related-card">
+          <div class="related-image" style="background:linear-gradient(135deg,#10b981,#34d399);">📱</div>
+          <div class="related-info">
+            <div class="related-name">DAC Adapter USB-C</div>
+            <div class="related-price">$49</div>
+          </div>
+        </div>
+        <div class="related-card">
+          <div class="related-image" style="background:linear-gradient(135deg,#8b5cf6,#a78bfa);">🎹</div>
+          <div class="related-info">
+            <div class="related-name">Bluetooth Amp</div>
+            <div class="related-price">$89</div>
+          </div>
+        </div>
+        <div class="related-card">
+          <div class="related-image" style="background:linear-gradient(135deg,#ec4899,#f9a8d4);">🧳</div>
+          <div class="related-info">
+            <div class="related-name">Travel Case (Hard)</div>
+            <div class="related-price">$29</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- QA checklist -->
+    <div class="test-checklist">
+      <h3>E-commerce QA Checklist</h3>
+      <ul>
+        <li><input type="checkbox"> Widget button visible above sticky product nav (z-index correct)</li>
+        <li><input type="checkbox"> Enter feedback mode — overlay appears over product images correctly</li>
+        <li><input type="checkbox"> Place comment on main product image</li>
+        <li><input type="checkbox"> Place comment on product title ("Pro Studio Headphones X1")</li>
+        <li><input type="checkbox"> Place comment on price ($279) — pin attached to price element</li>
+        <li><input type="checkbox"> Place comment on colour swatch row</li>
+        <li><input type="checkbox"> Place comment on "Add to Cart" button without accidentally triggering it</li>
+        <li><input type="checkbox"> Click thumbnail images — main image updates; widget pins remain correct</li>
+        <li><input type="checkbox"> Increment/decrement qty picker — works normally after feedback mode cycle</li>
+        <li><input type="checkbox"> Place comment on a review card (Alex Kim's review)</li>
+        <li><input type="checkbox"> Submit 3+ comments on the same page — pins don't overlap, each distinct</li>
+        <li><input type="checkbox"> Scroll down to "Related Products" — pins placed above stay anchored correctly</li>
+        <li><input type="checkbox"> Place comment on a related product card</li>
+        <li><input type="checkbox"> Mobile viewport (375px): product layout stacks correctly, widget usable</li>
+        <li><input type="checkbox"> No console errors throughout all interactions</li>
+      </ul>
+    </div>
+
+  </div>
+
+  <script>
+    let qty = 1;
+
+    function changeQty(delta) {
+      qty = Math.max(1, Math.min(12, qty + delta));
+      document.getElementById('qtyDisplay').textContent = qty;
+    }
+
+    function setThumb(el, emoji) {
+      document.querySelectorAll('.thumb').forEach(t => t.classList.remove('active'));
+      el.classList.add('active');
+      document.getElementById('mainImage').textContent = emoji;
+    }
+
+    function setColor(el) {
+      document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+      el.classList.add('active');
+    }
+
+    document.querySelectorAll('.size-btn:not(.sold-out)').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.size-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+  </script>
+</body>
+</html>

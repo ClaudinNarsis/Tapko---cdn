@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QA: Edge Cases — Tapko Widget</title>
+
+  <script src="http://localhost:5501/dist/tapko-widget.js"></script>
+  <script>
+    (async () => {
+      try {
+        await Tapko.init({
+          projectId: '7db2edc7-7edb-41d8-b5ac-107726a36400',
+          apiKey: 'your-api-key',
+          userId: 'qa-test-user-edge'
+        });
+        console.log('[QA] Tapko initialized on edge-cases page.');
+      } catch (err) {
+        console.error('[QA] Init failed:', err);
+      }
+    })();
+  </script>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8fafc; color: #1e293b; }
+
+    .qa-banner {
+      background: #f5f3ff;
+      border-bottom: 2px solid #7c3aed;
+      padding: 0.75rem 2rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #5b21b6;
+    }
+
+    .container { max-width: 900px; margin: 0 auto; padding: 2rem; }
+    h1 { font-size: 1.75rem; font-weight: 800; margin-bottom: 0.5rem; }
+    .subtitle { color: #64748b; margin-bottom: 2rem; font-size: 0.9rem; }
+
+    .edge-section {
+      background: white;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .edge-section h2 {
+      font-size: 0.875rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #7c3aed;
+      margin-bottom: 0.25rem;
+    }
+    .edge-section h3 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #1e293b;
+      margin-bottom: 1rem;
+    }
+    .edge-section p { color: #64748b; font-size: 0.875rem; line-height: 1.6; margin-bottom: 0.75rem; }
+
+    /* Dark background section */
+    .dark-section {
+      background: #0f172a;
+      border-radius: 12px;
+      padding: 2rem;
+      margin-bottom: 1.5rem;
+      color: #e2e8f0;
+    }
+    .dark-section h2 { font-size: 0.875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #818cf8; margin-bottom: 0.25rem; }
+    .dark-section h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 1rem; }
+    .dark-section p { color: #94a3b8; font-size: 0.875rem; line-height: 1.6; }
+
+    /* RTL section */
+    .rtl-section {
+      direction: rtl;
+      text-align: right;
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .rtl-section h2 { font-size: 0.875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #92400e; margin-bottom: 0.25rem; }
+    .rtl-section h3 { font-size: 1.1rem; font-weight: 700; color: #1e293b; margin-bottom: 1rem; }
+    .rtl-section p { color: #64748b; font-size: 0.875rem; line-height: 1.6; }
+
+    /* Viewport corner targets */
+    .corner-target {
+      position: fixed;
+      width: 60px;
+      height: 60px;
+      background: #6366f1;
+      color: white;
+      font-size: 0.6rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      border-radius: 4px;
+      z-index: 50;
+      line-height: 1.2;
+    }
+    .corner-tl { top: 0; left: 0; border-radius: 0 0 8px 0; }
+    .corner-tr { top: 0; right: 0; border-radius: 0 0 0 8px; }
+    .corner-bl { bottom: 80px; left: 0; border-radius: 0 8px 8px 0; }
+
+    /* API control panel */
+    .control-panel {
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .control-panel h2 { color: #94a3b8; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem; }
+    .btn-row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
+    .ctrl-btn {
+      background: #334155;
+      color: #e2e8f0;
+      border: none;
+      padding: 0.4rem 0.875rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-family: 'Monaco', 'Menlo', monospace;
+      transition: background 0.2s;
+    }
+    .ctrl-btn:hover { background: #475569; }
+    .ctrl-btn.danger { background: #7f1d1d; color: #fca5a5; }
+    .ctrl-btn.danger:hover { background: #991b1b; }
+    .log { background: #0f172a; color: #7dd3fc; font-family: monospace; font-size: 0.75rem; padding: 0.75rem; border-radius: 6px; min-height: 48px; white-space: pre-wrap; max-height: 120px; overflow-y: auto; }
+
+    /* Dynamic content zone */
+    .dynamic-zone {
+      background: #f0fdf4;
+      border: 2px dashed #86efac;
+      border-radius: 12px;
+      padding: 1.5rem;
+      min-height: 80px;
+    }
+    .dynamic-zone h4 { font-size: 0.8rem; color: #166534; font-weight: 700; margin-bottom: 0.75rem; }
+
+    /* Long text zone */
+    .long-text { font-size: 0.875rem; color: #374151; line-height: 1.8; }
+
+    /* Special chars zone */
+    .special-chars { font-size: 1rem; line-height: 2; color: #374151; }
+
+    /* Checklist */
+    .test-checklist { background: #1e293b; border-radius: 12px; padding: 1.5rem; }
+    .test-checklist h3 { color: #94a3b8; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem; }
+    .test-checklist ul { list-style: none; display: flex; flex-direction: column; gap: 0.5rem; }
+    .test-checklist li { display: flex; gap: 0.75rem; align-items: flex-start; font-size: 0.8rem; color: #cbd5e1; padding: 0.4rem 0; border-bottom: 1px solid #0f172a; }
+    .test-checklist li:last-child { border-bottom: none; }
+    .test-checklist li input { flex-shrink: 0; margin-top: 2px; accent-color: #6366f1; }
+    .test-checklist .group-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: #7c3aed; letter-spacing: 0.05em; padding: 0.75rem 0 0.25rem; border-bottom: none; }
+  </style>
+</head>
+<body>
+
+  <!-- Viewport corner targets for edge positioning tests -->
+  <div class="corner-target corner-tl">TOP<br>LEFT</div>
+  <div class="corner-target corner-tr">TOP<br>RIGHT</div>
+  <div class="corner-target corner-bl">BOT<br>LEFT</div>
+
+  <div class="qa-banner">QA TEST — Edge Cases | Special characters, RTL, dark bg, dynamic content, viewport edges</div>
+
+  <div class="container">
+    <h1>Edge Case Tests</h1>
+    <p class="subtitle">Each section targets a specific edge case. Enter feedback mode and click each area to place a pin.</p>
+
+    <!-- Rapid toggle control -->
+    <div class="control-panel">
+      <h2>Rapid Mode Toggle — Stress Test</h2>
+      <div class="btn-row">
+        <button class="ctrl-btn" onclick="rapidToggle()">Rapid Toggle ×5</button>
+        <button class="ctrl-btn" onclick="Tapko.enterFeedbackMode()">Enter Mode</button>
+        <button class="ctrl-btn" onclick="Tapko.exitFeedbackMode()">Exit Mode</button>
+        <button class="ctrl-btn" onclick="Tapko.closeAll()">closeAll()</button>
+        <button class="ctrl-btn danger" onclick="Tapko.destroy()">destroy()</button>
+      </div>
+      <div class="log" id="ctrlLog">// Events will appear here</div>
+    </div>
+
+    <!-- Long text -->
+    <div class="edge-section">
+      <h2>Edge Case 1</h2>
+      <h3>Very Long Comment Text</h3>
+      <p>Enter feedback mode and click this section. In the comment card, paste or type a 1000+ character comment. Verify it submits without truncation errors or payload issues.</p>
+      <div class="long-text">
+        This is a target paragraph for long-comment testing. The comment card should handle multi-paragraph text, line breaks, and extended descriptions gracefully. It should not truncate the text silently or throw an error when the comment exceeds a few hundred characters. Real-world feedback is often detailed — product managers leave thorough bug reports with steps to reproduce, expected versus actual behaviour, environment details, and screenshots references. The widget must handle all of this. Additionally, test pasting text copied from another document, which may include Unicode characters, smart quotes, em dashes, and other non-ASCII characters that sometimes trip up JSON serialization.
+      </div>
+    </div>
+
+    <!-- Special characters -->
+    <div class="edge-section">
+      <h2>Edge Case 2</h2>
+      <h3>Special Characters in Comments</h3>
+      <p>Submit comments containing each of the following in the text field:</p>
+      <div class="special-chars">
+        <div>Emoji: 🚀 🎉 💡 ⚠️ ❌ ✅ 🔥 🤔 😅 🎨</div>
+        <div>HTML entities: &lt;script&gt;alert('xss')&lt;/script&gt; &amp;amp; &quot;quoted&quot;</div>
+        <div>Quotes &amp; apostrophes: "double" 'single' `backtick` «guillemet»</div>
+        <div>Special symbols: © ® ™ § ¶ † ‡ • … ← → ↑ ↓ ↔</div>
+        <div>Math: ∞ ≈ ≠ ≤ ≥ ± × ÷ √ ∑ ∏ ∫</div>
+        <div>Newlines &amp; whitespace in comment box (press Enter between sentences)</div>
+        <div>Very long URL: https://example.com/path/to/page?param1=value1&amp;param2=value2&amp;param3=very-long-value-that-keeps-going-and-going</div>
+      </div>
+    </div>
+
+    <!-- RTL text -->
+    <div class="rtl-section">
+      <h2>Edge Case 3 — RTL</h2>
+      <h3>محتوى من اليمين إلى اليسار</h3>
+      <p>هذا نص عربي لاختبار موضع عنصر التعليق وتوجيه واجهة المستخدم عند وجود محتوى من اليمين إلى اليسار. يجب أن تظهر البطاقة في الموضع الصحيح بجانب نقطة النقر.</p>
+      <p>Hebrew example: מוצר מצוין — נשמח לשמוע את דעתך. ניתן להשאיר תגובה על ידי לחיצה על הכפתור.</p>
+    </div>
+
+    <!-- Dark background -->
+    <div class="dark-section">
+      <h2>Edge Case 4</h2>
+      <h3>Comment on Dark Background</h3>
+      <p>The comment card should remain readable against this dark section. The pin marker colour must be visible. The overlay tint should be perceptible even on dark backgrounds.</p>
+      <p>Click anywhere in this dark area while in feedback mode and verify: (1) pin is visible, (2) comment card text is legible, (3) overlay is distinguishable from the background.</p>
+    </div>
+
+    <!-- Dynamic content -->
+    <div class="edge-section">
+      <h2>Edge Case 5</h2>
+      <h3>Comment on Dynamically Injected Content</h3>
+      <p>Click "Inject Content" below, then immediately enter feedback mode and try to comment on the newly added elements. Tests whether pins attach to DOM nodes added after widget init.</p>
+      <div style="margin: 1rem 0; display: flex; gap: 0.75rem; flex-wrap: wrap;">
+        <button onclick="injectContent()" style="background:#6366f1;color:white;border:none;padding:0.5rem 1rem;border-radius:6px;cursor:pointer;font-size:0.8rem;">Inject Content</button>
+        <button onclick="clearDynamic()" style="background:white;border:1px solid #e2e8f0;color:#64748b;padding:0.5rem 1rem;border-radius:6px;cursor:pointer;font-size:0.8rem;">Clear</button>
+      </div>
+      <div class="dynamic-zone" id="dynamicZone">
+        <h4>Dynamic content will appear here</h4>
+      </div>
+    </div>
+
+    <!-- Viewport edge positioning -->
+    <div class="edge-section">
+      <h2>Edge Case 6</h2>
+      <h3>Comment Card Viewport Clamping</h3>
+      <p>Three coloured corner targets are pinned at the viewport edges (top-left, top-right, bottom-left). Enter feedback mode and click each corner target. The comment card must <strong>not</strong> appear off-screen — it should reposition itself to stay within the viewport.</p>
+    </div>
+
+    <!-- High-frequency submission -->
+    <div class="edge-section">
+      <h2>Edge Case 7</h2>
+      <h3>Rapid Submit — Double-Submit Guard</h3>
+      <p>Enter feedback mode, click to open a comment card, then click the Submit button multiple times quickly. Only one feedback item should be created — the widget should prevent duplicate submissions.</p>
+    </div>
+
+    <!-- Offline queue -->
+    <div class="edge-section">
+      <h2>Edge Case 8</h2>
+      <h3>Offline Queue</h3>
+      <p>Steps: (1) Open DevTools → Network → select "Offline". (2) Enter feedback mode and submit a comment. (3) Verify the QueueViewerModal shows the queued item. (4) Re-enable Network. (5) Verify queue retries and item is marked as synced.</p>
+      <div style="margin-top: 0.75rem;">
+        <button onclick="Tapko.showQueueViewer()" style="background:#0f172a;color:#7dd3fc;border:none;padding:0.5rem 1rem;border-radius:6px;cursor:pointer;font-size:0.8rem;font-family:monospace;">showQueueViewer()</button>
+      </div>
+    </div>
+
+    <!-- Checklist -->
+    <div class="test-checklist">
+      <h3>Edge Case Checklist</h3>
+      <ul>
+        <li class="group-label">Long text</li>
+        <li><input type="checkbox"> Submit 1000+ char comment — no truncation or payload error</li>
+        <li><input type="checkbox"> Submit comment with newlines — line breaks preserved on pin hover</li>
+
+        <li class="group-label">Special characters</li>
+        <li><input type="checkbox"> Submit comment with emoji — renders correctly, no encoding error</li>
+        <li><input type="checkbox"> Submit comment with HTML tags as literal text — not interpreted as HTML (XSS safe)</li>
+        <li><input type="checkbox"> Submit comment with smart quotes and em dashes — no JSON parse error</li>
+
+        <li class="group-label">RTL content</li>
+        <li><input type="checkbox"> Comment card opens in correct position on RTL section</li>
+        <li><input type="checkbox"> Pin marker visible on RTL content area</li>
+
+        <li class="group-label">Dark background</li>
+        <li><input type="checkbox"> Pin marker visible against dark background</li>
+        <li><input type="checkbox"> Comment card text is readable (contrast OK)</li>
+        <li><input type="checkbox"> Feedback mode overlay visible on dark bg</li>
+
+        <li class="group-label">Dynamic content</li>
+        <li><input type="checkbox"> Can place comment on injected elements after widget init</li>
+        <li><input type="checkbox"> Pin coordinates correct on dynamically-added content</li>
+
+        <li class="group-label">Viewport clamping</li>
+        <li><input type="checkbox"> Click top-left corner — card stays on screen</li>
+        <li><input type="checkbox"> Click top-right corner — card stays on screen</li>
+        <li><input type="checkbox"> Click bottom-left corner (above widget button) — card stays on screen</li>
+
+        <li class="group-label">Rapid toggle / stress</li>
+        <li><input type="checkbox"> Rapid Toggle ×5 completes without console errors</li>
+        <li><input type="checkbox"> Widget still functional after rapid toggle</li>
+        <li><input type="checkbox"> Double-click Submit — only one feedback item created</li>
+
+        <li class="group-label">Offline queue</li>
+        <li><input type="checkbox"> Offline submit — item appears in QueueViewerModal</li>
+        <li><input type="checkbox"> Reconnect — queued item retries and syncs successfully</li>
+      </ul>
+    </div>
+
+  </div>
+
+  <script>
+    let toggleCount = 0;
+    const log = document.getElementById('ctrlLog');
+
+    function logEvent(msg) {
+      const ts = new Date().toLocaleTimeString();
+      log.textContent = `[${ts}] ${msg}\n` + log.textContent;
+    }
+
+    async function rapidToggle() {
+      logEvent('Starting rapid toggle ×5...');
+      for (let i = 0; i < 5; i++) {
+        await new Promise(r => setTimeout(r, 80));
+        Tapko.enterFeedbackMode();
+        await new Promise(r => setTimeout(r, 80));
+        Tapko.exitFeedbackMode();
+      }
+      logEvent('Rapid toggle ×5 complete. Check for console errors.');
+    }
+
+    function injectContent() {
+      const zone = document.getElementById('dynamicZone');
+      zone.innerHTML = '';
+      const items = [
+        { title: 'Dynamically added card A', body: 'This card was injected after widget init. Try placing a comment here.' },
+        { title: 'Dynamically added card B', body: 'Another injected element. Pin coordinates should be correct relative to page origin.' },
+        { title: 'Injected image placeholder', body: null, isImage: true }
+      ];
+      items.forEach(item => {
+        const el = document.createElement('div');
+        el.style.cssText = 'background:white;border:1px solid #d1fae5;border-radius:8px;padding:1rem;margin-bottom:0.75rem;';
+        el.innerHTML = item.isImage
+          ? `<div style="background:linear-gradient(135deg,#6366f1,#a78bfa);height:80px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:white;font-weight:700;">Injected Image Block</div>`
+          : `<strong style="font-size:0.9rem;color:#065f46;">${item.title}</strong><p style="font-size:0.8rem;color:#64748b;margin-top:0.375rem;">${item.body}</p>`;
+        zone.appendChild(el);
+      });
+      logEvent('Dynamic content injected. Enter feedback mode and comment on it.');
+    }
+
+    function clearDynamic() {
+      document.getElementById('dynamicZone').innerHTML = '<h4 style="font-size:0.8rem;color:#166534;font-weight:700;">Dynamic content will appear here</h4>';
+    }
+  </script>
+</body>
+</html>
