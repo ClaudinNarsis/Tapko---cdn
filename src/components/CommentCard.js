@@ -841,7 +841,7 @@ class CommentCard {
 
     // 8. Close card after brief confirmation display
     setTimeout(() => {
-      this.close();
+      this.close(true);
     }, 1500);
 
     // 9. Trigger queue processing (async, non-blocking)
