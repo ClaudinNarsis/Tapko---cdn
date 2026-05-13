@@ -63,10 +63,19 @@ class APIClient {
       const response = await fetch(url, {
         ...options,
         headers: this._getHeaders(options.headers),
-        signal: controller.signal
+        signal: controller.signal,
+        redirect: 'manual'
       });
 
       clearTimeout(timeoutId);
+
+      if (response.type === 'opaqueredirect') {
+        console.error('[Tapko API] Redirect (3xx) received — backend endpoint may not be deployed:', {
+          method: options.method || 'GET',
+          url
+        });
+        throw new Error(`API Error: Redirect received for ${options.method || 'GET'} ${url} — check that the backend endpoint is deployed`);
+      }
 
       if (!response.ok) {
         throw new Error(`API Error: ${response.status} ${response.statusText}`);
@@ -150,10 +159,14 @@ class APIClient {
   }
 
   /**
-   * DELETE request
+   * DELETE request (optionally with body)
    */
-  async delete(endpoint) {
-    return this._request(endpoint, { method: 'DELETE' });
+  async delete(endpoint, data = null) {
+    const options = { method: 'DELETE' };
+    if (data) {
+      options.body = JSON.stringify(data);
+    }
+    return this._request(endpoint, options);
   }
 
   // === Widget-specific API methods ===
@@ -371,6 +384,34 @@ class APIClient {
     };
 
     return this.post(endpoint, payload);
+  }
+
+  /**
+   * Delete a specific feedback (user-initiated — sends userId for ownership check)
+   */
+  async deleteFeedback(projectId, feedbackId, userId) {
+    const endpoint = `/feedback/${projectId}/${feedbackId}`;
+    const payload = { userId };
+    console.log('[Tapko API] deleteFeedback →', {
+      url: this._buildUrl(endpoint),
+      payload
+    });
+    return this.delete(endpoint, payload);
+  }
+
+  /**
+   * Update feedback title/description (user-initiated — sends userId for ownership check)
+   */
+  async updateFeedback(projectId, feedbackId, updates) {
+    const userId = updates.userId || this.userId;
+    if (!userId) throw new Error('updateFeedback: userId is required');
+    const endpoint = `/feedback/${projectId}/${feedbackId}`;
+    const payload = { ...updates, userId };
+    console.log('[Tapko API] updateFeedback →', {
+      url: this._buildUrl(endpoint),
+      payload
+    });
+    return this.put(endpoint, payload);
   }
 
   /**

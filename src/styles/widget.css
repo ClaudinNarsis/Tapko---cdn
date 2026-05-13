@@ -524,6 +524,131 @@
   word-wrap: break-word;
 }
 
+.dtc-pin-detail-edited {
+  display: inline-block;
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: 500;
+  border-radius: 4px;
+  background: #f3f4f6;
+  color: #6b7280;
+  letter-spacing: 0.3px;
+}
+
+/* Actions bar (edit/delete buttons for own pins) */
+.dtc-pin-detail-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 16px 14px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.dtc-pin-detail-edit,
+.dtc-pin-detail-cancel,
+.dtc-pin-detail-confirm-no {
+  background: #f3f4f6;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #4b5563;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+
+.dtc-pin-detail-edit:hover,
+.dtc-pin-detail-cancel:hover,
+.dtc-pin-detail-confirm-no:hover {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.dtc-pin-detail-delete {
+  background: transparent;
+  border: 1px solid #fca5a5;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #ef4444;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+
+.dtc-pin-detail-delete:hover {
+  background: #fee2e2;
+  border-color: #ef4444;
+}
+
+.dtc-pin-detail-save,
+.dtc-pin-detail-confirm-yes {
+  background: #4f46e5;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #ffffff;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+
+.dtc-pin-detail-save:hover {
+  background: #4338ca;
+}
+
+.dtc-pin-detail-confirm-yes {
+  background: #ef4444;
+}
+
+.dtc-pin-detail-confirm-yes:hover {
+  background: #dc2626;
+}
+
+.dtc-pin-detail-confirm-text {
+  font-size: 12px;
+  color: #374151;
+  flex: 1 1 100%;
+}
+
+/* Edit mode textarea */
+.dtc-pin-detail-edit-textarea {
+  width: 100%;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #111827;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 60px;
+  outline: none;
+  transition: border-color 0.2s ease;
+  box-sizing: border-box;
+}
+
+.dtc-pin-detail-edit-textarea:focus {
+  border-color: #4f46e5;
+}
+
+.dtc-pin-detail-loading {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.dtc-pin-detail-error {
+  font-size: 12px;
+  color: #ef4444;
+  flex: 1 1 100%;
+}
+
 @keyframes dtc-fadeIn {
   from {
     opacity: 0;

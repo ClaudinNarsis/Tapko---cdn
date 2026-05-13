@@ -680,6 +680,16 @@ class FeedbackQueueManager {
           ctx.lineCap = 'round';
           ctx.lineJoin = 'round';
 
+          // Scale annotation coords from drawing-canvas space → screenshot image space.
+          // Annotations were recorded on a canvas sized to 90% of the viewport; the
+          // screenshot may have been captured at a different resolution (e.g. capped at
+          // 1280×720 by the Screen Capture API). Without this transform, annotations
+          // land at the wrong position on the merged image.
+          const scaleX = annotationData.canvasWidth ? img.width / annotationData.canvasWidth : 1;
+          const scaleY = annotationData.canvasHeight ? img.height / annotationData.canvasHeight : 1;
+          ctx.save();
+          ctx.scale(scaleX, scaleY);
+
           // Draw each annotation
           annotationData.paths.forEach(item => {
             if (item.type === 'path' || Array.isArray(item)) {
@@ -743,6 +753,8 @@ class FeedbackQueueManager {
               ctx.fillText(item.text, item.x, item.y);
             }
           });
+
+          ctx.restore();
 
           // Convert to blob
           canvas.toBlob((blob) => {
