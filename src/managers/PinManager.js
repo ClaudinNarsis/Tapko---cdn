@@ -153,6 +153,12 @@ class PinManager {
             extractedText: commentText.substring(0, 50) + '...'
           });
 
+          console.log(`[PinManager] Mapping feedback ${feedbackId}:`, {
+            isOwner: feedback.isOwner,
+            editedAt: feedback.editedAt,
+            apiClientUserId: this.apiClient?.userId
+          });
+
           const pinData = {
             id: feedbackId,
             projectId: projectId,
@@ -167,9 +173,11 @@ class PinManager {
               text: commentText,
               createdAt: feedback.createdAt || new Date().toISOString()
             },
-            status: feedback.status || 'pending', // Include status from feedback
+            status: feedback.status || 'pending',
             createdAt: feedback.createdAt || new Date().toISOString(),
-            createdInThisBrowser: false // From backend
+            editedAt: feedback.editedAt || null,
+            isOwner: feedback.isOwner === true,
+            createdInThisBrowser: false
           };
 
           // Save to IndexedDB
@@ -204,6 +212,12 @@ class PinManager {
   async createPin(pinData) {
     console.log('[PinManager] Creating pin:', pinData.id);
 
+    // A pin created in this session is always owned by the current user.
+    // isOwner is only set during init() via the backend response, so new pins
+    // would show without Edit/Delete until the next page refresh without this.
+    pinData.isOwner = !!this.apiClient.userId;
+    pinData.editedAt = pinData.editedAt || null;
+
     try {
       // 1. Save to IndexedDB
       await this.pinStorage.savePin(pinData);
@@ -211,7 +225,7 @@ class PinManager {
       // 2. Render immediately
       this.renderPin(pinData);
 
-      console.log('[PinManager] Pin created successfully:', pinData.id);
+      console.log('[PinManager] Pin created successfully:', pinData.id, '| isOwner:', pinData.isOwner);
       return pinData.id;
     } catch (error) {
       console.error('[PinManager] Failed to create pin:', error);
@@ -324,22 +338,29 @@ class PinManager {
     // Position near the pin
     this._positionDetailCard(detailCard, pinData);
 
+    // Prevent clicks inside the card from reaching the document outside-click handler.
+    // In shadow DOM, event.target is retargeted to the shadow host at the document level,
+    // so detailCard.contains(event.target) always returns false — the card would close
+    // on every internal click without this stopPropagation guard.
+    detailCard.addEventListener('click', (e) => e.stopPropagation());
+
     // Add close handler
     const closeBtn = detailCard.querySelector(`.${CONFIG.CLASS_PREFIX}pin-detail-close`);
     if (closeBtn) {
       closeBtn.addEventListener('click', () => {
+        console.log('[PinManager] Detail card closed via × button');
         detailCard.remove();
+        document.removeEventListener('click', outsideClickHandler);
       });
     }
 
-    // Close on outside click
+    // Close on outside click — only fires for clicks outside the card (due to stopPropagation above)
+    const outsideClickHandler = (event) => {
+      console.log('[PinManager] Outside click detected, closing detail card');
+      detailCard.remove();
+      document.removeEventListener('click', outsideClickHandler);
+    };
     setTimeout(() => {
-      const outsideClickHandler = (event) => {
-        if (!detailCard.contains(event.target)) {
-          detailCard.remove();
-          document.removeEventListener('click', outsideClickHandler);
-        }
-      };
       document.addEventListener('click', outsideClickHandler);
     }, 100);
   }
@@ -351,12 +372,18 @@ class PinManager {
    * @private
    */
   _createPinDetailCard(pinData) {
+    console.log('[PinManager] _createPinDetailCard:', {
+      id: pinData.id,
+      isOwner: pinData.isOwner,
+      editedAt: pinData.editedAt,
+      apiClientUserId: this.apiClient?.userId
+    });
+
     const card = createElement('div', `${CONFIG.CLASS_PREFIX}pin-detail`);
 
     const createdDate = new Date(pinData.comment.createdAt).toLocaleDateString();
     const status = pinData.status || 'pending';
 
-    // Status display labels
     const statusLabels = {
       'pending': 'Pending',
       'in_progress': 'In Progress',
@@ -366,11 +393,21 @@ class PinManager {
     };
 
     const statusLabel = statusLabels[status] || status.charAt(0).toUpperCase() + status.slice(1);
+    const editedBadge = pinData.editedAt
+      ? `<span class="${CONFIG.CLASS_PREFIX}pin-detail-edited">Edited</span>`
+      : '';
+
+    const ownerActions = pinData.isOwner ? `
+      <div class="${CONFIG.CLASS_PREFIX}pin-detail-actions">
+        <button class="${CONFIG.CLASS_PREFIX}pin-detail-edit" aria-label="Edit feedback">Edit</button>
+        <button class="${CONFIG.CLASS_PREFIX}pin-detail-delete" aria-label="Delete feedback">Delete</button>
+      </div>` : '';
 
     card.innerHTML = `
       <div class="${CONFIG.CLASS_PREFIX}pin-detail-header">
         <div class="${CONFIG.CLASS_PREFIX}pin-detail-meta">
           <span class="${CONFIG.CLASS_PREFIX}pin-detail-date">${createdDate}</span>
+          ${editedBadge}
           <span class="${CONFIG.CLASS_PREFIX}pin-detail-status ${CONFIG.CLASS_PREFIX}pin-detail-status-${status}">${statusLabel}</span>
         </div>
         <button class="${CONFIG.CLASS_PREFIX}pin-detail-close" aria-label="Close">×</button>
@@ -378,9 +415,198 @@ class PinManager {
       <div class="${CONFIG.CLASS_PREFIX}pin-detail-content">
         <p>${this._escapeHTML(pinData.comment.text)}</p>
       </div>
+      ${ownerActions}
     `;
 
+    if (pinData.isOwner) {
+      const editBtn = card.querySelector(`.${CONFIG.CLASS_PREFIX}pin-detail-edit`);
+      const deleteBtn = card.querySelector(`.${CONFIG.CLASS_PREFIX}pin-detail-delete`);
+      console.log('[PinManager] Attaching owner action listeners:', { editBtnFound: !!editBtn, deleteBtnFound: !!deleteBtn });
+      if (editBtn) editBtn.addEventListener('click', () => {
+        console.log('[PinManager] Edit button clicked for pin:', pinData.id);
+        this._handleEditClick(pinData, card);
+      });
+      if (deleteBtn) deleteBtn.addEventListener('click', () => {
+        console.log('[PinManager] Delete button clicked for pin:', pinData.id);
+        this._handleDeleteClick(pinData, card);
+      });
+    } else {
+      console.log('[PinManager] Pin is not owned by current user — no edit/delete buttons');
+    }
+
     return card;
+  }
+
+  /**
+   * Handle delete button click — shows in-card confirm UI, pessimistic delete
+   * @param {Object} pinData
+   * @param {HTMLElement} card
+   * @private
+   */
+  _handleDeleteClick(pinData, card) {
+    console.log('[PinManager] _handleDeleteClick called:', {
+      id: pinData.id,
+      projectId: pinData.projectId,
+      userId: this.apiClient?.userId
+    });
+    const actionsEl = card.querySelector(`.${CONFIG.CLASS_PREFIX}pin-detail-actions`);
+    console.log('[PinManager] actionsEl found:', !!actionsEl);
+    if (!actionsEl) return;
+
+    actionsEl.innerHTML = `
+      <span class="${CONFIG.CLASS_PREFIX}pin-detail-confirm-text">Delete this feedback? This cannot be undone.</span>
+      <button class="${CONFIG.CLASS_PREFIX}pin-detail-confirm-yes">Confirm</button>
+      <button class="${CONFIG.CLASS_PREFIX}pin-detail-confirm-no">Cancel</button>
+    `;
+
+    actionsEl.querySelector(`.${CONFIG.CLASS_PREFIX}pin-detail-confirm-no`)
+      .addEventListener('click', () => {
+        actionsEl.innerHTML = `
+          <button class="${CONFIG.CLASS_PREFIX}pin-detail-edit" aria-label="Edit feedback">Edit</button>
+          <button class="${CONFIG.CLASS_PREFIX}pin-detail-delete" aria-label="Delete feedback">Delete</button>
+        `;
+        actionsEl.querySelector(`.${CONFIG.CLASS_PREFIX}pin-detail-edit`)
+          .addEventListener('click', () => this._handleEditClick(pinData, card));
+        actionsEl.querySelector(`.${CONFIG.CLASS_PREFIX}pin-detail-delete`)
+          .addEventListener('click', () => this._handleDeleteClick(pinData, card));
+      });
+
+    actionsEl.querySelector(`.${CONFIG.CLASS_PREFIX}pin-detail-confirm-yes`)
+      .addEventListener('click', async () => {
+        actionsEl.innerHTML = `<span class="${CONFIG.CLASS_PREFIX}pin-detail-loading">Deleting…</span>`;
+        console.log('[PinManager] Delete confirmed — calling API:', {
+          projectId: pinData.projectId,
+          feedbackId: pinData.id,
+          userId: this.apiClient?.userId
+        });
+        try {
+          const result = await this.apiClient.deleteFeedback(pinData.projectId, pinData.id, this.apiClient.userId);
+          console.log('[PinManager] Delete API success:', result);
+          card.remove();
+          await this.removePin(pinData.id);
+        } catch (err) {
+          console.error('[PinManager] Delete failed:', err);
+          actionsEl.innerHTML = `
+            <span class="${CONFIG.CLASS_PREFIX}pin-detail-error">Delete failed. Try again.</span>
+            <button class="${CONFIG.CLASS_PREFIX}pin-detail-edit" aria-label="Edit feedback">Edit</button>
+            <button class="${CONFIG.CLASS_PREFIX}pin-detail-delete" aria-label="Delete feedback">Delete</button>
+          `;
+          actionsEl.querySelector(`.${CONFIG.CLASS_PREFIX}pin-detail-edit`)
+            .addEventListener('click', () => this._handleEditClick(pinData, card));
+          actionsEl.querySelector(`.${CONFIG.CLASS_PREFIX}pin-detail-delete`)
+            .addEventListener('click', () => this._handleDeleteClick(pinData, card));
+        }
+      });
+  }
+
+  /**
+   * Handle edit button click — inline textarea, save/cancel, updates pin on success
+   * @param {Object} pinData
+   * @param {HTMLElement} card
+   * @param {string|null} initialText - pre-fill value for retry after failed save (never mutates pinData)
+   * @private
+   */
+  _handleEditClick(pinData, card, initialText = null) {
+    console.log('[PinManager] _handleEditClick called:', {
+      id: pinData.id,
+      projectId: pinData.projectId,
+      userId: this.apiClient?.userId,
+      initialText
+    });
+    const contentEl = card.querySelector(`.${CONFIG.CLASS_PREFIX}pin-detail-content`);
+    const actionsEl = card.querySelector(`.${CONFIG.CLASS_PREFIX}pin-detail-actions`);
+    console.log('[PinManager] contentEl found:', !!contentEl, '| actionsEl found:', !!actionsEl);
+    if (!contentEl || !actionsEl) return;
+
+    const savedText = pinData.comment.text;
+    const startText = initialText !== null ? initialText : savedText;
+
+    contentEl.innerHTML = `
+      <textarea class="${CONFIG.CLASS_PREFIX}pin-detail-edit-textarea" rows="4">${this._escapeHTML(startText)}</textarea>
+    `;
+
+    actionsEl.innerHTML = `
+      <button class="${CONFIG.CLASS_PREFIX}pin-detail-save">Save</button>
+      <button class="${CONFIG.CLASS_PREFIX}pin-detail-cancel">Cancel</button>
+    `;
+
+    const textarea = contentEl.querySelector(`.${CONFIG.CLASS_PREFIX}pin-detail-edit-textarea`);
+    textarea.focus();
+
+    const restoreView = () => {
+      contentEl.innerHTML = `<p>${this._escapeHTML(pinData.comment.text)}</p>`;
+      actionsEl.innerHTML = `
+        <button class="${CONFIG.CLASS_PREFIX}pin-detail-edit" aria-label="Edit feedback">Edit</button>
+        <button class="${CONFIG.CLASS_PREFIX}pin-detail-delete" aria-label="Delete feedback">Delete</button>
+      `;
+      actionsEl.querySelector(`.${CONFIG.CLASS_PREFIX}pin-detail-edit`)
+        .addEventListener('click', () => this._handleEditClick(pinData, card));
+      actionsEl.querySelector(`.${CONFIG.CLASS_PREFIX}pin-detail-delete`)
+        .addEventListener('click', () => this._handleDeleteClick(pinData, card));
+    };
+
+    textarea.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') restoreView();
+    });
+
+    actionsEl.querySelector(`.${CONFIG.CLASS_PREFIX}pin-detail-cancel`)
+      .addEventListener('click', restoreView);
+
+    actionsEl.querySelector(`.${CONFIG.CLASS_PREFIX}pin-detail-save`)
+      .addEventListener('click', async () => {
+        const newText = textarea.value.trim();
+        if (!newText || newText === savedText) {
+          restoreView();
+          return;
+        }
+
+        actionsEl.innerHTML = `<span class="${CONFIG.CLASS_PREFIX}pin-detail-loading">Saving…</span>`;
+        textarea.disabled = true;
+
+        console.log('[PinManager] Saving edit — calling API:', {
+          projectId: pinData.projectId,
+          feedbackId: pinData.id,
+          feedbackTitle: newText,
+          userId: this.apiClient?.userId
+        });
+        try {
+          const result = await this.apiClient.updateFeedback(pinData.projectId, pinData.id, {
+            feedbackTitle: newText,
+            userId: this.apiClient.userId
+          });
+          console.log('[PinManager] Update API success:', result);
+
+          pinData.comment.text = newText;
+          pinData.editedAt = new Date().toISOString();
+
+          const metaEl = card.querySelector(`.${CONFIG.CLASS_PREFIX}pin-detail-meta`);
+          if (metaEl && !metaEl.querySelector(`.${CONFIG.CLASS_PREFIX}pin-detail-edited`)) {
+            const badge = document.createElement('span');
+            badge.className = `${CONFIG.CLASS_PREFIX}pin-detail-edited`;
+            badge.textContent = 'Edited';
+            metaEl.insertBefore(badge, metaEl.querySelector(`.${CONFIG.CLASS_PREFIX}pin-detail-status`));
+          }
+
+          const pinEntry = this.pins.get(pinData.id);
+          if (pinEntry) pinEntry.data = pinData;
+
+          restoreView();
+        } catch (err) {
+          console.error('[PinManager] Update failed:', err);
+          // Re-enter edit mode pre-filled with what the user typed; pinData.comment.text is NOT mutated
+          actionsEl.innerHTML = `
+            <span class="${CONFIG.CLASS_PREFIX}pin-detail-error">Save failed — ${err.message}</span>
+            <button class="${CONFIG.CLASS_PREFIX}pin-detail-save">Retry</button>
+            <button class="${CONFIG.CLASS_PREFIX}pin-detail-cancel">Cancel</button>
+          `;
+          textarea.disabled = false;
+          textarea.addEventListener('keydown', (e) => { if (e.key === 'Escape') restoreView(); });
+          actionsEl.querySelector(`.${CONFIG.CLASS_PREFIX}pin-detail-cancel`)
+            .addEventListener('click', restoreView);
+          actionsEl.querySelector(`.${CONFIG.CLASS_PREFIX}pin-detail-save`)
+            .addEventListener('click', () => this._handleEditClick(pinData, card, textarea.value));
+        }
+      });
   }
 
   /**
