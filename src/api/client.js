@@ -403,8 +403,10 @@ class APIClient {
    * Update feedback title/description (user-initiated — sends userId for ownership check)
    */
   async updateFeedback(projectId, feedbackId, updates) {
+    const userId = updates.userId || this.userId;
+    if (!userId) throw new Error('updateFeedback: userId is required');
     const endpoint = `/feedback/${projectId}/${feedbackId}`;
-    const payload = { ...updates, userId: updates.userId || this.userId };
+    const payload = { ...updates, userId };
     console.log('[Tapko API] updateFeedback →', {
       url: this._buildUrl(endpoint),
       payload

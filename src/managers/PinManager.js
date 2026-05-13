@@ -329,6 +329,9 @@ class PinManager {
     // Create a simple detail popup
     const existingDetail = this.shadowRoot.querySelector(`.${CONFIG.CLASS_PREFIX}pin-detail`);
     if (existingDetail) {
+      if (existingDetail._outsideClickHandler) {
+        document.removeEventListener('click', existingDetail._outsideClickHandler);
+      }
       existingDetail.remove();
     }
 
@@ -360,6 +363,7 @@ class PinManager {
       detailCard.remove();
       document.removeEventListener('click', outsideClickHandler);
     };
+    detailCard._outsideClickHandler = outsideClickHandler;
     setTimeout(() => {
       document.addEventListener('click', outsideClickHandler);
     }, 100);
@@ -482,8 +486,8 @@ class PinManager {
         try {
           const result = await this.apiClient.deleteFeedback(pinData.projectId, pinData.id, this.apiClient.userId);
           console.log('[PinManager] Delete API success:', result);
-          card.remove();
           await this.removePin(pinData.id);
+          card.remove();
         } catch (err) {
           console.error('[PinManager] Delete failed:', err);
           actionsEl.innerHTML = `
@@ -577,7 +581,7 @@ class PinManager {
           console.log('[PinManager] Update API success:', result);
 
           pinData.comment.text = newText;
-          pinData.editedAt = new Date().toISOString();
+          pinData.editedAt = Date.now();
 
           const metaEl = card.querySelector(`.${CONFIG.CLASS_PREFIX}pin-detail-meta`);
           if (metaEl && !metaEl.querySelector(`.${CONFIG.CLASS_PREFIX}pin-detail-edited`)) {
@@ -595,7 +599,7 @@ class PinManager {
           console.error('[PinManager] Update failed:', err);
           // Re-enter edit mode pre-filled with what the user typed; pinData.comment.text is NOT mutated
           actionsEl.innerHTML = `
-            <span class="${CONFIG.CLASS_PREFIX}pin-detail-error">Save failed — ${err.message}</span>
+            <span class="${CONFIG.CLASS_PREFIX}pin-detail-error">Save failed — ${this._escapeHTML(err.message)}</span>
             <button class="${CONFIG.CLASS_PREFIX}pin-detail-save">Retry</button>
             <button class="${CONFIG.CLASS_PREFIX}pin-detail-cancel">Cancel</button>
           `;
