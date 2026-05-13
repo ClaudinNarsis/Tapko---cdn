@@ -649,6 +649,20 @@ async function captureDOMScreenshot(options = {}) {
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
 
+  // 1b. Snapshot every CSS custom property currently on :root from the LIVE DOM.
+  //     Scripts are stripped from the clone later, so any values that JS wrote via
+  //     element.style.setProperty() or framework init would be lost. We freeze them
+  //     here and re-inject them into the clone as a high-priority inline <style> block
+  //     so the renderer sees the same layout state the user sees.
+  const liveRootStyle = getComputedStyle(document.documentElement);
+  const frozenCustomProps = [];
+  for (const prop of liveRootStyle) {
+    if (prop.startsWith('--')) {
+      const val = liveRootStyle.getPropertyValue(prop).trim();
+      if (val) frozenCustomProps.push(`${prop}:${val}`);
+    }
+  }
+
   // 2. Stamp document-absolute top positions onto elements BEFORE cloning.
   //    The live DOM has layout; the clone will not. These are used by
   //    _stripBelowViewport() to prune content far below the fold.
@@ -666,13 +680,22 @@ async function captureDOMScreenshot(options = {}) {
   // 4a. Remove the Tapko widget itself
   clone.querySelector('#tapko-widget-shadow-host')?.remove();
 
-  // 4b. Remove scripts and noscript elements
+  // 4b. Freeze JS-initialized CSS custom properties BEFORE stripping scripts.
+  //     Appending to the end of <head> ensures this rule wins over earlier
+  //     stylesheet declarations at the same (:root) specificity.
+  if (frozenCustomProps.length) {
+    const freezeStyle = document.createElement('style');
+    freezeStyle.textContent = `:root{${frozenCustomProps.join(';')}}`;
+    clone.querySelector('head')?.appendChild(freezeStyle);
+  }
+
+  // 4c. Remove scripts and noscript elements
   clone.querySelectorAll('script, noscript').forEach(el => el.remove());
 
-  // 4c. Mask sensitive elements
+  // 4d. Mask sensitive elements
   clone.querySelectorAll('.mk-mask, [data-mk-mask], .mk-exclude, [data-mk-exclude]').forEach(el => el.remove());
 
-  // 4d. Fix scroll position so renderer paints the correct area
+  // 4e. Fix scroll position so renderer paints the correct area
   clone.style.cssText += `; scroll-behavior: auto !important;`;
   const bodyClone = clone.querySelector('body');
   if (bodyClone) {
@@ -681,7 +704,7 @@ async function captureDOMScreenshot(options = {}) {
     bodyClone.style.marginLeft = `-${scrollX}px`;
   }
 
-  // 4e. Inline <img> srcs as base64 (existing 512 KB per-asset cap applies)
+  // 4f. Inline <img> srcs as base64 (existing 512 KB per-asset cap applies)
   const imgEls = [...clone.querySelectorAll('img[src]')];
   await Promise.allSettled(imgEls.map(async img => {
     const src = img.getAttribute('src');
@@ -691,7 +714,7 @@ async function captureDOMScreenshot(options = {}) {
     if (dataURI) img.setAttribute('src', dataURI);
   }));
 
-  // 4f. Inline <link rel="stylesheet"> — skip files > 200 KB to avoid bloat
+  // 4g. Inline <link rel="stylesheet"> — skip files > 200 KB to avoid bloat
   //     from CSS frameworks; strip comments from those we do inline.
   const linkEls = [...clone.querySelectorAll('link[rel="stylesheet"][href]')];
   await Promise.allSettled(linkEls.map(async link => {
@@ -711,7 +734,7 @@ async function captureDOMScreenshot(options = {}) {
     } catch { /* leave original link if fetch fails */ }
   }));
 
-  // 4g. Inline background-image style attributes — skip if result exceeds 100 KB
+  // 4h. Inline background-image style attributes — skip if result exceeds 100 KB
   const styledEls = [...clone.querySelectorAll('[style]')];
   await Promise.allSettled(styledEls.map(async el => {
     const style = el.getAttribute('style');
@@ -721,7 +744,7 @@ async function captureDOMScreenshot(options = {}) {
     el.setAttribute('style', inlined);
   }));
 
-  // 4h. Replace <canvas> with <img> snapshots — use JPEG and skip if > 500 KB
+  // 4i. Replace <canvas> with <img> snapshots — use JPEG and skip if > 500 KB
   const canvasEls = [...clone.querySelectorAll('canvas')];
   const liveCanvases = [...document.querySelectorAll('canvas')];
   canvasEls.forEach((cloneCanvas, i) => {
