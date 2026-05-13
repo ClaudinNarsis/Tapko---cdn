@@ -680,12 +680,20 @@ async function captureDOMScreenshot(options = {}) {
   // 4a. Remove the Tapko widget itself
   clone.querySelector('#tapko-widget-shadow-host')?.remove();
 
-  // 4b. Freeze JS-initialized CSS custom properties BEFORE stripping scripts.
-  //     Appending to the end of <head> ensures this rule wins over earlier
-  //     stylesheet declarations at the same (:root) specificity.
-  if (frozenCustomProps.length) {
+  // 4b. Freeze JS-initialized CSS custom properties AND animations BEFORE
+  //     stripping scripts. Appending to the end of <head> ensures these rules
+  //     win over earlier stylesheet declarations at the same specificity.
+  //     The animation freeze means entrance animations (opacity:0→1, slide-ins)
+  //     never play in the renderer, so Puppeteer always sees a stable frame
+  //     rather than mid-flight invisible content (plain white screens).
+  {
     const freezeStyle = document.createElement('style');
-    freezeStyle.textContent = `:root{${frozenCustomProps.join(';')}}`;
+    const customPropRule = frozenCustomProps.length
+      ? `:root{${frozenCustomProps.join(';')}}`
+      : '';
+    const animationFreezeRule =
+      '*, *::before, *::after{animation-play-state:paused!important;transition-duration:0s!important;}';
+    freezeStyle.textContent = customPropRule + animationFreezeRule;
     clone.querySelector('head')?.appendChild(freezeStyle);
   }
 
