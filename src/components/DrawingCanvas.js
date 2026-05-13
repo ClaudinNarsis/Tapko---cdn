@@ -782,7 +782,9 @@ class DrawingCanvas {
         paths: JSON.parse(JSON.stringify(this.paths)), // Deep copy
         strokeColor: this.strokeColor,
         strokeWidth: this.strokeWidth,
-        hasAnnotations: this.paths.length > 0
+        hasAnnotations: this.paths.length > 0,
+        canvasWidth: this.canvas.width,
+        canvasHeight: this.canvas.height
       };
 
       // Generate merged thumbnail for preview

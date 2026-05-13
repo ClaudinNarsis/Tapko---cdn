@@ -1443,6 +1443,12 @@ class CommentCard {
           ctx.lineCap = 'round';
           ctx.lineJoin = 'round';
 
+          // Scale annotation coords from drawing-canvas space → screenshot image space
+          const scaleX = annotationData.canvasWidth ? img.width / annotationData.canvasWidth : 1;
+          const scaleY = annotationData.canvasHeight ? img.height / annotationData.canvasHeight : 1;
+          ctx.save();
+          ctx.scale(scaleX, scaleY);
+
           // Draw each annotation
           annotationData.paths.forEach(item => {
             if (item.type === 'path' || Array.isArray(item)) {
@@ -1506,6 +1512,8 @@ class CommentCard {
               ctx.fillText(item.text, item.x, item.y);
             }
           });
+
+          ctx.restore();
 
           // Convert to blob
           canvas.toBlob((blob) => {
