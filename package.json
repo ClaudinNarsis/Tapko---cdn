@@ -1,6 +1,6 @@
 {
   "name": "tapko-widget",
-  "version": "2.0.0",
+  "version": "4.2.0.0",
   "description": "CDN-served commenting widget for third-party websites",
   "main": "dist/tapko-widget.js",
   "scripts": {
