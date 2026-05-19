@@ -649,6 +649,20 @@ async function captureDOMScreenshot(options = {}) {
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
 
+  // 1b. Snapshot every CSS custom property currently on :root from the LIVE DOM.
+  //     Scripts are stripped from the clone later, so any values that JS wrote via
+  //     element.style.setProperty() or framework init would be lost. We freeze them
+  //     here and re-inject them into the clone as a high-priority inline <style> block
+  //     so the renderer sees the same layout state the user sees.
+  const liveRootStyle = getComputedStyle(document.documentElement);
+  const frozenCustomProps = [];
+  for (const prop of liveRootStyle) {
+    if (prop.startsWith('--')) {
+      const val = liveRootStyle.getPropertyValue(prop).trim();
+      if (val) frozenCustomProps.push(`${prop}:${val}`);
+    }
+  }
+
   // 2. Stamp document-absolute top positions onto elements BEFORE cloning.
   //    The live DOM has layout; the clone will not. These are used by
   //    _stripBelowViewport() to prune content far below the fold.
@@ -666,13 +680,30 @@ async function captureDOMScreenshot(options = {}) {
   // 4a. Remove the Tapko widget itself
   clone.querySelector('#tapko-widget-shadow-host')?.remove();
 
-  // 4b. Remove scripts and noscript elements
+  // 4b. Freeze JS-initialized CSS custom properties AND animations BEFORE
+  //     stripping scripts. Appending to the end of <head> ensures these rules
+  //     win over earlier stylesheet declarations at the same specificity.
+  //     The animation freeze means entrance animations (opacity:0→1, slide-ins)
+  //     never play in the renderer, so Puppeteer always sees a stable frame
+  //     rather than mid-flight invisible content (plain white screens).
+  {
+    const freezeStyle = document.createElement('style');
+    const customPropRule = frozenCustomProps.length
+      ? `:root{${frozenCustomProps.join(';')}}`
+      : '';
+    const animationFreezeRule =
+      '*, *::before, *::after{animation-play-state:paused!important;transition-duration:0s!important;}';
+    freezeStyle.textContent = customPropRule + animationFreezeRule;
+    clone.querySelector('head')?.appendChild(freezeStyle);
+  }
+
+  // 4c. Remove scripts and noscript elements
   clone.querySelectorAll('script, noscript').forEach(el => el.remove());
 
-  // 4c. Mask sensitive elements
+  // 4d. Mask sensitive elements
   clone.querySelectorAll('.mk-mask, [data-mk-mask], .mk-exclude, [data-mk-exclude]').forEach(el => el.remove());
 
-  // 4d. Fix scroll position so renderer paints the correct area
+  // 4e. Fix scroll position so renderer paints the correct area
   clone.style.cssText += `; scroll-behavior: auto !important;`;
   const bodyClone = clone.querySelector('body');
   if (bodyClone) {
@@ -681,7 +712,7 @@ async function captureDOMScreenshot(options = {}) {
     bodyClone.style.marginLeft = `-${scrollX}px`;
   }
 
-  // 4e. Inline <img> srcs as base64 (existing 512 KB per-asset cap applies)
+  // 4f. Inline <img> srcs as base64 (existing 512 KB per-asset cap applies)
   const imgEls = [...clone.querySelectorAll('img[src]')];
   await Promise.allSettled(imgEls.map(async img => {
     const src = img.getAttribute('src');
@@ -691,7 +722,7 @@ async function captureDOMScreenshot(options = {}) {
     if (dataURI) img.setAttribute('src', dataURI);
   }));
 
-  // 4f. Inline <link rel="stylesheet"> — skip files > 200 KB to avoid bloat
+  // 4g. Inline <link rel="stylesheet"> — skip files > 200 KB to avoid bloat
   //     from CSS frameworks; strip comments from those we do inline.
   const linkEls = [...clone.querySelectorAll('link[rel="stylesheet"][href]')];
   await Promise.allSettled(linkEls.map(async link => {
@@ -711,7 +742,7 @@ async function captureDOMScreenshot(options = {}) {
     } catch { /* leave original link if fetch fails */ }
   }));
 
-  // 4g. Inline background-image style attributes — skip if result exceeds 100 KB
+  // 4h. Inline background-image style attributes — skip if result exceeds 100 KB
   const styledEls = [...clone.querySelectorAll('[style]')];
   await Promise.allSettled(styledEls.map(async el => {
     const style = el.getAttribute('style');
@@ -721,7 +752,7 @@ async function captureDOMScreenshot(options = {}) {
     el.setAttribute('style', inlined);
   }));
 
-  // 4h. Replace <canvas> with <img> snapshots — use JPEG and skip if > 500 KB
+  // 4i. Replace <canvas> with <img> snapshots — use JPEG and skip if > 500 KB
   const canvasEls = [...clone.querySelectorAll('canvas')];
   const liveCanvases = [...document.querySelectorAll('canvas')];
   canvasEls.forEach((cloneCanvas, i) => {
@@ -844,35 +875,120 @@ async function captureDOMScreenshot(options = {}) {
 }
 
 /**
- * Orchestrator: tries DOM serialization (primary, no permission prompt) first.
- * Falls back to Screen Capture API if RENDERER_URL is not configured or the
- * renderer call fails for any reason.
+ * Capture screenshot by sending the live page URL to the server-side renderer.
+ * Puppeteer navigates the real URL directly — no DOM serialization, no asset
+ * inlining, no payload limits. Works for any publicly accessible page and
+ * produces the most faithful render because JS runs and CSS/fonts load natively.
  *
- * @param {Object} options - Passed through to captureViewportScreenshot (primary)
+ * @param {Object} options
+ * @param {Object} [options.widgetOverlay] - Pin and card overlay data
+ */
+async function captureURLScreenshot(options = {}) {
+  const timingStart = performance.now();
+
+  const scrollX = window.scrollX || window.pageXOffset;
+  const scrollY = window.scrollY || window.pageYOffset;
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  const { widgetOverlay } = options;
+
+  const response = await fetch(CONFIG.API.rendererUrl + '/render', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      url: location.href,
+      format: 'webp',
+      width: viewportWidth,
+      height: viewportHeight,
+      devicePixelRatio: window.devicePixelRatio || 1,
+      scrollX,
+      scrollY,
+    })
+  });
+
+  if (!response.ok) throw new Error(`URL renderer responded with ${response.status}`);
+
+  const json = await response.json();
+  let dataURL = `data:image/${json.format};base64,${json.image}`;
+
+  if (widgetOverlay) {
+    dataURL = await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        const scale = img.width / window.innerWidth;
+        _drawWidgetOverlay(ctx, widgetOverlay, scale);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.onerror = () => reject(new Error('Failed to load renderer image for overlay'));
+      img.src = dataURL;
+    });
+  }
+
+  const timingEnd = performance.now();
+  console.log(`[Tapko] URL screenshot captured in ${(timingEnd - timingStart).toFixed(0)}ms`);
+
+  return {
+    dataURL,
+    metadata: {
+      scrollX,
+      scrollY,
+      viewportWidth,
+      viewportHeight,
+      devicePixelRatio: window.devicePixelRatio || 1,
+      timestamp: new Date().toISOString(),
+      url: location.href,
+      userAgent: navigator.userAgent,
+      method: 'url-navigation'
+    }
+  };
+}
+
+/**
+ * Orchestrator — priority order when a renderer URL is configured:
+ *   1. URL navigation  — renderer loads the live public page directly (best quality)
+ *   2. DOM serialization — renderer renders the pre-serialized HTML (private/localhost pages)
+ *   3. getDisplayMedia  — browser screen capture (DPR=1 only; requires user permission)
+ *
+ * When no renderer URL is configured, falls through directly to getDisplayMedia.
  */
 async function captureScreenshot(options = {}) {
   const dpr = window.devicePixelRatio || 1;
 
-  // On HiDPI/Retina displays (DPR > 1) the getDisplayMedia path allocates GPU
-  // memory at physical-pixel resolution (viewport × DPR²), which commonly
-  // crashes the GPU process. Skip straight to the POST renderer path instead.
-  if (dpr > 1 && CONFIG.API.rendererUrl) {
-    console.log(`[Tapko] DPR=${dpr} > 1 — using DOM renderer directly`);
+  if (CONFIG.API.rendererUrl) {
     let captureOverlay = null;
     if (options.shadowRoot) {
       captureOverlay = new ScreenshotPermissionOverlay(options.shadowRoot);
       captureOverlay.showCapturing();
     }
     try {
-      if (captureOverlay) captureOverlay.updateStatus('Analysing page…');
-      return await captureDOMScreenshot(options);
-    } catch (domErr) {
-      if (domErr.code === 'DOM_PAYLOAD_TOO_LARGE') {
-        console.warn('[Tapko] DOM screenshot skipped — payload too large after maximum reduction. Feedback will be submitted without a screenshot.');
+      // 1. URL navigation — simplest path; Puppeteer opens the live page.
+      //    Falls back to DOM serialization if the page isn't publicly reachable
+      //    (localhost, staging behind auth, non-200 responses from the renderer).
+      try {
+        if (captureOverlay) captureOverlay.updateStatus('Capturing page…');
+        console.log('[Tapko] Attempting URL-based screenshot');
+        return await captureURLScreenshot(options);
+      } catch (urlErr) {
+        console.warn('[Tapko] URL capture failed:', urlErr.message, '— falling back to DOM serialization');
+      }
+
+      // 2. DOM serialization fallback.
+      try {
+        if (captureOverlay) captureOverlay.updateStatus('Analysing page…');
+        return await captureDOMScreenshot(options);
+      } catch (domErr) {
+        if (domErr.code === 'DOM_PAYLOAD_TOO_LARGE') {
+          console.warn('[Tapko] DOM screenshot skipped — payload too large. Feedback will be submitted without a screenshot.');
+          return null;
+        }
+        console.warn('[Tapko] DOM screenshot failed:', domErr.message);
         return null;
       }
-      console.warn('[Tapko] DOM screenshot failed:', domErr.message);
-      return null;
     } finally {
       if (captureOverlay) {
         captureOverlay.hide();
@@ -881,52 +997,20 @@ async function captureScreenshot(options = {}) {
     }
   }
 
-  try {
-    // PRIMARY: existing screen capture via getDisplayMedia (no network cost)
-    return await captureViewportScreenshot(options);
-  } catch (err) {
-    // FALLBACK: DOM serialization + server-side renderer
-    // Triggered when the user denies/dismisses the permission prompt or the
-    // browser silently blocks getDisplayMedia (common in iframes, some mobile browsers)
-    if (CONFIG.API.rendererUrl) {
-      console.warn('[Tapko] Screen capture failed, falling back to DOM serialization:', err.message);
-
-      // Show a blocking "Capturing Screenshot…" overlay so the user knows what is
-      // happening during the 5–20 s DOM-serialization + server-render window.
-      // We reuse ScreenshotPermissionOverlay (already imported for the primary path).
-      let fallbackOverlay = null;
-      if (options.shadowRoot) {
-        fallbackOverlay = new ScreenshotPermissionOverlay(options.shadowRoot);
-        fallbackOverlay.showCapturing();
-      }
-
-      try {
-        if (fallbackOverlay) fallbackOverlay.updateStatus('Analysing page…');
-        const result = await captureDOMScreenshot(options);
-        return result;
-      } catch (domErr) {
-        // If the payload is unresolvably large even after all reduction passes,
-        // return null so the caller can proceed without a screenshot rather than
-        // blocking the entire feedback submission.
-        if (domErr.code === 'DOM_PAYLOAD_TOO_LARGE') {
-          console.warn('[Tapko] DOM screenshot skipped — payload too large after maximum reduction. Feedback will be submitted without a screenshot.');
-          return null;
-        }
-        console.warn('[Tapko] DOM screenshot failed:', domErr.message);
-        return null;
-      } finally {
-        if (fallbackOverlay) {
-          fallbackOverlay.hide();
-          fallbackOverlay = null;
-        }
-      }
-    }
-    throw err;
+  // No renderer configured. On HiDPI displays getDisplayMedia crashes the GPU
+  // process (viewport × DPR² physical pixels), so skip it entirely.
+  if (dpr > 1) {
+    console.warn('[Tapko] No renderer URL configured — skipping screenshot on HiDPI device');
+    return null;
   }
+
+  // DPR=1: use getDisplayMedia (requires user permission prompt).
+  return await captureViewportScreenshot(options);
 }
 
 export {
   captureScreenshot,
+  captureURLScreenshot,
   captureViewportScreenshot,
   generateThumbnail,
   dataURLToBlob,

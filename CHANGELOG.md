@@ -2,6 +2,19 @@
 
 All notable changes to Tapko CDN Widget are documented here.
 
+## [4.3.0.0] - 2026-05-14
+
+### Added
+- URL-based screenshot as primary render path — when a renderer URL is configured, the widget now sends `{url, width, height, devicePixelRatio, scrollX, scrollY}` to the renderer's `/render` endpoint so Puppeteer navigates the live page directly, producing higher-fidelity captures with no serialization overhead
+
+### Fixed
+- DOM screenshot white-screen: animation and transition states are now frozen in the serialised HTML clone before it is sent to the renderer (`animation-play-state:paused`, `transition-duration:0s`), preventing mid-animation frames from producing blank captures
+- DOM screenshot missing CSS custom properties: computed `--*` variables are snapshotted from the live `:root` before the DOM clone is built and re-injected as a `:root{...}` block in the clone, so design-token-driven colours and spacing now appear correctly in the renderer
+- All local-testing example pages now reference the widget script via a relative path (`/dist/tapko-widget.js`) instead of hardcoded `localhost` ports, so the test suite works from any dev server regardless of port
+
+### Changed
+- Screenshot capture waterfall: URL-based path is attempted first, DOM serialisation second, `getDisplayMedia` third — each fallback is only reached if the previous path fails or is unconfigured
+
 ## [4.2.0.0] - 2026-05-13
 
 ### Added
