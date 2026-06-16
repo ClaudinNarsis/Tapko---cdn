@@ -292,7 +292,6 @@ class FeedbackQueueManager {
       }
 
       console.log('[FeedbackQueue] All items processed');
-      this.emit('queue:all-completed');
 
     } finally {
       this.isProcessing = false;
@@ -303,6 +302,14 @@ class FeedbackQueueManager {
     if (remainingPending.length > 0) {
       console.log(`[FeedbackQueue] ${remainingPending.length} items pending retry, scheduling next cycle...`);
       setTimeout(() => this.processQueue(), this.config.processInterval);
+    } else {
+      // Only signal "all done" when nothing is pending AND nothing permanently failed.
+      // Emitting too early (before this check) caused a false "synced successfully"
+      // banner even when all items had been re-queued after a failure.
+      const stats = await this.getQueueStats();
+      if (stats.failed === 0) {
+        this.emit('queue:all-completed');
+      }
     }
   }
 

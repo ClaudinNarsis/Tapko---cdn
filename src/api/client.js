@@ -78,7 +78,9 @@ class APIClient {
       }
 
       if (!response.ok) {
-        throw new Error(`API Error: ${response.status} ${response.statusText}`);
+        let body = '';
+        try { body = await response.text(); } catch (_) {}
+        throw new Error(`API Error: ${response.status} ${response.statusText}${body ? ` — ${body.slice(0, 300)}` : ''}`);
       }
 
       return await response.json();

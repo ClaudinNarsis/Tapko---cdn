@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tapko — React + Auth Reproduction Page</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f9fafb; color: #111827; }
+    header { background: #fff; border-bottom: 1px solid #e5e7eb; padding: 16px 32px; display: flex; align-items: center; justify-content: space-between; }
+    header h1 { font-size: 18px; font-weight: 600; }
+    .badge { background: #dbeafe; color: #1d4ed8; border-radius: 9999px; font-size: 12px; font-weight: 600; padding: 4px 10px; }
+    main { max-width: 860px; margin: 40px auto; padding: 0 24px; }
+    section { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 24px; margin-bottom: 24px; }
+    h2 { font-size: 15px; font-weight: 600; margin-bottom: 12px; }
+    p { font-size: 14px; color: #4b5563; line-height: 1.6; margin-bottom: 8px; }
+    label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+    input, select { width: 100%; border: 1px solid #d1d5db; border-radius: 6px; padding: 8px 10px; font-size: 14px; margin-bottom: 12px; }
+    button { background: #4f46e5; color: #fff; border: none; border-radius: 6px; padding: 9px 18px; font-size: 14px; font-weight: 500; cursor: pointer; }
+    button:hover { background: #4338ca; }
+    button.secondary { background: #f3f4f6; color: #374151; }
+    button.secondary:hover { background: #e5e7eb; }
+    button.danger { background: #ef4444; }
+    button.danger:hover { background: #dc2626; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    #log { background: #111827; color: #d1fae5; font-family: 'Menlo', monospace; font-size: 12px; border-radius: 8px; padding: 16px; height: 260px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
+    .log-warn { color: #fbbf24; }
+    .log-error { color: #f87171; }
+    .log-info { color: #93c5fd; }
+    .notice { background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 14px 16px; font-size: 13px; color: #92400e; line-height: 1.5; }
+    .notice strong { display: block; margin-bottom: 4px; }
+    hr { border: none; border-top: 1px solid #e5e7eb; margin: 16px 0; }
+    .status-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #4b5563; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #9ca3af; flex-shrink: 0; }
+    .dot.green { background: #10b981; }
+    .dot.red { background: #ef4444; }
+    .dot.yellow { background: #f59e0b; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Tapko — React + Authenticated App Reproduction</h1>
+  <span class="badge" id="init-status">Not initialised</span>
+</header>
+
+<main>
+
+  <div class="notice">
+    <strong>What this page reproduces</strong>
+    This page simulates common patterns in React TypeScript authenticated apps that cause
+    the presigned-URL endpoint to return 500. Select a scenario below, then click
+    "Initialise Tapko" and submit feedback to observe the behaviour.
+  </div>
+
+  <br />
+
+  <!-- Scenario selector -->
+  <section>
+    <h2>Scenario</h2>
+    <label for="scenario">Select the scenario to simulate:</label>
+    <select id="scenario">
+      <option value="correct">✅ Correct — userId passed after auth resolves</option>
+      <option value="no-userid">❌ Missing userId — Tapko.init() called before auth resolves (userId: undefined)</option>
+      <option value="null-userid">❌ Null userId — init called with userId: null</option>
+      <option value="auth-interceptor">⚠️ Auth interceptor — React auth lib overwrites Authorization header</option>
+      <option value="double-init">⚠️ Double init — useEffect runs twice (React 18 Strict Mode)</option>
+    </select>
+
+    <label for="project-id">Project ID</label>
+    <input id="project-id" type="text" placeholder="your-tapko-project-id" />
+
+    <label for="api-key">API Key</label>
+    <input id="api-key" type="text" placeholder="your-tapko-api-key" />
+
+    <label for="user-id-input">User ID (used in "correct" scenario only)</label>
+    <input id="user-id-input" type="text" placeholder="user-123" value="test-user-456" />
+
+    <div class="row">
+      <button id="btn-init">Initialise Tapko</button>
+      <button class="secondary" id="btn-destroy">Destroy</button>
+      <button class="danger" id="btn-clear-queue">Clear IndexedDB Queue</button>
+    </div>
+  </section>
+
+  <!-- Network intercept status -->
+  <section>
+    <h2>Network intercepts active</h2>
+    <div id="intercept-list">
+      <div class="status-row"><div class="dot" id="dot-presigned"></div><span id="label-presigned">No presigned-url calls yet</span></div>
+      <div class="status-row" style="margin-top:6px"><div class="dot" id="dot-auth-header"></div><span id="label-auth-header">Auth header not intercepted</span></div>
+    </div>
+  </section>
+
+  <!-- Log output -->
+  <section>
+    <h2>Console log</h2>
+    <div id="log">Waiting...\n</div>
+    <div class="row" style="margin-top:8px">
+      <button class="secondary" id="btn-clear-log">Clear log</button>
+    </div>
+  </section>
+
+  <!-- Page content to click on -->
+  <section>
+    <h2>Page content — click anywhere in feedback mode to place a pin</h2>
+    <p>This is a simulated authenticated page. The header above mimics a React app shell.
+       Open the Tapko widget (purple button, bottom right), click anywhere here, type something, and submit to trigger the presigned-URL call.</p>
+    <hr />
+    <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Quisque vehicula
+       tortor ut enim posuere, eu pharetra eros efficitur.</p>
+  </section>
+
+</main>
+
+<!--
+  Load Tapko widget — use relative path to the built debug bundle
+  so this works without a CDN when served from the examples/ folder.
+-->
+<script src="../../dist/tapko-widget.js"></script>
+
+<script>
+// ─── Logger ───────────────────────────────────────────────────────────────────
+const logEl = document.getElementById('log');
+function log(msg, cls = '') {
+  const line = document.createElement('span');
+  if (cls) line.className = cls;
+  line.textContent = `[${new Date().toISOString().slice(11,23)}] ${msg}\n`;
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+// Intercept console methods so Tapko's own logs appear here too
+;['log','warn','error','info'].forEach(method => {
+  const orig = console[method].bind(console);
+  console[method] = (...args) => {
+    orig(...args);
+    const text = args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 0) : String(a)).join(' ');
+    log(text, method === 'warn' ? 'log-warn' : method === 'error' ? 'log-error' : method === 'info' ? 'log-info' : '');
+  };
+});
+
+document.getElementById('btn-clear-log').addEventListener('click', () => { logEl.textContent = ''; });
+
+// ─── Scenario helpers ─────────────────────────────────────────────────────────
+
+let origFetch = null;
+let interceptorActive = false;
+
+function installAuthInterceptor() {
+  if (interceptorActive) return;
+  origFetch = window.fetch.bind(window);
+  interceptorActive = true;
+
+  window.fetch = async (input, init = {}) => {
+    const url = typeof input === 'string' ? input : input.url;
+    const headers = new Headers(init.headers || {});
+
+    // Simulate Clerk / Auth0 interceptor: overwrite Authorization on every request
+    if (url.includes('execute-api') || url.includes('tapko')) {
+      headers.set('Authorization', 'Bearer REACT_APP_JWT_TOKEN_FROM_CLERK');
+      log(`[Auth Interceptor] Overwrote Authorization header on: ${url}`, 'log-warn');
+      document.getElementById('dot-auth-header').className = 'dot yellow';
+      document.getElementById('label-auth-header').textContent = 'Authorization header overwritten by mock interceptor!';
+    }
+
+    if (url.includes('presigned-url')) {
+      log(`[Auth Interceptor] Presigned-URL call detected: ${url}`, 'log-info');
+      document.getElementById('dot-presigned').className = 'dot yellow';
+      document.getElementById('label-presigned').textContent = `presigned-url called — headers modified`;
+    }
+
+    return origFetch(input, { ...init, headers });
+  };
+
+  log('[Auth Interceptor] Installed — simulating Clerk/Auth0 fetch interception', 'log-warn');
+}
+
+function removeAuthInterceptor() {
+  if (!interceptorActive || !origFetch) return;
+  window.fetch = origFetch;
+  origFetch = null;
+  interceptorActive = false;
+  document.getElementById('dot-auth-header').className = 'dot';
+  document.getElementById('label-auth-header').textContent = 'Auth header not intercepted';
+  log('[Auth Interceptor] Removed');
+}
+
+// Observe presigned-url calls regardless of scenario
+const _baseFetch = window.fetch.bind(window);
+window.fetch = async (input, init) => {
+  const url = typeof input === 'string' ? input : (input instanceof URL ? input.href : input.url);
+  if (url && url.includes('presigned-url')) {
+    // Log the payload being sent
+    let body = '';
+    try { body = init?.body || ''; } catch (_) {}
+    log(`[NETWORK] POST presigned-url — payload: ${body}`, 'log-info');
+    document.getElementById('dot-presigned').className = 'dot yellow';
+  }
+  try {
+    const res = await _baseFetch(input, init);
+    if (url && url.includes('presigned-url')) {
+      const status = res.status;
+      document.getElementById('dot-presigned').className = status >= 400 ? 'dot red' : 'dot green';
+      document.getElementById('label-presigned').textContent = `presigned-url → HTTP ${status}`;
+      log(`[NETWORK] presigned-url responded: HTTP ${status}`, status >= 400 ? 'log-error' : 'log-info');
+    }
+    return res;
+  } catch (err) {
+    if (url && url.includes('presigned-url')) {
+      document.getElementById('dot-presigned').className = 'dot red';
+      document.getElementById('label-presigned').textContent = `presigned-url → FAILED: ${err.message}`;
+      log(`[NETWORK] presigned-url fetch error: ${err.message}`, 'log-error');
+    }
+    throw err;
+  }
+};
+
+// ─── Tapko init ───────────────────────────────────────────────────────────────
+
+document.getElementById('btn-init').addEventListener('click', async () => {
+  const scenario = document.getElementById('scenario').value;
+  const projectId = document.getElementById('project-id').value.trim();
+  const apiKey = document.getElementById('api-key').value.trim();
+  const userId = document.getElementById('user-id-input').value.trim();
+
+  if (!projectId) { alert('Please enter a Project ID'); return; }
+
+  // Cleanup any previous instance
+  if (window.Tapko && window.Tapko.isReady && window.Tapko.isReady()) {
+    window.Tapko.destroy();
+    log('Previous Tapko instance destroyed');
+  }
+
+  // Remove any previous interceptor
+  removeAuthInterceptor();
+
+  log(`\n=== Scenario: ${scenario} ===`);
+
+  let initOptions = { projectId, apiKey };
+
+  switch (scenario) {
+    case 'correct':
+      initOptions.userId = userId || 'test-user-456';
+      log(`init({ projectId, apiKey, userId: "${initOptions.userId}" })`);
+      break;
+
+    case 'no-userid':
+      // Don't set userId at all — simulates init before auth resolves
+      log('init({ projectId, apiKey }) ← userId omitted (undefined)', 'log-warn');
+      log('EXPECTED: presigned-url may return 500 if backend requires userId', 'log-warn');
+      break;
+
+    case 'null-userid':
+      initOptions.userId = null;
+      log('init({ projectId, apiKey, userId: null })', 'log-warn');
+      log('EXPECTED: presigned-url may return 500 if backend rejects null userId', 'log-warn');
+      break;
+
+    case 'auth-interceptor':
+      initOptions.userId = userId || 'test-user-456';
+      installAuthInterceptor();
+      log('init({ projectId, apiKey, userId }) + auth interceptor active', 'log-warn');
+      log('EXPECTED: Authorization header overwritten → backend rejects Tapko apiKey → 500', 'log-warn');
+      break;
+
+    case 'double-init':
+      initOptions.userId = userId || 'test-user-456';
+      log('Simulating React 18 Strict Mode double-init...', 'log-warn');
+      // First call — will succeed
+      try {
+        await window.Tapko.init(initOptions);
+        log('First init() call completed', 'log-info');
+      } catch (e) {
+        log(`First init() threw: ${e.message}`, 'log-error');
+      }
+      // Destroy immediately (simulates Strict Mode cleanup)
+      if (window.Tapko.isReady()) window.Tapko.destroy();
+      log('Destroy called (Strict Mode cleanup)', 'log-warn');
+      // Re-init — simulates second mount
+      log('Re-initialising (second mount)...', 'log-warn');
+      break;
+  }
+
+  try {
+    await window.Tapko.init(initOptions);
+    document.getElementById('init-status').textContent = 'Initialised ✓';
+    document.getElementById('init-status').style.background = '#d1fae5';
+    document.getElementById('init-status').style.color = '#065f46';
+    log(`Tapko.init() succeeded — userId="${initOptions.userId ?? '(none)'}"`, 'log-info');
+    log('Open the widget (bottom-right button) → click somewhere → submit feedback to trigger presigned-url call', 'log-info');
+  } catch (err) {
+    document.getElementById('init-status').textContent = 'Init failed ✗';
+    document.getElementById('init-status').style.background = '#fee2e2';
+    document.getElementById('init-status').style.color = '#991b1b';
+    log(`Tapko.init() failed: ${err.message}`, 'log-error');
+  }
+});
+
+document.getElementById('btn-destroy').addEventListener('click', () => {
+  removeAuthInterceptor();
+  if (window.Tapko && window.Tapko.isReady && window.Tapko.isReady()) {
+    window.Tapko.destroy();
+    document.getElementById('init-status').textContent = 'Destroyed';
+    document.getElementById('init-status').style.background = '#dbeafe';
+    document.getElementById('init-status').style.color = '#1d4ed8';
+    log('Tapko destroyed');
+  } else {
+    log('Tapko not initialised — nothing to destroy', 'log-warn');
+  }
+});
+
+document.getElementById('btn-clear-queue').addEventListener('click', async () => {
+  const req = indexedDB.deleteDatabase('TapkoFeedbackQueue');
+  req.onsuccess = () => log('IndexedDB queue cleared ✓');
+  req.onerror = () => log('Failed to clear IndexedDB queue', 'log-error');
+});
+
+// Listen for Tapko events to show in log
+window.addEventListener('tapko:comment:queued', e => log(`[Event] tapko:comment:queued — queueId: ${e.detail?.queueId}`, 'log-info'));
+window.addEventListener('tapko:initialized', e => log(`[Event] tapko:initialized — v${e.detail?.version}`, 'log-info'));
+window.addEventListener('tapko:error', e => log(`[Event] tapko:error — ${JSON.stringify(e.detail)}`, 'log-error'));
+</script>
+</body>
+</html>
