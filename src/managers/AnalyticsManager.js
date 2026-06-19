@@ -8,7 +8,7 @@ import { CONFIG } from '../config.js';
 
 class AnalyticsManager {
   constructor() {
-    this.measurementId = 'G-KBPCZXZR96';
+    this.measurementId = null; // opt-in only — set via Tapko.init({ measurementId: 'G-XXXXXXXX' })
     this.isInitialized = false;
     this.projectId = null;
     this.userId = null;
@@ -20,12 +20,15 @@ class AnalyticsManager {
   /**
    * Initialize analytics tracking
    */
-  async init(projectId, userId) {
+  async init(projectId, userId, measurementId) {
+    if (!measurementId) return; // analytics disabled unless caller opts in
+
     if (this.isInitialized) {
       console.log('[Tapko Analytics] Already initialized');
       return;
     }
 
+    this.measurementId = measurementId;
     this.projectId = projectId;
     this.userId = userId || 'anonymous';
 

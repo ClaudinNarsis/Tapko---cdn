@@ -423,7 +423,6 @@ import debugLogger from './utils/DebugLogger.js';
               if (urlSecretKey) {
                 // Validate against the expected key
                 if (urlSecretKey !== security.url_secret_key) {
-                  console.error('[Tapko Security] given urlSecretKey :'+ urlSecretKey + ' required url_secret_key : '+ security.url_secret_key );
                   console.error('[Tapko Security] Invalid URL secret key provided');
                   // Clear any previously stored session validation since a wrong key was supplied
                   sessionStorage.removeItem(SESSION_KEY);
@@ -484,8 +483,8 @@ import debugLogger from './utils/DebugLogger.js';
       // Inject styles (now goes into shadow DOM)
       this._injectStyles();
 
-      // Initialize analytics (NEW)
-      await analyticsManager.init(this.config.projectId, this.config.userId);
+      // Initialize analytics — only runs if caller passed measurementId in init options
+      await analyticsManager.init(this.config.projectId, this.config.userId, this.config.measurementId);
 
       // Initialize queue system (NEW)
       await this._initializeQueueSystem();
