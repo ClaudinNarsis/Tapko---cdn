@@ -955,6 +955,14 @@ async function captureURLScreenshot(options = {}) {
  *   3. getDisplayMedia  — browser screen capture (DPR=1 only; requires user permission)
  *
  * When no renderer URL is configured, falls through directly to getDisplayMedia.
+ *
+ * options.renderMode (auth-redirect render-mode plan, T9): 'html' means this
+ * project's creation-time/re-check render already detected an auth-wall or
+ * redirect for this project's URL — an anonymous URL-navigation capture is
+ * already known to fail for this project, so step 1 is skipped entirely and
+ * capture goes straight to DOM serialization (step 2), which captures the
+ * visitor's live, already-authenticated DOM instead. Undefined/'url'
+ * preserves today's URL-first behavior unchanged.
  */
 async function captureScreenshot(options = {}) {
   const dpr = window.devicePixelRatio || 1;
@@ -969,12 +977,17 @@ async function captureScreenshot(options = {}) {
       // 1. URL navigation — simplest path; Puppeteer opens the live page.
       //    Falls back to DOM serialization if the page isn't publicly reachable
       //    (localhost, staging behind auth, non-200 responses from the renderer).
-      try {
-        if (captureOverlay) captureOverlay.updateStatus('Capturing page…');
-        console.log('[Tapko] Attempting URL-based screenshot');
-        return await captureURLScreenshot(options);
-      } catch (urlErr) {
-        console.warn('[Tapko] URL capture failed:', urlErr.message, '— falling back to DOM serialization');
+      //    Skipped entirely when renderMode === 'html' (see doc comment above).
+      if (options.renderMode !== 'html') {
+        try {
+          if (captureOverlay) captureOverlay.updateStatus('Capturing page…');
+          console.log('[Tapko] Attempting URL-based screenshot');
+          return await captureURLScreenshot(options);
+        } catch (urlErr) {
+          console.warn('[Tapko] URL capture failed:', urlErr.message, '— falling back to DOM serialization');
+        }
+      } else {
+        console.log('[Tapko] renderMode is "html" — skipping URL-based screenshot, using DOM serialization');
       }
 
       // 2. DOM serialization fallback.

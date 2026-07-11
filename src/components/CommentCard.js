@@ -27,12 +27,19 @@ import {
 } from '../utils/dom.js';
 
 class CommentCard {
-  constructor(target, coordinates, apiClient, shadowRoot = document.body, pinManager = null) {
+  // renderMode: 'url' (default) | 'html' — auth-redirect render-mode plan.
+  // 'html' means the project's creation-time/re-check render already
+  // detected an auth-wall or redirect for this project's URL, so
+  // captureScreenshot() should skip the URL-navigation attempt entirely and
+  // go straight to DOM serialization (see screenshot.js). Undefined/'url'
+  // preserves today's URL-first behavior unchanged.
+  constructor(target, coordinates, apiClient, shadowRoot = document.body, pinManager = null, renderMode = 'url') {
     this.target = target;
     this.coordinates = coordinates;
     this.apiClient = apiClient;
     this.shadowRoot = shadowRoot;
     this.pinManager = pinManager; // NEW: Pin manager for persistent pins
+    this.renderMode = renderMode;
     this.feedbackWidget = null; // NEW: Feedback widget reference for hiding during screenshot
     this.card = null;
     this.pinMarker = null;
@@ -339,7 +346,7 @@ class CommentCard {
         try {
           debugLogger.info('Calling captureViewportScreenshot');
           // Capture screenshot of current viewport
-          const screenshotData = await captureScreenshot({ shadowRoot: this.shadowRoot });
+          const screenshotData = await captureScreenshot({ shadowRoot: this.shadowRoot, renderMode: this.renderMode });
           debugLogger.info('Screenshot capture returned', {
             hasDataURL: !!screenshotData.dataURL,
             dataURLLength: screenshotData.dataURL?.length
@@ -1145,7 +1152,8 @@ class CommentCard {
       const screenshotData = await captureScreenshot({
         shadowRoot: this.shadowRoot,
         keepWidgetVisible: false,
-        widgetOverlay
+        widgetOverlay,
+        renderMode: this.renderMode
       });
 
       if (screenshotData) {
