@@ -26,7 +26,7 @@ function makeCard(renderMode) {
   const apiClient = { userId: 'u1', projectId: 'p1' };
   return renderMode === undefined
     ? new CommentCard(target, { x: 10, y: 10 }, apiClient, document.body, null)
-    : new CommentCard(target, { x: 10, y: 10 }, apiClient, document.body, null, renderMode);
+    : new CommentCard(target, { x: 10, y: 10 }, apiClient, document.body, null, { renderMode });
 }
 
 describe('CommentCard — renderMode constructor param (T9)', () => {

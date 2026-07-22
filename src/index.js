@@ -742,7 +742,11 @@ import debugLogger from './utils/DebugLogger.js';
 
       try {
         // Create card in shadow root (pass pinManager for Phase 1)
-        const card = new CommentCard(element, coordinates, this.apiClient, this.shadowRoot, this.pinManager, this.projectData?.renderMode);
+        const card = new CommentCard(element, coordinates, this.apiClient, this.shadowRoot, this.pinManager, {
+          renderMode: this.projectData?.renderMode,
+          placeholderText: this.projectData?.widgetSettings?.placeholderText,
+          submitButtonText: this.projectData?.widgetSettings?.submitButtonText,
+        });
 
         // Set draw callback to enter drawing mode with screenshot and annotations
         card.setDrawCallback((onComplete, screenshotData, existingAnnotations) => {

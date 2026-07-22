@@ -27,7 +27,14 @@ export const CONFIG = {
     enableEmojis: true,
     enableDrawing: true,
     // V2: Single-tap mode (no double-click/tap required in feedback mode)
-    feedbackModeEnabled: true
+    feedbackModeEnabled: true,
+    // Widget-copy fallback text (widget-copy plan) — used when a project's
+    // widgetSettings.placeholderText/submitButtonText is unset/empty.
+    // Independently maintained from TapKo's own copy of these same strings
+    // (src/lib/widgetSettings.ts WIDGET_SETTINGS_DEFAULTS, used for the
+    // settings-UI preview) — no shared source, no cross-repo runtime call.
+    commentPlaceholderText: "What's on your mind?",
+    submitButtonText: 'Submit'
   },
 
   // UI Configuration
