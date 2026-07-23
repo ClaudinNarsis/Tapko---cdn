@@ -5,6 +5,25 @@
 
 import { CONFIG } from '../config.js';
 
+// The 4 corners the widget's persistent floating UI (entry button, view-all
+// button, hidden-warning, disabled-popup) can be anchored to. Mirrors
+// TapKo's WidgetPosition type (src/types/project.ts) — no shared source,
+// independently maintained, same pattern as CONFIG.DEFAULTS' copy of the
+// widget-copy fallback text.
+const VALID_WIDGET_POSITIONS = ['bottom-right', 'bottom-left', 'top-right', 'top-left'];
+
+/**
+ * Resolve a widgetSettings.position value to one of the 4 known corners.
+ * Defensive at READ-time, independent of the dashboard PATCH route's own
+ * write-time validation — any nil/malformed/unrecognized value (a future
+ * migration bug, a direct DB edit bypassing the validator) falls back to
+ * CONFIG.DEFAULTS.position rather than propagating an invalid value into
+ * a CSS attribute selector.
+ */
+export function resolveWidgetPosition(rawPosition) {
+  return VALID_WIDGET_POSITIONS.includes(rawPosition) ? rawPosition : CONFIG.DEFAULTS.position;
+}
+
 /**
  * Find the best anchor container for positioning
  */
