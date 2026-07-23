@@ -28,7 +28,7 @@ import { CommentCard } from './components/CommentCard.js';
 import { DrawingCanvas } from './components/DrawingCanvas.js';
 import { FeedbackDisabledPopup } from './components/FeedbackDisabledPopup.js';
 import { FeedbackWidget } from './components/FeedbackWidget.js';
-import { dispatchCustomEvent, getUrlParam } from './utils/dom.js';
+import { dispatchCustomEvent, getUrlParam, resolveWidgetPosition } from './utils/dom.js';
 import { logManager } from './managers/LogManager.js';
 import { networkLogManager } from './managers/NetworkLogManager.js';
 import { analyticsManager } from './managers/AnalyticsManager.js';
@@ -319,6 +319,15 @@ import debugLogger from './utils/DebugLogger.js';
         pointer-events: none;
         z-index: ${CONFIG.UI.zIndex} !important;
       `;
+
+      // Resolve the corner the persistent widget UI (entry button, view-all
+      // button, hidden-warning, disabled-popup) anchors to. Set as a
+      // data-attribute on the shadow host, not string-interpolated into any
+      // style — widget.css's :host([data-position="..."]) selectors are the
+      // only thing that reads this value, keeping the 4 valid corners as
+      // fixed selectors we wrote, never a dynamically generated one.
+      const widgetPosition = resolveWidgetPosition(this.projectData?.widgetSettings?.position);
+      this.shadowHost.setAttribute('data-position', widgetPosition);
 
       // Attach shadow root (closed mode for encapsulation)
       this.shadowRoot = this.shadowHost.attachShadow({
