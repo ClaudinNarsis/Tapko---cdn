@@ -28,7 +28,7 @@ import { CommentCard } from './components/CommentCard.js';
 import { DrawingCanvas } from './components/DrawingCanvas.js';
 import { FeedbackDisabledPopup } from './components/FeedbackDisabledPopup.js';
 import { FeedbackWidget } from './components/FeedbackWidget.js';
-import { dispatchCustomEvent, getUrlParam } from './utils/dom.js';
+import { dispatchCustomEvent, getUrlParam, resolveWidgetPosition } from './utils/dom.js';
 import { logManager } from './managers/LogManager.js';
 import { networkLogManager } from './managers/NetworkLogManager.js';
 import { analyticsManager } from './managers/AnalyticsManager.js';
@@ -320,6 +320,15 @@ import debugLogger from './utils/DebugLogger.js';
         z-index: ${CONFIG.UI.zIndex} !important;
       `;
 
+      // Resolve the corner the persistent widget UI (entry button, view-all
+      // button, hidden-warning, disabled-popup) anchors to. Set as a
+      // data-attribute on the shadow host, not string-interpolated into any
+      // style — widget.css's :host([data-position="..."]) selectors are the
+      // only thing that reads this value, keeping the 4 valid corners as
+      // fixed selectors we wrote, never a dynamically generated one.
+      const widgetPosition = resolveWidgetPosition(this.projectData?.widgetSettings?.position);
+      this.shadowHost.setAttribute('data-position', widgetPosition);
+
       // Attach shadow root (closed mode for encapsulation)
       this.shadowRoot = this.shadowHost.attachShadow({
         mode: 'closed',
@@ -423,7 +432,6 @@ import debugLogger from './utils/DebugLogger.js';
               if (urlSecretKey) {
                 // Validate against the expected key
                 if (urlSecretKey !== security.url_secret_key) {
-                  console.error('[Tapko Security] given urlSecretKey :'+ urlSecretKey + ' required url_secret_key : '+ security.url_secret_key );
                   console.error('[Tapko Security] Invalid URL secret key provided');
                   // Clear any previously stored session validation since a wrong key was supplied
                   sessionStorage.removeItem(SESSION_KEY);
@@ -484,8 +492,8 @@ import debugLogger from './utils/DebugLogger.js';
       // Inject styles (now goes into shadow DOM)
       this._injectStyles();
 
-      // Initialize analytics (NEW)
-      await analyticsManager.init(this.config.projectId, this.config.userId);
+      // Initialize analytics — only runs if caller passed measurementId in init options
+      await analyticsManager.init(this.config.projectId, this.config.userId, this.config.measurementId);
 
       // Initialize queue system (NEW)
       await this._initializeQueueSystem();
@@ -743,7 +751,11 @@ import debugLogger from './utils/DebugLogger.js';
 
       try {
         // Create card in shadow root (pass pinManager for Phase 1)
-        const card = new CommentCard(element, coordinates, this.apiClient, this.shadowRoot, this.pinManager);
+        const card = new CommentCard(element, coordinates, this.apiClient, this.shadowRoot, this.pinManager, {
+          renderMode: this.projectData?.renderMode,
+          placeholderText: this.projectData?.widgetSettings?.placeholderText,
+          submitButtonText: this.projectData?.widgetSettings?.submitButtonText,
+        });
 
         // Set draw callback to enter drawing mode with screenshot and annotations
         card.setDrawCallback((onComplete, screenshotData, existingAnnotations) => {

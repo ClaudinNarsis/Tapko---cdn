@@ -27,12 +27,27 @@ import {
 } from '../utils/dom.js';
 
 class CommentCard {
-  constructor(target, coordinates, apiClient, shadowRoot = document.body, pinManager = null) {
+  // options.renderMode: 'url' (default) | 'html' — auth-redirect render-mode
+  // plan. 'html' means the project's creation-time/re-check render already
+  // detected an auth-wall or redirect for this project's URL, so
+  // captureScreenshot() should skip the URL-navigation attempt entirely and
+  // go straight to DOM serialization (see screenshot.js). Undefined/'url'
+  // preserves today's URL-first behavior unchanged.
+  // options.placeholderText / options.submitButtonText: per-project custom
+  // widget copy (widget-copy plan) — undefined/empty falls back to
+  // CONFIG.DEFAULTS at render time, applied via imperative DOM property
+  // assignment only (never string-interpolated into innerHTML — see the XSS
+  // fix in _createCard()/_renderBubbleContent()).
+  constructor(target, coordinates, apiClient, shadowRoot = document.body, pinManager = null, options = {}) {
+    const { renderMode = 'url', placeholderText, submitButtonText } = options;
     this.target = target;
     this.coordinates = coordinates;
     this.apiClient = apiClient;
     this.shadowRoot = shadowRoot;
     this.pinManager = pinManager; // NEW: Pin manager for persistent pins
+    this.renderMode = renderMode;
+    this.placeholderText = placeholderText;
+    this.submitButtonText = submitButtonText;
     this.feedbackWidget = null; // NEW: Feedback widget reference for hiding during screenshot
     this.card = null;
     this.pinMarker = null;
@@ -141,12 +156,16 @@ class CommentCard {
   _createCard() {
     const card = createElement('div', `${CONFIG.CLASS_PREFIX}comment-card-v2`);
 
+    // placeholder/submit-button text are NOT interpolated here — custom
+    // widget copy is untrusted per-project data and must be applied via
+    // imperative DOM property assignment below, never string-interpolated
+    // into innerHTML (sanitizeHTML() doesn't escape quotes, so interpolation
+    // here would be exploitable stored XSS reaching every site visitor).
     card.innerHTML = `
       <div class="${CONFIG.CLASS_PREFIX}comment-bubble">
         <textarea
           class="${CONFIG.CLASS_PREFIX}comment-textarea"
           rows="3"
-          placeholder="What's on your mind?"
           maxlength="500"
         ></textarea>
         <div class="${CONFIG.CLASS_PREFIX}comment-actions">
@@ -160,14 +179,34 @@ class CommentCard {
             </svg>
             Attach annotations
           </button>
-          <button type="button" class="${CONFIG.CLASS_PREFIX}btn-submit">Submit</button>
+          <button type="button" class="${CONFIG.CLASS_PREFIX}btn-submit"></button>
         </div>
       </div>
     `;
 
+    this._applyWidgetCopy(card);
+
     // Append to shadow root
     this.shadowRoot.appendChild(card);
     return card;
+  }
+
+  /**
+   * Apply custom widget copy (placeholder/submit-button text) via imperative
+   * DOM property assignment. Shared by _createCard() and
+   * _renderBubbleContent() so both render call sites stay in sync — a
+   * previous version of this feature covered only the first, letting custom
+   * copy silently revert to default after drawing/minimize-restore.
+   */
+  _applyWidgetCopy(root) {
+    const textarea = root.querySelector(`.${CONFIG.CLASS_PREFIX}comment-textarea`);
+    if (textarea) {
+      textarea.placeholder = this.placeholderText || CONFIG.DEFAULTS.commentPlaceholderText;
+    }
+    const submitBtn = root.querySelector(`.${CONFIG.CLASS_PREFIX}btn-submit`);
+    if (submitBtn) {
+      submitBtn.textContent = this.submitButtonText || CONFIG.DEFAULTS.submitButtonText;
+    }
   }
 
   /**
@@ -339,7 +378,7 @@ class CommentCard {
         try {
           debugLogger.info('Calling captureViewportScreenshot');
           // Capture screenshot of current viewport
-          const screenshotData = await captureScreenshot({ shadowRoot: this.shadowRoot });
+          const screenshotData = await captureScreenshot({ shadowRoot: this.shadowRoot, renderMode: this.renderMode });
           debugLogger.info('Screenshot capture returned', {
             hasDataURL: !!screenshotData.dataURL,
             dataURLLength: screenshotData.dataURL?.length
@@ -544,13 +583,20 @@ class CommentCard {
       `;
     }
 
+    // currentText (the visitor's own in-progress comment) and the custom
+    // placeholder/submit-button copy are NOT interpolated into innerHTML —
+    // all three are untrusted-origin strings (visitor input or per-project
+    // settings) and must be applied via imperative DOM property assignment
+    // below. Previously currentText WAS interpolated here
+    // (`>${currentText}</textarea>`), which let a comment containing
+    // `</textarea><img src=x onerror=...>` break out of the textarea and
+    // execute — fixed as part of this same render-path rewrite.
     bubble.innerHTML = `
       <textarea
         class="${CONFIG.CLASS_PREFIX}comment-textarea"
         rows="3"
-        placeholder="What's on your mind?"
         maxlength="500"
-      >${currentText}</textarea>
+      ></textarea>
       ${screenshotPreviewHTML}
       <div class="${CONFIG.CLASS_PREFIX}comment-actions">
         <button type="button" class="${CONFIG.CLASS_PREFIX}btn-cancel">Cancel</button>
@@ -565,9 +611,12 @@ class CommentCard {
           ${this.drawingData ? 'Edit annotations' : 'Attach annotations'}
         </button>
         ` : ''}
-        <button type="button" class="${CONFIG.CLASS_PREFIX}btn-submit">Submit</button>
+        <button type="button" class="${CONFIG.CLASS_PREFIX}btn-submit"></button>
       </div>
     `;
+
+    bubble.querySelector(`.${CONFIG.CLASS_PREFIX}comment-textarea`).value = currentText;
+    this._applyWidgetCopy(bubble);
 
     // Re-attach events
     this._attachEventListeners();
@@ -1145,7 +1194,8 @@ class CommentCard {
       const screenshotData = await captureScreenshot({
         shadowRoot: this.shadowRoot,
         keepWidgetVisible: false,
-        widgetOverlay
+        widgetOverlay,
+        renderMode: this.renderMode
       });
 
       if (screenshotData) {

@@ -1,6 +1,6 @@
 {
   "name": "tapko-widget",
-  "version": "4.3.0.0",
+  "version": "4.4.0.0",
   "description": "CDN-served commenting widget for third-party websites",
   "main": "dist/tapko-widget.js",
   "scripts": {
@@ -8,7 +8,8 @@
     "build": "node build.js",
     "build:prod": "NODE_ENV=production node build.js",
     "serve": "npx serve -l 8080 .",
-    "lint": "eslint src/**/*.js"
+    "lint": "eslint src/**/*.js",
+    "test": "vitest run"
   },
   "keywords": [
     "widget",
@@ -21,6 +22,8 @@
   "license": "MIT",
   "devDependencies": {
     "esbuild": "^0.19.0",
-    "eslint": "^8.50.0"
+    "eslint": "^8.50.0",
+    "jsdom": "^27.0.1",
+    "vitest": "^3.2.7"
   }
 }

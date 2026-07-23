@@ -31,3 +31,7 @@ tmp/
 temp/
 .temp/
 .gstack/
+
+# Browser cookie exports
+cookies.txt
+*.cookies.txt

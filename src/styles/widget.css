@@ -253,6 +253,69 @@
 }
 
 /* ===========================================
+   WIDGET POSITION (v1 — dashboard-configured corner)
+   Overrides for the 4 persistently-visible elements above (entry button,
+   view-all button, hidden-warning, disabled-popup) — the only elements
+   this reported complaint is actually about. The other position:fixed
+   elements in this file (feedback overlay, snackbar, screenshot/drawing
+   UI, permission/exit dialogs) are full-screen or centered session-scoped
+   overlays, not corner-anchored, and are intentionally untouched.
+
+   data-position is set once on the shadow host at init (see index.js
+   resolveWidgetPosition / _createShadowDOM) from widgetSettings.position,
+   defaulting to bottom-right — identical to the values already declared
+   above, so an absent/legacy attribute changes nothing. Every override
+   below explicitly resets the opposite left/right or top/bottom property
+   to auto — leaving both set simultaneously on a position:fixed element
+   with an explicit width is invalid and browser behavior is inconsistent.
+   =========================================== */
+:host([data-position="bottom-left"]) .dtc-floating-entry-button,
+:host([data-position="bottom-left"]) .dtc-widget-view-all-btn,
+:host([data-position="bottom-left"]) .dtc-widget-hidden-warning,
+:host([data-position="bottom-left"]) .dtc-feedback-disabled-popup {
+  right: auto;
+  left: 24px;
+}
+
+:host([data-position="top-right"]) .dtc-floating-entry-button,
+:host([data-position="top-right"]) .dtc-widget-view-all-btn {
+  bottom: auto;
+  top: 24px;
+}
+
+:host([data-position="top-right"]) .dtc-widget-hidden-warning {
+  bottom: auto;
+  top: 76px;
+}
+
+:host([data-position="top-right"]) .dtc-feedback-disabled-popup {
+  bottom: auto;
+  top: 80px;
+}
+
+:host([data-position="top-left"]) .dtc-floating-entry-button,
+:host([data-position="top-left"]) .dtc-widget-view-all-btn {
+  bottom: auto;
+  right: auto;
+  top: 24px;
+  left: 24px;
+}
+
+:host([data-position="top-left"]) .dtc-widget-hidden-warning {
+  bottom: auto;
+  right: auto;
+  top: 76px;
+  left: 24px;
+}
+
+:host([data-position="top-left"]) .dtc-feedback-disabled-popup {
+  bottom: auto;
+  right: auto;
+  top: 80px;
+  left: 24px;
+}
+
+/* ===========================================
    FEEDBACK MODE OVERLAY
    =========================================== */
 .dtc-feedback-overlay {
@@ -1333,6 +1396,44 @@
     max-width: calc(100vw - 40px);
     font-size: 11px;
     padding: 8px 12px;
+  }
+
+  /* Widget position (v1) — mobile corner overrides, same elements/rules as
+     the desktop block above, just with mobile's 20px edge offset instead
+     of 24px. .dtc-feedback-disabled-popup has no distinct mobile block
+     (uses its desktop bottom:80px/right:24px values at every width), so
+     its corner override lives with the desktop rules only. */
+  :host([data-position="bottom-left"]) .dtc-floating-entry-button,
+  :host([data-position="bottom-left"]) .dtc-widget-view-all-btn,
+  :host([data-position="bottom-left"]) .dtc-widget-hidden-warning {
+    right: auto;
+    left: 20px;
+  }
+
+  :host([data-position="top-right"]) .dtc-floating-entry-button,
+  :host([data-position="top-right"]) .dtc-widget-view-all-btn {
+    bottom: auto;
+    top: 20px;
+  }
+
+  :host([data-position="top-right"]) .dtc-widget-hidden-warning {
+    bottom: auto;
+    top: 76px;
+  }
+
+  :host([data-position="top-left"]) .dtc-floating-entry-button,
+  :host([data-position="top-left"]) .dtc-widget-view-all-btn {
+    bottom: auto;
+    right: auto;
+    top: 20px;
+    left: 20px;
+  }
+
+  :host([data-position="top-left"]) .dtc-widget-hidden-warning {
+    bottom: auto;
+    right: auto;
+    top: 76px;
+    left: 20px;
   }
 
   .dtc-snackbar {
