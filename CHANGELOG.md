@@ -2,6 +2,19 @@
 
 All notable changes to Tapko CDN Widget are documented here.
 
+## [4.4.0.0] - 2026-07-23
+
+### Added
+- Widget now renders your own custom placeholder and submit-button text, matching whatever you set in Project Settings
+- Widget position is now configurable per project — the feedback entry button, "view all" button, and related indicators respect your chosen corner (bottom-right, bottom-left, top-right, top-left)
+- Screenshot capture now works correctly on pages behind a login wall or redirect — when a project is flagged as auth-walled, the widget captures the visitor's authenticated page directly instead of attempting a blind anonymous navigation
+
+### Fixed
+- Fixed an XSS vulnerability where a visitor's in-progress comment text could be interpolated unsafely into the widget's HTML
+- Self-hosted installs no longer send analytics data to Tapko by default — a hardcoded analytics ID was removed and analytics is now opt-in only
+- Removed a secret key value that was being included in error logs
+- Removed a committed session-cookie file from the repo history going forward
+
 ## [4.3.0.0] - 2026-05-14
 
 ### Added
