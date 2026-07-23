@@ -42,16 +42,7 @@ export const CONFIG = {
     cardMinWidth: 260,
     cardMaxWidth: 340,
     animationDuration: 300,
-    // Applied to the shadow host (position:fixed + z-index establishes a
-    // stacking context — see index.js _createShadowDOM), which is what
-    // actually determines whether the widget wins against the HOST PAGE's
-    // own elements. The individual .dtc-* z-index values in widget.css
-    // (2147483645-650) only order the widget's OWN elements relative to
-    // each other WITHIN this stacking context and are unaffected by this
-    // value — deliberately not the 32-bit max anymore: a bounded-but-still-
-    // very-high value resolves the reported "always wins" collision without
-    // guaranteeing an absolute win against an unusually high host z-index.
-    zIndex: 999999,
+    zIndex: 2147483647,
     // V2: Floating entry button specs
     entryButtonSize: 44, // 38-44px per spec
     overlayOpacity: 0.04, // 4% tint
