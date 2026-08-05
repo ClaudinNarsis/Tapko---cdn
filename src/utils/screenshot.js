@@ -963,9 +963,25 @@ async function captureURLScreenshot(options = {}) {
  * capture goes straight to DOM serialization (step 2), which captures the
  * visitor's live, already-authenticated DOM instead. Undefined/'url'
  * preserves today's URL-first behavior unchanged.
+ *
+ * options.screenshotMode: user-set project override, independent of
+ * renderMode. 'local' skips the server-side renderer entirely (steps 1 and
+ * 2 above are never attempted, regardless of whether a rendererUrl is
+ * configured) and goes straight to getDisplayMedia — for projects whose page
+ * the renderer can never reach at all. Still subject to the DPR=1-only
+ * constraint below: on HiDPI displays getDisplayMedia crashes the GPU
+ * process, so capture is skipped there rather than forced.
  */
 async function captureScreenshot(options = {}) {
   const dpr = window.devicePixelRatio || 1;
+
+  if (options.screenshotMode === 'local') {
+    if (dpr > 1) {
+      console.warn('[Tapko] screenshotMode is "local" but device is HiDPI — skipping screenshot');
+      return null;
+    }
+    return await captureViewportScreenshot(options);
+  }
 
   if (CONFIG.API.rendererUrl) {
     let captureOverlay = null;

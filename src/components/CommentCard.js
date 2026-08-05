@@ -38,14 +38,20 @@ class CommentCard {
   // CONFIG.DEFAULTS at render time, applied via imperative DOM property
   // assignment only (never string-interpolated into innerHTML — see the XSS
   // fix in _createCard()/_renderBubbleContent()).
+  // options.screenshotMode: 'auto' (default) | 'local' — user-set override,
+  // independent of renderMode above. 'local' means captureScreenshot() skips
+  // the server-side renderer entirely (both URL-navigation and DOM
+  // serialization) and captures via the browser's own getDisplayMedia
+  // instead — for projects whose page the renderer can never reach.
   constructor(target, coordinates, apiClient, shadowRoot = document.body, pinManager = null, options = {}) {
-    const { renderMode = 'url', placeholderText, submitButtonText } = options;
+    const { renderMode = 'url', screenshotMode = 'auto', placeholderText, submitButtonText } = options;
     this.target = target;
     this.coordinates = coordinates;
     this.apiClient = apiClient;
     this.shadowRoot = shadowRoot;
     this.pinManager = pinManager; // NEW: Pin manager for persistent pins
     this.renderMode = renderMode;
+    this.screenshotMode = screenshotMode;
     this.placeholderText = placeholderText;
     this.submitButtonText = submitButtonText;
     this.feedbackWidget = null; // NEW: Feedback widget reference for hiding during screenshot
@@ -378,7 +384,7 @@ class CommentCard {
         try {
           debugLogger.info('Calling captureViewportScreenshot');
           // Capture screenshot of current viewport
-          const screenshotData = await captureScreenshot({ shadowRoot: this.shadowRoot, renderMode: this.renderMode });
+          const screenshotData = await captureScreenshot({ shadowRoot: this.shadowRoot, renderMode: this.renderMode, screenshotMode: this.screenshotMode });
           debugLogger.info('Screenshot capture returned', {
             hasDataURL: !!screenshotData.dataURL,
             dataURLLength: screenshotData.dataURL?.length
@@ -1195,7 +1201,8 @@ class CommentCard {
         shadowRoot: this.shadowRoot,
         keepWidgetVisible: false,
         widgetOverlay,
-        renderMode: this.renderMode
+        renderMode: this.renderMode,
+        screenshotMode: this.screenshotMode
       });
 
       if (screenshotData) {

@@ -753,6 +753,7 @@ import debugLogger from './utils/DebugLogger.js';
         // Create card in shadow root (pass pinManager for Phase 1)
         const card = new CommentCard(element, coordinates, this.apiClient, this.shadowRoot, this.pinManager, {
           renderMode: this.projectData?.renderMode,
+          screenshotMode: this.projectData?.screenshotMode,
           placeholderText: this.projectData?.widgetSettings?.placeholderText,
           submitButtonText: this.projectData?.widgetSettings?.submitButtonText,
         });
