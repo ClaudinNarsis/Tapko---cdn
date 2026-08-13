@@ -776,6 +776,13 @@
   color: #9ca3af;
 }
 
+.dtc-comment-micro-label {
+  font-size: 11px;
+  color: #9ca3af;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
 .dtc-comment-actions {
   display: flex;
   align-items: center;

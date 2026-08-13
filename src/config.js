@@ -33,7 +33,7 @@ export const CONFIG = {
     // Independently maintained from TapKo's own copy of these same strings
     // (src/lib/widgetSettings.ts WIDGET_SETTINGS_DEFAULTS, used for the
     // settings-UI preview) — no shared source, no cross-repo runtime call.
-    commentPlaceholderText: "What's on your mind?",
+    commentPlaceholderText: "What's on your mind? (/high /medium /low sets priority)",
     submitButtonText: 'Submit'
   },
 

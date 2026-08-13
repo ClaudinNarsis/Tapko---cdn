@@ -25,6 +25,7 @@ import {
   getBrowserInfo,
   getCurrentBreakpoint
 } from '../utils/dom.js';
+import { parsePriorityCommand } from '../utils/priorityCommand.js';
 
 class CommentCard {
   // options.renderMode: 'url' (default) | 'html' — auth-redirect render-mode
@@ -174,6 +175,7 @@ class CommentCard {
           rows="3"
           maxlength="500"
         ></textarea>
+        <div class="${CONFIG.CLASS_PREFIX}comment-micro-label">Tip: /high /medium /low sets priority</div>
         <div class="${CONFIG.CLASS_PREFIX}comment-actions">
           <button type="button" class="${CONFIG.CLASS_PREFIX}btn-cancel">Cancel</button>
           <button type="button" class="${CONFIG.CLASS_PREFIX}btn-draw">
@@ -603,6 +605,7 @@ class CommentCard {
         rows="3"
         maxlength="500"
       ></textarea>
+      <div class="${CONFIG.CLASS_PREFIX}comment-micro-label">Tip: /high /medium /low sets priority</div>
       ${screenshotPreviewHTML}
       <div class="${CONFIG.CLASS_PREFIX}comment-actions">
         <button type="button" class="${CONFIG.CLASS_PREFIX}btn-cancel">Cancel</button>
@@ -759,7 +762,13 @@ class CommentCard {
     if (this.isSubmitting) return;
 
     const textarea = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}comment-textarea`);
-    const text = textarea ? textarea.value.trim() : '';
+    const rawText = textarea ? textarea.value.trim() : '';
+
+    // Parse an inline /high /medium /low command out of the text before
+    // anything else touches it (title generation truncates the raw text,
+    // so this must happen first or the token could leak into the title).
+    const { priority, text } = parsePriorityCommand(rawText);
+    this.priority = priority;
 
     // Validate input
     if (!text && !this.drawingData) {
@@ -865,7 +874,8 @@ class CommentCard {
       },
       idempotencyKey: `${this.apiClient.userId}-${Date.now()}-${Math.random().toString(36).substring(7)}`,
       projectId: this.apiClient.projectId,
-      userId: this.apiClient.userId
+      userId: this.apiClient.userId,
+      ...(this.priority ? { priority: this.priority } : {})
     };
 
     // 5. Add to queue (instant!)
@@ -1032,7 +1042,8 @@ class CommentCard {
       },
       idempotencyKey: `${this.apiClient.userId}-${Date.now()}-${Math.random().toString(36).substring(7)}`,
       projectId: this.apiClient.projectId,
-      userId: this.apiClient.userId
+      userId: this.apiClient.userId,
+      ...(this.priority ? { priority: this.priority } : {})
     };
 
     // 4. Submit feedback

@@ -439,7 +439,8 @@ class FeedbackQueueManager {
           context: item.feedbackData.context,
           idempotencyKey: item.feedbackData.idempotencyKey,
           projectId: item.feedbackData.projectId,
-          userId: item.feedbackData.userId
+          userId: item.feedbackData.userId,
+          ...(item.feedbackData.priority ? { priority: item.feedbackData.priority } : {})
         };
 
         console.log('[FeedbackQueue] Submitting payload:', {
