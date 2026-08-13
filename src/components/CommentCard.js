@@ -25,7 +25,9 @@ import {
   getBrowserInfo,
   getCurrentBreakpoint
 } from '../utils/dom.js';
-import { parsePriorityCommand } from '../utils/priorityCommand.js';
+import { parsePriorityCommand, detectPriorityCommand } from '../utils/priorityCommand.js';
+
+const PRIORITY_CHIP_LABEL = { high: 'High priority', medium: 'Medium priority', low: 'Low priority' };
 
 class CommentCard {
   // options.renderMode: 'url' (default) | 'html' — auth-redirect render-mode
@@ -175,7 +177,10 @@ class CommentCard {
           rows="3"
           maxlength="500"
         ></textarea>
-        <div class="${CONFIG.CLASS_PREFIX}comment-micro-label">Tip: /high /medium /low sets priority</div>
+        <div class="${CONFIG.CLASS_PREFIX}comment-command-row">
+          <span class="${CONFIG.CLASS_PREFIX}priority-chip" hidden></span>
+          <div class="${CONFIG.CLASS_PREFIX}comment-micro-label">Tip: /high /medium /low sets priority</div>
+        </div>
         <div class="${CONFIG.CLASS_PREFIX}comment-actions">
           <button type="button" class="${CONFIG.CLASS_PREFIX}btn-cancel">Cancel</button>
           <button type="button" class="${CONFIG.CLASS_PREFIX}btn-draw">
@@ -335,6 +340,39 @@ class CommentCard {
       textarea.addEventListener('keypress', (e) => {
         e.stopPropagation();
       });
+
+      // Live priority chip: update on every keystroke rather than waiting
+      // for submit, so typing /high shows immediate feedback that the
+      // command was recognized (same matching rules as parsePriorityCommand,
+      // via the read-only detectPriorityCommand — this listener never
+      // mutates textarea.value).
+      textarea.addEventListener('input', () => {
+        this._updatePriorityChip(textarea.value);
+      });
+
+      // Reflect any pre-existing text (e.g. after a re-render) immediately.
+      this._updatePriorityChip(textarea.value);
+    }
+  }
+
+  /**
+   * Show/hide the live priority chip based on the current textarea value.
+   * Shared by both render sites via _attachEventListeners().
+   */
+  _updatePriorityChip(text) {
+    const chip = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}priority-chip`);
+    if (!chip) return;
+
+    const label = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}comment-micro-label`);
+    const priority = detectPriorityCommand(text);
+    if (priority) {
+      chip.textContent = PRIORITY_CHIP_LABEL[priority];
+      chip.className = `${CONFIG.CLASS_PREFIX}priority-chip ${CONFIG.CLASS_PREFIX}priority-chip--${priority}`;
+      chip.hidden = false;
+      if (label) label.hidden = true;
+    } else {
+      chip.hidden = true;
+      if (label) label.hidden = false;
     }
   }
 

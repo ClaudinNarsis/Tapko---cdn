@@ -44,3 +44,23 @@ export function parsePriorityCommand(rawText) {
 
   return { priority, text };
 }
+
+/**
+ * Same matching rules as parsePriorityCommand, but read-only — for live
+ * detection on every keystroke (e.g. showing a chip as the user types)
+ * without mutating the textarea's value out from under their cursor.
+ * Returns 'high' | 'medium' | 'low' | undefined; last match wins.
+ */
+export function detectPriorityCommand(rawText) {
+  if (!rawText) {
+    return undefined;
+  }
+
+  let priority;
+  const pattern = new RegExp(PRIORITY_COMMAND_PATTERN.source, PRIORITY_COMMAND_PATTERN.flags);
+  let match;
+  while ((match = pattern.exec(rawText)) !== null) {
+    priority = match[2].toLowerCase();
+  }
+  return priority;
+}
