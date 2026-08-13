@@ -111,7 +111,8 @@ class FeedbackQueueManager {
           context: feedbackData.context,
           idempotencyKey: feedbackData.idempotencyKey,
           projectId: feedbackData.projectId,
-          userId: feedbackData.userId
+          userId: feedbackData.userId,
+          ...(feedbackData.priority ? { priority: feedbackData.priority } : {})
         },
         uploadProgress: {
           screenshot: {
@@ -439,7 +440,8 @@ class FeedbackQueueManager {
           context: item.feedbackData.context,
           idempotencyKey: item.feedbackData.idempotencyKey,
           projectId: item.feedbackData.projectId,
-          userId: item.feedbackData.userId
+          userId: item.feedbackData.userId,
+          ...(item.feedbackData.priority ? { priority: item.feedbackData.priority } : {})
         };
 
         console.log('[FeedbackQueue] Submitting payload:', {

@@ -776,6 +776,129 @@
   color: #9ca3af;
 }
 
+.dtc-comment-command-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.dtc-comment-micro-label {
+  font-size: 11px;
+  color: #9ca3af;
+  line-height: 1.4;
+}
+
+.dtc-priority-chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+  animation: dtc-chip-pop 0.12s ease-out;
+}
+
+/* The [hidden] attribute only wins over the class's own `display` via UA
+   stylesheet specificity when nothing else targets the element — a class
+   selector with an explicit `display` always beats it, so the chip stayed
+   visible (stale label/priority) after JS set `.hidden = true`. */
+.dtc-priority-chip[hidden] {
+  display: none;
+}
+
+.dtc-priority-chip--high {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.dtc-priority-chip--medium {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.dtc-priority-chip--low {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+@keyframes dtc-chip-pop {
+  from {
+    transform: scale(0.85);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Live "/" suggestion dropdown — shown the instant the visitor types "/",
+   filtered as they keep typing (/h -> High only), before the full word is
+   finished. Renders in normal flow directly under the textarea (no
+   absolute positioning — the bubble is small enough that pushing the
+   command row down is fine). Gives feedback on every keystroke instead of
+   only once the full /high /medium /low word is complete and the chip
+   (a separate, later signal) appears. */
+.dtc-priority-suggest {
+  margin: 4px 0 0;
+  padding: 4px;
+  list-style: none;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  animation: dtc-chip-pop 0.12s ease-out;
+}
+
+.dtc-priority-suggest[hidden] {
+  display: none;
+}
+
+.dtc-priority-suggest-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.dtc-priority-suggest-item::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.dtc-priority-suggest-item--high {
+  color: #b91c1c;
+}
+
+.dtc-priority-suggest-item--medium {
+  color: #b45309;
+}
+
+.dtc-priority-suggest-item--low {
+  color: #0369a1;
+}
+
+.dtc-priority-suggest-item--active {
+  background: #f3f4f6;
+}
+
+.dtc-priority-suggest-empty {
+  padding: 6px 8px;
+  font-size: 13px;
+  color: #9ca3af;
+}
+
 .dtc-comment-actions {
   display: flex;
   align-items: center;
