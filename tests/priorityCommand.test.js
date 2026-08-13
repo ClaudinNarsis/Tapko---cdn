@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { parsePriorityCommand, detectPriorityCommand } from '../src/utils/priorityCommand.js';
+import {
+  parsePriorityCommand,
+  detectPriorityCommand,
+  matchInProgressCommand,
+  completeInProgressCommand,
+} from '../src/utils/priorityCommand.js';
 
 describe('parsePriorityCommand', () => {
   it('returns priority undefined and text unchanged when no command is present', () => {
@@ -111,5 +116,70 @@ describe('detectPriorityCommand — live/read-only detection (chip UI)', () => {
     const input = 'fix this /high please';
     detectPriorityCommand(input);
     expect(input).toBe('fix this /high please');
+  });
+});
+
+describe('matchInProgressCommand — live suggestion dropdown while typing', () => {
+  it('returns null when there is no "/" at the caret', () => {
+    expect(matchInProgressCommand('fix this button', 16)).toBeNull();
+    expect(matchInProgressCommand('', 0)).toBeNull();
+  });
+
+  it('returns all three priorities right after typing "/"', () => {
+    expect(matchInProgressCommand('fix this /', 10)).toEqual(['low', 'medium', 'high']);
+  });
+
+  it('narrows to matches as more letters are typed', () => {
+    expect(matchInProgressCommand('fix this /h', 11)).toEqual(['high']);
+    expect(matchInProgressCommand('fix this /l', 11)).toEqual(['low']);
+    expect(matchInProgressCommand('fix this /m', 11)).toEqual(['medium']);
+  });
+
+  it('returns an empty array (not null) when no priority matches — dropdown shows "no match", not silence', () => {
+    expect(matchInProgressCommand('fix this /x', 11)).toEqual([]);
+  });
+
+  it('stops matching once the word is already complete and bounded', () => {
+    // detectPriorityCommand takes over at this point; the in-progress
+    // matcher should not also fire for a finished command.
+    expect(matchInProgressCommand('fix this /high', 15)).toBeNull();
+  });
+
+  it('is case-insensitive', () => {
+    expect(matchInProgressCommand('fix this /H', 11)).toEqual(['high']);
+  });
+
+  it('only considers the command touching the caret, not one earlier in the text', () => {
+    // Caret sits after "this", nowhere near the stray "/x" from earlier —
+    // moving the cursor away from an abandoned command should not reopen
+    // the dropdown for it.
+    expect(matchInProgressCommand('/x actually this', 12)).toBeNull();
+  });
+
+  it('defaults caretIndex to end-of-text when omitted', () => {
+    expect(matchInProgressCommand('fix this /hi')).toEqual(['high']);
+  });
+});
+
+describe('completeInProgressCommand — Tab/Enter accepts a dropdown suggestion', () => {
+  it('completes "/h" to "/high" and places the caret after it', () => {
+    expect(completeInProgressCommand('fix this /h', 11, 'high')).toEqual({
+      text: 'fix this /high',
+      caretIndex: 14,
+    });
+  });
+
+  it('completes a bare "/" to the full word', () => {
+    expect(completeInProgressCommand('/', 1, 'low')).toEqual({
+      text: '/low',
+      caretIndex: 4,
+    });
+  });
+
+  it('preserves text after the caret', () => {
+    expect(completeInProgressCommand('fix this /h please', 11, 'high')).toEqual({
+      text: 'fix this /high please',
+      caretIndex: 14,
+    });
   });
 });
