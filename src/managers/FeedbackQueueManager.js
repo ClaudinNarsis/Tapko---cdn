@@ -111,7 +111,8 @@ class FeedbackQueueManager {
           context: feedbackData.context,
           idempotencyKey: feedbackData.idempotencyKey,
           projectId: feedbackData.projectId,
-          userId: feedbackData.userId
+          userId: feedbackData.userId,
+          ...(feedbackData.priority ? { priority: feedbackData.priority } : {})
         },
         uploadProgress: {
           screenshot: {
