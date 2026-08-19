@@ -25,6 +25,15 @@ import {
   getBrowserInfo,
   getCurrentBreakpoint
 } from '../utils/dom.js';
+import {
+  parsePriorityCommand,
+  detectPriorityCommand,
+  matchInProgressCommand,
+  completeInProgressCommand,
+} from '../utils/priorityCommand.js';
+
+const PRIORITY_CHIP_LABEL = { high: 'High priority', medium: 'Medium priority', low: 'Low priority' };
+const PRIORITY_SUGGEST_LABEL = { high: 'High', medium: 'Medium', low: 'Low' };
 
 class CommentCard {
   // options.renderMode: 'url' (default) | 'html' — auth-redirect render-mode
@@ -69,6 +78,12 @@ class CommentCard {
     // NEW: Separate storage for unmerged screenshot and annotation data
     this.screenshotDataURL = null;  // Unmerged screenshot for editing
     this.annotationData = null;     // {paths, strokeColor, strokeWidth}
+
+    // Priority "/" in-progress suggestion dropdown state (see
+    // _updatePriorityDropdown / _renderPriorityDropdown).
+    this._priorityDropdownOpen = false;
+    this._priorityDropdownMatches = [];
+    this._priorityDropdownHighlight = -1;
 
     // Recording UI elements
     this.micIcon = null;
@@ -174,6 +189,11 @@ class CommentCard {
           rows="3"
           maxlength="500"
         ></textarea>
+        <ul class="${CONFIG.CLASS_PREFIX}priority-suggest" hidden role="listbox" aria-label="Priority suggestions"></ul>
+        <div class="${CONFIG.CLASS_PREFIX}comment-command-row">
+          <span class="${CONFIG.CLASS_PREFIX}priority-chip" hidden></span>
+          <div class="${CONFIG.CLASS_PREFIX}comment-micro-label">Tip: /high /medium /low sets priority</div>
+        </div>
         <div class="${CONFIG.CLASS_PREFIX}comment-actions">
           <button type="button" class="${CONFIG.CLASS_PREFIX}btn-cancel">Cancel</button>
           <button type="button" class="${CONFIG.CLASS_PREFIX}btn-draw">
@@ -317,6 +337,36 @@ class CommentCard {
       textarea.addEventListener('keydown', (e) => {
         e.stopPropagation();
 
+        // While the priority-suggestion dropdown is open, it owns Escape,
+        // Tab/Enter, and the arrow keys — closing/accepting/navigating the
+        // dropdown takes priority over the textarea's own shortcuts for the
+        // same keys (dismissing the card, submitting, moving the caret).
+        if (this._priorityDropdownOpen) {
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            this._closePriorityDropdown();
+            return;
+          }
+          if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            this._movePriorityDropdownHighlight(1);
+            return;
+          }
+          if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            this._movePriorityDropdownHighlight(-1);
+            return;
+          }
+          if (e.key === 'Tab' || e.key === 'Enter') {
+            if (this._acceptPriorityDropdownHighlight()) {
+              e.preventDefault();
+              return;
+            }
+            // No highlighted match (empty suggestion list) — fall through
+            // to default Tab/Enter behavior instead of swallowing the key.
+          }
+        }
+
         if (e.key === 'Escape') {
           this.close();
         } else if (e.key === 'Enter' && !e.shiftKey) {
@@ -333,6 +383,167 @@ class CommentCard {
       textarea.addEventListener('keypress', (e) => {
         e.stopPropagation();
       });
+
+      // Live priority chip + in-progress suggestion dropdown: update on
+      // every keystroke rather than waiting for submit, so typing "/"
+      // shows immediate feedback before the full word "/high" is even
+      // finished (matchInProgressCommand), and finishing it shows the
+      // committed chip (detectPriorityCommand) — this listener never
+      // mutates textarea.value itself.
+      textarea.addEventListener('input', () => {
+        this._updatePriorityChip(textarea.value);
+        this._updatePriorityDropdown(textarea.value, textarea.selectionStart);
+      });
+
+      // Clicking/arrow-keying the caret around should re-evaluate whether
+      // it's still inside a "/"-command (e.g. clicking away from "/h"
+      // should close the dropdown even though the text didn't change).
+      textarea.addEventListener('click', () => {
+        this._updatePriorityDropdown(textarea.value, textarea.selectionStart);
+      });
+
+      // Reflect any pre-existing text (e.g. after a re-render) immediately.
+      this._updatePriorityChip(textarea.value);
+      this._updatePriorityDropdown(textarea.value, textarea.selectionStart);
+    }
+
+    // Clicking a suggestion in the dropdown accepts it, same as Tab/Enter.
+    const dropdown = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}priority-suggest`);
+    if (dropdown) {
+      dropdown.addEventListener('mousedown', (e) => {
+        // mousedown (not click) so this fires before the textarea's blur,
+        // otherwise the dropdown would already be closed by the time click
+        // fires and the suggestion would be lost.
+        const item = e.target.closest(`.${CONFIG.CLASS_PREFIX}priority-suggest-item`);
+        if (!item) return;
+        e.preventDefault();
+        this._priorityDropdownHighlight = Number(item.dataset.index);
+        this._acceptPriorityDropdownHighlight();
+      });
+    }
+  }
+
+  /**
+   * Show/hide the live priority chip based on the current textarea value.
+   * Shared by both render sites via _attachEventListeners().
+   */
+  _updatePriorityChip(text) {
+    const chip = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}priority-chip`);
+    if (!chip) return;
+
+    const label = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}comment-micro-label`);
+    const priority = detectPriorityCommand(text);
+    if (priority) {
+      chip.textContent = PRIORITY_CHIP_LABEL[priority];
+      chip.className = `${CONFIG.CLASS_PREFIX}priority-chip ${CONFIG.CLASS_PREFIX}priority-chip--${priority}`;
+      chip.hidden = false;
+      if (label) label.hidden = true;
+    } else {
+      chip.hidden = true;
+      if (label) label.hidden = false;
+    }
+  }
+
+  /**
+   * Show/hide/populate the "/" in-progress suggestion dropdown based on the
+   * current textarea value and caret position. This is the mid-typing
+   * feedback loop: /, /h, /hi all show something before the word is
+   * finished, instead of the visitor typing blind until /high completes
+   * and the chip (a separate, later signal) finally appears.
+   */
+  _updatePriorityDropdown(text, caretIndex) {
+    const dropdown = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}priority-suggest`);
+    if (!dropdown) return;
+
+    const matches = matchInProgressCommand(text, caretIndex);
+    if (matches === null) {
+      this._closePriorityDropdown();
+      return;
+    }
+
+    this._priorityDropdownOpen = true;
+    this._priorityDropdownMatches = matches;
+    this._priorityDropdownHighlight = matches.length > 0 ? 0 : -1;
+    this._renderPriorityDropdown();
+  }
+
+  /**
+   * Renders the dropdown's <li> items from current state and reflects the
+   * highlighted index — split from _updatePriorityDropdown so arrow-key
+   * navigation (which doesn't change the match list, only the highlight)
+   * can re-render cheaply without re-running matchInProgressCommand.
+   */
+  _renderPriorityDropdown() {
+    const dropdown = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}priority-suggest`);
+    if (!dropdown) return;
+
+    if (this._priorityDropdownMatches.length === 0) {
+      dropdown.innerHTML = `<li class="${CONFIG.CLASS_PREFIX}priority-suggest-empty">No matching priority</li>`;
+      dropdown.hidden = false;
+      return;
+    }
+
+    dropdown.innerHTML = this._priorityDropdownMatches
+      .map((priority, index) => `
+        <li
+          class="${CONFIG.CLASS_PREFIX}priority-suggest-item ${CONFIG.CLASS_PREFIX}priority-suggest-item--${priority}${index === this._priorityDropdownHighlight ? ` ${CONFIG.CLASS_PREFIX}priority-suggest-item--active` : ''}"
+          data-index="${index}"
+          role="option"
+          aria-selected="${index === this._priorityDropdownHighlight}"
+        >${sanitizeHTML(PRIORITY_SUGGEST_LABEL[priority])}</li>
+      `)
+      .join('');
+    dropdown.hidden = false;
+  }
+
+  /**
+   * Moves the highlighted suggestion by `delta` (1 = down, -1 = up),
+   * wrapping around the ends — lets the user reach any of the (at most 3)
+   * suggestions via arrow keys without typing more letters.
+   */
+  _movePriorityDropdownHighlight(delta) {
+    const count = this._priorityDropdownMatches.length;
+    if (count === 0) return;
+    this._priorityDropdownHighlight = (this._priorityDropdownHighlight + delta + count) % count;
+    this._renderPriorityDropdown();
+  }
+
+  /**
+   * Commits the currently-highlighted suggestion into the textarea (e.g.
+   * "/h" -> "/high"), closes the dropdown, and refreshes the chip so the
+   * committed state is visible immediately. Returns false without mutating
+   * anything if there's no highlighted match (empty "no match" state) —
+   * callers use this to decide whether to preventDefault the key that
+   * triggered acceptance.
+   */
+  _acceptPriorityDropdownHighlight() {
+    const priority = this._priorityDropdownMatches[this._priorityDropdownHighlight];
+    if (!priority) return false;
+
+    const textarea = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}comment-textarea`);
+    if (!textarea) return false;
+
+    const { text, caretIndex } = completeInProgressCommand(textarea.value, textarea.selectionStart, priority);
+    textarea.value = text;
+    textarea.setSelectionRange(caretIndex, caretIndex);
+
+    this._closePriorityDropdown();
+    this._updatePriorityChip(textarea.value);
+    return true;
+  }
+
+  /**
+   * Hides the dropdown and clears its state. Safe to call when already
+   * closed (e.g. every keystroke that isn't inside a "/"-command).
+   */
+  _closePriorityDropdown() {
+    this._priorityDropdownOpen = false;
+    this._priorityDropdownMatches = [];
+    this._priorityDropdownHighlight = -1;
+    const dropdown = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}priority-suggest`);
+    if (dropdown) {
+      dropdown.hidden = true;
+      dropdown.innerHTML = '';
     }
   }
 
@@ -603,6 +814,11 @@ class CommentCard {
         rows="3"
         maxlength="500"
       ></textarea>
+      <ul class="${CONFIG.CLASS_PREFIX}priority-suggest" hidden role="listbox" aria-label="Priority suggestions"></ul>
+      <div class="${CONFIG.CLASS_PREFIX}comment-command-row">
+        <span class="${CONFIG.CLASS_PREFIX}priority-chip" hidden></span>
+        <div class="${CONFIG.CLASS_PREFIX}comment-micro-label">Tip: /high /medium /low sets priority</div>
+      </div>
       ${screenshotPreviewHTML}
       <div class="${CONFIG.CLASS_PREFIX}comment-actions">
         <button type="button" class="${CONFIG.CLASS_PREFIX}btn-cancel">Cancel</button>
@@ -759,7 +975,13 @@ class CommentCard {
     if (this.isSubmitting) return;
 
     const textarea = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}comment-textarea`);
-    const text = textarea ? textarea.value.trim() : '';
+    const rawText = textarea ? textarea.value.trim() : '';
+
+    // Parse an inline /high /medium /low command out of the text before
+    // anything else touches it (title generation truncates the raw text,
+    // so this must happen first or the token could leak into the title).
+    const { priority, text } = parsePriorityCommand(rawText);
+    this.priority = priority;
 
     // Validate input
     if (!text && !this.drawingData) {
@@ -865,7 +1087,8 @@ class CommentCard {
       },
       idempotencyKey: `${this.apiClient.userId}-${Date.now()}-${Math.random().toString(36).substring(7)}`,
       projectId: this.apiClient.projectId,
-      userId: this.apiClient.userId
+      userId: this.apiClient.userId,
+      ...(this.priority ? { priority: this.priority } : {})
     };
 
     // 5. Add to queue (instant!)
@@ -1032,7 +1255,8 @@ class CommentCard {
       },
       idempotencyKey: `${this.apiClient.userId}-${Date.now()}-${Math.random().toString(36).substring(7)}`,
       projectId: this.apiClient.projectId,
-      userId: this.apiClient.userId
+      userId: this.apiClient.userId,
+      ...(this.priority ? { priority: this.priority } : {})
     };
 
     // 4. Submit feedback
