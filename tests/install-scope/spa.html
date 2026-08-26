@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>SPA route-change harness</title>
+  <style>
+    body { font-family: system-ui; margin: 0; padding: 40px; }
+    #view { min-height: 900px; padding: 20px; border: 2px dashed #ccc; }
+    button { padding: 10px 16px; margin-right: 8px; font-size: 15px; }
+    h1 { font-size: 22px; }
+  </style>
+  <!-- Installed the way a correctly-configured host app would: in the shell, once. -->
+  <script src="/dist/tapko-widget.js" data-tapko-project-id="proj-test-1"></script>
+</head>
+<body>
+  <h1 id="title">route-a</h1>
+  <button id="to-a">go /spa/route-a</button>
+  <button id="to-b">go /spa/route-b</button>
+  <div id="view">
+    <p id="target-a" style="height:200px;background:#eef">Content block for route A</p>
+  </div>
+
+  <script>
+    // A minimal client-side router: exactly what React Router / Vue Router /
+    // next/link do under the hood — history.pushState + swap the view. No reload.
+    function render(route) {
+      document.getElementById('title').textContent = route;
+      document.getElementById('view').innerHTML =
+        '<p id="target-' + route.slice(-1) + '" style="height:200px;background:#eef">Content block for ' + route + '</p>';
+    }
+    function navigate(route) {
+      history.pushState({}, '', '/spa/' + route);
+      render(route);
+    }
+    document.getElementById('to-a').onclick = () => navigate('route-a');
+    document.getElementById('to-b').onclick = () => navigate('route-b');
+    window.addEventListener('popstate', () => render(location.pathname.split('/').pop()));
+    render(location.pathname.split('/').pop() || 'route-a');
+  </script>
+</body>
+</html>
