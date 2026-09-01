@@ -40,6 +40,7 @@ import SyncLifecycleManager from './managers/SyncLifecycleManager.js';
 import NetworkStatusManager from './managers/NetworkStatusManager.js';
 import { ShadowStyleManager } from './utils/ShadowStyleManager.js';
 import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
+import { installKeyboardShortcutGuard } from './utils/keyboardShortcutGuard.js';
 import debugLogger from './utils/DebugLogger.js';
 
 (function (window, document) {
@@ -72,6 +73,15 @@ import debugLogger from './utils/DebugLogger.js';
 
       // Initialize debug logger and check for crashes
       this._initializeDebugSystem();
+
+      // Guard against host-page keyboard shortcuts (capture-phase listeners
+      // on document/window that preventDefault() a key like "c" for their
+      // own "compose"/"comment"/"create" shortcut) swallowing keystrokes
+      // typed into the widget's own inputs before they ever reach them.
+      // Registered here, at construction time, so it runs as early as
+      // possible in the capture phase relative to any host-page listener
+      // registered after the widget script loads.
+      this._installKeyboardShortcutGuard();
 
       // Shadow DOM properties
       this.shadowHost = null;
@@ -301,6 +311,17 @@ import debugLogger from './utils/DebugLogger.js';
       console.log('  TapkoDebug.enable()               - Enable debug mode');
       console.log('  TapkoDebug.viewNetworkLogs()      - View captured network requests');
       console.log('  TapkoDebug.checkCrash()           - Check for crashes');
+    }
+
+    /**
+     * Installs the window-capture-phase keyboard shortcut guard (see
+     * utils/keyboardShortcutGuard.js) as early as possible — at
+     * construction time, before this.shadowRoot even exists yet — so it
+     * has the best chance of running ahead of a host page's own shortcut
+     * listeners in window's capture-phase registration order.
+     */
+    _installKeyboardShortcutGuard() {
+      installKeyboardShortcutGuard(window, () => this.shadowRoot);
     }
 
     /**
