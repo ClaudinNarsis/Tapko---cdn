@@ -38,6 +38,7 @@ class PinManager {
     }
 
     console.log('[PinManager] Initializing...');
+    this._projectId = projectId;
 
     try {
       const normalizedUrl = this._normalizeUrl(pageUrl);
@@ -716,6 +717,19 @@ class PinManager {
    */
   getCount() {
     return this.pins.size;
+  }
+
+  /**
+   * Re-fetch and re-render pins for a new page URL without touching local
+   * pin storage — used on SPA client-side route changes, where the widget
+   * itself stays mounted but the pins belong to the previous route.
+   * @param {string} pageUrl - New page URL
+   */
+  async refreshForUrl(pageUrl) {
+    this.pins.forEach(({ element }) => element.remove());
+    this.pins.clear();
+    this.initialized = false;
+    await this.init(this._projectId, pageUrl);
   }
 
   /**

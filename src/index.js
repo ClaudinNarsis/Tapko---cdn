@@ -40,6 +40,7 @@ import SyncLifecycleManager from './managers/SyncLifecycleManager.js';
 import NetworkStatusManager from './managers/NetworkStatusManager.js';
 import { ShadowStyleManager } from './utils/ShadowStyleManager.js';
 import { ShadowEventBridge } from './utils/ShadowEventBridge.js';
+import { installKeyboardShortcutGuard } from './utils/keyboardShortcutGuard.js';
 import debugLogger from './utils/DebugLogger.js';
 
 (function (window, document) {
@@ -72,6 +73,15 @@ import debugLogger from './utils/DebugLogger.js';
 
       // Initialize debug logger and check for crashes
       this._initializeDebugSystem();
+
+      // Guard against host-page keyboard shortcuts (capture-phase listeners
+      // on document/window that preventDefault() a key like "c" for their
+      // own "compose"/"comment"/"create" shortcut) swallowing keystrokes
+      // typed into the widget's own inputs before they ever reach them.
+      // Registered here, at construction time, so it runs as early as
+      // possible in the capture phase relative to any host-page listener
+      // registered after the widget script loads.
+      this._installKeyboardShortcutGuard();
 
       // Shadow DOM properties
       this.shadowHost = null;
@@ -301,6 +311,17 @@ import debugLogger from './utils/DebugLogger.js';
       console.log('  TapkoDebug.enable()               - Enable debug mode');
       console.log('  TapkoDebug.viewNetworkLogs()      - View captured network requests');
       console.log('  TapkoDebug.checkCrash()           - Check for crashes');
+    }
+
+    /**
+     * Installs the window-capture-phase keyboard shortcut guard (see
+     * utils/keyboardShortcutGuard.js) as early as possible — at
+     * construction time, before this.shadowRoot even exists yet — so it
+     * has the best chance of running ahead of a host page's own shortcut
+     * listeners in window's capture-phase registration order.
+     */
+    _installKeyboardShortcutGuard() {
+      installKeyboardShortcutGuard(window, () => this.shadowRoot);
     }
 
     /**
@@ -1249,6 +1270,29 @@ import debugLogger from './utils/DebugLogger.js';
     events: CONFIG.EVENTS
   };
 
+  // Restores widget config cached by a prior page in this session/tab.
+  // Shared by: no-snippet pages, SPA route changes, and bfcache restores.
+  const restoreFromSession = () => {
+    try {
+      const cached = sessionStorage.getItem('tapko_session_config');
+      if (cached) {
+        const { projectId, apiKey, userId, projectData, isDisabled } = JSON.parse(cached);
+        if (projectId) {
+          window[CONFIG.NAMESPACE].init({
+            projectId, apiKey, userId,
+            _cachedProjectData: projectData,
+            _isDisabled: isDisabled
+          }).catch(error => {
+            console.error('[Tapko] Session restore failed:', error);
+            sessionStorage.removeItem('tapko_session_config');
+          });
+        }
+      }
+    } catch (e) {
+      sessionStorage.removeItem('tapko_session_config');
+    }
+  };
+
   // Auto-init if data attribute is present
   const autoInitScript = document.querySelector('script[data-tapko-project-id]');
   if (autoInitScript) {
@@ -1264,27 +1308,6 @@ import debugLogger from './utils/DebugLogger.js';
   } else {
     // No snippet on this page — check if a prior page cached the config in this session.
     // Wait for DOMContentLoaded so document.body exists before init tries to appendChild.
-    const restoreFromSession = () => {
-      try {
-        const cached = sessionStorage.getItem('tapko_session_config');
-        if (cached) {
-          const { projectId, apiKey, userId, projectData, isDisabled } = JSON.parse(cached);
-          if (projectId) {
-            window[CONFIG.NAMESPACE].init({
-              projectId, apiKey, userId,
-              _cachedProjectData: projectData,
-              _isDisabled: isDisabled
-            }).catch(error => {
-              console.error('[Tapko] Session restore failed:', error);
-              sessionStorage.removeItem('tapko_session_config');
-            });
-          }
-        }
-      } catch (e) {
-        sessionStorage.removeItem('tapko_session_config');
-      }
-    };
-
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', restoreFromSession);
     } else {
@@ -1292,24 +1315,39 @@ import debugLogger from './utils/DebugLogger.js';
     }
   }
 
+  // Re-attach/refresh on SPA client-side route changes. The widget's shadow
+  // host is position:fixed and survives framework re-renders, so it never
+  // visually disappears — but pins are fetched once per document and
+  // filtered by pageUrl, so without this they stay stuck on whichever route
+  // the widget script first ran on. pushState/replaceState don't fire any
+  // native event, so patch them once (covers every router — React Router,
+  // Next.js, Vue Router, etc. — since they all go through the History API).
+  const handleRouteChange = () => {
+    if (!tapko.isInitialized) {
+      restoreFromSession();
+    } else if (tapko.pinManager) {
+      tapko.pinManager.refreshForUrl(window.location.href).catch((error) => {
+        console.error('[Tapko] Failed to refresh pins for new route:', error);
+      });
+    }
+  };
+
+  window.addEventListener('popstate', handleRouteChange);
+
+  ['pushState', 'replaceState'].forEach((method) => {
+    const original = history[method];
+    history[method] = function (...args) {
+      const result = original.apply(this, args);
+      window.dispatchEvent(new Event('tapko:locationchange'));
+      return result;
+    };
+  });
+  window.addEventListener('tapko:locationchange', handleRouteChange);
+
   // Re-attach widget when browser restores a bfcache page (Back/Forward navigation)
   window.addEventListener('pageshow', (event) => {
     if (event.persisted && !tapko.isInitialized) {
-      try {
-        const cached = sessionStorage.getItem('tapko_session_config');
-        if (cached) {
-          const { projectId, apiKey, userId, projectData, isDisabled } = JSON.parse(cached);
-          if (projectId) {
-            window[CONFIG.NAMESPACE].init({
-              projectId, apiKey, userId,
-              _cachedProjectData: projectData,
-              _isDisabled: isDisabled
-            }).catch(error => {
-              console.error('[Tapko] bfcache restore failed:', error);
-            });
-          }
-        }
-      } catch (e) { /* non-fatal */ }
+      restoreFromSession();
     }
   });
 
