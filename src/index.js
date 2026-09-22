@@ -29,7 +29,8 @@ import { DrawingCanvas } from './components/DrawingCanvas.js';
 import { FeedbackDisabledPopup } from './components/FeedbackDisabledPopup.js';
 import { FeedbackWidget } from './components/FeedbackWidget.js';
 import { dispatchCustomEvent, getUrlParam, resolveWidgetPosition } from './utils/dom.js';
-import { shouldAutoEnterFeedbackMode } from './utils/autoFeedbackMode.js';
+import { shouldShowFirstCommentPrompt, rememberDismissal } from './utils/firstCommentPrompt.js';
+import { FirstCommentPrompt } from './components/FirstCommentPrompt.js';
 import { logManager } from './managers/LogManager.js';
 import { networkLogManager } from './managers/NetworkLogManager.js';
 import { analyticsManager } from './managers/AnalyticsManager.js';
@@ -95,6 +96,7 @@ import debugLogger from './utils/DebugLogger.js';
       this.feedbackOverlay = null;
       this.drawingCanvas = null;
       this.disabledPopup = new FeedbackDisabledPopup();
+      this.firstCommentPrompt = new FirstCommentPrompt();
       this.feedbackWidget = null;
 
       // Queue system components (NEW)
@@ -547,18 +549,20 @@ import debugLogger from './utils/DebugLogger.js';
 
       console.log('[Tapko] Widget initialized', CONFIG.VERSION);
 
-      // Guided first-comment entry — a link from Tapko's onboarding can open
-      // the owner's own site already in feedback mode, so their first comment
-      // is a real one through the real widget rather than something the app
-      // fakes on their behalf. Runs last, after isInitialized is set, because
-      // _enterFeedbackMode depends on the pin manager and shadow DOM built
-      // above. Non-fatal: a failure here must never break a page that only
-      // wanted the widget present.
-      if (shouldAutoEnterFeedbackMode(window.location.search, this.isDisabled)) {
+      // Guided first-comment entry — a link from Tapko's onboarding points
+      // the owner at the entry button and asks them to press it. It does not
+      // press it for them: the real interaction, the one their clients will
+      // perform, begins with noticing that button, and an owner who never
+      // performs it comes away thinking feedback mode is simply always on.
+      // Non-fatal: a failure here must never break a page that only wanted
+      // the widget present.
+      if (shouldShowFirstCommentPrompt(window.location.search, this.isDisabled, this._sessionStorage())) {
         try {
-          this._enterFeedbackMode();
+          this.firstCommentPrompt.show(this.shadowRoot, () =>
+            rememberDismissal(this._sessionStorage())
+          );
         } catch (error) {
-          console.warn('[Tapko] Could not auto-enter feedback mode:', error.message);
+          console.warn('[Tapko] Could not show the first-comment prompt:', error.message);
         }
       }
     }
@@ -625,6 +629,19 @@ import debugLogger from './utils/DebugLogger.js';
     }
 
     /**
+     * sessionStorage, or null where the browser refuses it (private
+     * browsing, blocked cookies) — merely reading the property can throw,
+     * so every caller goes through here rather than touching it directly.
+     */
+    _sessionStorage() {
+      try {
+        return window.sessionStorage || null;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    /**
      * Toggle feedback mode
      */
     _toggleFeedbackMode() {
@@ -649,6 +666,11 @@ import debugLogger from './utils/DebugLogger.js';
       debugLogger.logUserAction('enter-feedback-mode');
       debugLogger.checkpoint('enter-feedback-mode');
       this.isInFeedbackMode = true;
+
+      // The prompt has been followed rather than rejected, so it is hidden
+      // without recording a dismissal — a later page in the same session
+      // can still show it if they never got as far as commenting.
+      this.firstCommentPrompt.hide();
 
       // Save original overflow but DON'T lock scroll - allow normal scrolling
       this._originalOverflow = document.body.style.overflow;
@@ -947,6 +969,11 @@ import debugLogger from './utils/DebugLogger.js';
       // Destroy disabled popup
       if (this.disabledPopup) {
         this.disabledPopup.destroy();
+      }
+
+      // Destroy the first-comment prompt
+      if (this.firstCommentPrompt) {
+        this.firstCommentPrompt.destroy();
       }
 
       // Destroy feedback widget

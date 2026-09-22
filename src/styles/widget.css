@@ -253,6 +253,98 @@
 }
 
 /* ===========================================
+   FIRST COMMENT PROMPT (activation plan)
+   Coach mark anchored beside the entry button, shown only when an
+   onboarding link carries ?tapko_feedback=1. Base rules below are the
+   bottom-right case; the WIDGET POSITION section further down carries the
+   overrides for the other three corners, following the same convention as
+   the entry button itself.
+   =========================================== */
+.dtc-first-comment-prompt {
+  position: fixed;
+  bottom: 80px;
+  right: 24px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+  padding: 14px 14px 14px 16px;
+  width: 260px;
+  /* Above the entry button it points at, so the arrow can overlap the gap
+     between them without the button's own stacking context clipping it. */
+  z-index: 2147483650;
+  transform: translateY(10px);
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.dtc-first-comment-prompt.dtc-visible {
+  transform: translateY(0);
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Arrow pointing down at the entry button below it. Drawn as a rotated
+   square sharing the card's border so the two visible edges keep the
+   card's outline, which a bordered CSS triangle cannot do. */
+.dtc-first-comment-prompt::after {
+  content: '';
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: #ffffff;
+  border-right: 1px solid #e5e7eb;
+  border-bottom: 1px solid #e5e7eb;
+  bottom: -7px;
+  right: 28px;
+  transform: rotate(45deg);
+}
+
+.dtc-first-comment-prompt-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.dtc-first-comment-prompt-title {
+  margin: 0 0 4px 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: #111827;
+}
+
+.dtc-first-comment-prompt-text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #6b7280;
+}
+
+.dtc-first-comment-prompt-close {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  padding: 2px;
+  cursor: pointer;
+  color: #9ca3af;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: color 0.2s, background-color 0.2s;
+}
+
+.dtc-first-comment-prompt-close:hover {
+  color: #111827;
+  background-color: #f3f4f6;
+}
+
+/* ===========================================
    WIDGET POSITION (v1 — dashboard-configured corner)
    Overrides for the 4 persistently-visible elements above (entry button,
    view-all button, hidden-warning, disabled-popup) — the only elements
@@ -275,6 +367,50 @@
 :host([data-position="bottom-left"]) .dtc-feedback-disabled-popup {
   right: auto;
   left: 24px;
+}
+
+:host([data-position="bottom-left"]) .dtc-first-comment-prompt {
+  right: auto;
+  left: 24px;
+}
+
+:host([data-position="bottom-left"]) .dtc-first-comment-prompt::after {
+  right: auto;
+  left: 28px;
+}
+
+:host([data-position="top-right"]) .dtc-first-comment-prompt {
+  bottom: auto;
+  top: 80px;
+}
+
+/* Flipped to point up at a button now above the card: the arrow moves to
+   the top edge and shows its other two borders. */
+:host([data-position="top-right"]) .dtc-first-comment-prompt::after {
+  bottom: auto;
+  top: -7px;
+  border-right: none;
+  border-bottom: none;
+  border-left: 1px solid #e5e7eb;
+  border-top: 1px solid #e5e7eb;
+}
+
+:host([data-position="top-left"]) .dtc-first-comment-prompt {
+  bottom: auto;
+  right: auto;
+  top: 80px;
+  left: 24px;
+}
+
+:host([data-position="top-left"]) .dtc-first-comment-prompt::after {
+  bottom: auto;
+  right: auto;
+  top: -7px;
+  left: 28px;
+  border-right: none;
+  border-bottom: none;
+  border-left: 1px solid #e5e7eb;
+  border-top: 1px solid #e5e7eb;
 }
 
 :host([data-position="top-right"]) .dtc-floating-entry-button,
