@@ -29,6 +29,7 @@ import { DrawingCanvas } from './components/DrawingCanvas.js';
 import { FeedbackDisabledPopup } from './components/FeedbackDisabledPopup.js';
 import { FeedbackWidget } from './components/FeedbackWidget.js';
 import { dispatchCustomEvent, getUrlParam, resolveWidgetPosition } from './utils/dom.js';
+import { shouldAutoEnterFeedbackMode } from './utils/autoFeedbackMode.js';
 import { logManager } from './managers/LogManager.js';
 import { networkLogManager } from './managers/NetworkLogManager.js';
 import { analyticsManager } from './managers/AnalyticsManager.js';
@@ -545,6 +546,21 @@ import debugLogger from './utils/DebugLogger.js';
       });
 
       console.log('[Tapko] Widget initialized', CONFIG.VERSION);
+
+      // Guided first-comment entry — a link from Tapko's onboarding can open
+      // the owner's own site already in feedback mode, so their first comment
+      // is a real one through the real widget rather than something the app
+      // fakes on their behalf. Runs last, after isInitialized is set, because
+      // _enterFeedbackMode depends on the pin manager and shadow DOM built
+      // above. Non-fatal: a failure here must never break a page that only
+      // wanted the widget present.
+      if (shouldAutoEnterFeedbackMode(window.location.search, this.isDisabled)) {
+        try {
+          this._enterFeedbackMode();
+        } catch (error) {
+          console.warn('[Tapko] Could not auto-enter feedback mode:', error.message);
+        }
+      }
     }
 
     /**
