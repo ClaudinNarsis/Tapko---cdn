@@ -345,6 +345,87 @@
 }
 
 /* ===========================================
+   TAP ANYWHERE PROMPT (activation plan, step 2)
+   Shown after the owner enters feedback mode from a guided onboarding link.
+   Top-centre and corner-independent on purpose: it points at the page
+   itself, not at the widget, so it needs no data-position overrides, and it
+   stays clear of the snackbar at bottom: 150px.
+   =========================================== */
+.dtc-tap-anywhere-prompt {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+  padding: 14px 14px 14px 16px;
+  width: 280px;
+  max-width: calc(100vw - 48px);
+  /* Above the feedback overlay (2147483647) and its snackbar so the
+     instruction is never tinted or covered by what it explains. */
+  z-index: 2147483650;
+  /* The page underneath is exactly what the owner is being told to click,
+     so the card itself must not intercept that click. */
+  pointer-events: none;
+  transform: translateX(-50%) translateY(-10px);
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.dtc-tap-anywhere-prompt.dtc-visible {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+  visibility: visible;
+}
+
+.dtc-tap-anywhere-prompt-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.dtc-tap-anywhere-prompt-title {
+  margin: 0 0 4px 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: #111827;
+}
+
+.dtc-tap-anywhere-prompt-text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #6b7280;
+}
+
+.dtc-tap-anywhere-prompt-close {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  padding: 2px;
+  cursor: pointer;
+  color: #9ca3af;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  /* Re-enabled on the one element that is meant to be clicked. */
+  pointer-events: all;
+  transition: color 0.2s, background-color 0.2s;
+}
+
+.dtc-tap-anywhere-prompt-close:hover {
+  color: #111827;
+  background-color: #f3f4f6;
+}
+
+/* ===========================================
    WIDGET POSITION (v1 — dashboard-configured corner)
    Overrides for the 4 persistently-visible elements above (entry button,
    view-all button, hidden-warning, disabled-popup) — the only elements

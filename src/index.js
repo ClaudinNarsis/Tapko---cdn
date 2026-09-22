@@ -29,8 +29,14 @@ import { DrawingCanvas } from './components/DrawingCanvas.js';
 import { FeedbackDisabledPopup } from './components/FeedbackDisabledPopup.js';
 import { FeedbackWidget } from './components/FeedbackWidget.js';
 import { dispatchCustomEvent, getUrlParam, resolveWidgetPosition } from './utils/dom.js';
-import { shouldShowFirstCommentPrompt, rememberDismissal } from './utils/firstCommentPrompt.js';
+import {
+  shouldShowFirstCommentPrompt,
+  shouldShowTapPrompt,
+  rememberDismissal,
+  rememberTapDismissal
+} from './utils/firstCommentPrompt.js';
 import { FirstCommentPrompt } from './components/FirstCommentPrompt.js';
+import { TapAnywherePrompt } from './components/TapAnywherePrompt.js';
 import { logManager } from './managers/LogManager.js';
 import { networkLogManager } from './managers/NetworkLogManager.js';
 import { analyticsManager } from './managers/AnalyticsManager.js';
@@ -97,6 +103,10 @@ import debugLogger from './utils/DebugLogger.js';
       this.drawingCanvas = null;
       this.disabledPopup = new FeedbackDisabledPopup();
       this.firstCommentPrompt = new FirstCommentPrompt();
+      this.tapAnywherePrompt = new TapAnywherePrompt();
+      // True only for a page load that came from a Tapko onboarding link;
+      // it gates the follow-up prompt so no ordinary visitor is coached.
+      this.isGuidedFirstComment = false;
       this.feedbackWidget = null;
 
       // Queue system components (NEW)
@@ -556,7 +566,12 @@ import debugLogger from './utils/DebugLogger.js';
       // performs it comes away thinking feedback mode is simply always on.
       // Non-fatal: a failure here must never break a page that only wanted
       // the widget present.
-      if (shouldShowFirstCommentPrompt(window.location.search, this.isDisabled, this._sessionStorage())) {
+      this.isGuidedFirstComment = shouldShowFirstCommentPrompt(
+        window.location.search,
+        this.isDisabled,
+        this._sessionStorage()
+      );
+      if (this.isGuidedFirstComment) {
         try {
           this.firstCommentPrompt.show(this.shadowRoot, () =>
             rememberDismissal(this._sessionStorage())
@@ -672,6 +687,20 @@ import debugLogger from './utils/DebugLogger.js';
       // can still show it if they never got as far as commenting.
       this.firstCommentPrompt.hide();
 
+      // ...and hand over to the follow-up prompt. Feedback mode on its own
+      // is a faint tint and a snackbar saying it is on; neither says that
+      // the next move is to click the page, which is the step between
+      // "installed" and "activated".
+      if (shouldShowTapPrompt(this.isGuidedFirstComment, this._sessionStorage())) {
+        try {
+          this.tapAnywherePrompt.show(this.shadowRoot, () =>
+            rememberTapDismissal(this._sessionStorage())
+          );
+        } catch (error) {
+          console.warn('[Tapko] Could not show the tap prompt:', error.message);
+        }
+      }
+
       // Save original overflow but DON'T lock scroll - allow normal scrolling
       this._originalOverflow = document.body.style.overflow;
 
@@ -752,6 +781,8 @@ import debugLogger from './utils/DebugLogger.js';
       debugLogger.logUserAction('exit-feedback-mode');
       this.isInFeedbackMode = false;
 
+      this.tapAnywherePrompt.hide();
+
       // Hide pins when exiting feedback mode
       if (this.pinManager) {
         this.pinManager.hide();
@@ -801,6 +832,10 @@ import debugLogger from './utils/DebugLogger.js';
       }
 
       debugLogger.logUserAction('feedback-tap', { tag: element?.tagName, x: Math.round(coordinates?.x), y: Math.round(coordinates?.y) });
+
+      // They have done the thing it asked for, so it goes away without being
+      // recorded as a dismissal.
+      this.tapAnywherePrompt.hide();
       debugLogger.checkpoint('comment-card-create');
 
       // Close existing card
@@ -974,6 +1009,11 @@ import debugLogger from './utils/DebugLogger.js';
       // Destroy the first-comment prompt
       if (this.firstCommentPrompt) {
         this.firstCommentPrompt.destroy();
+      }
+
+      // Destroy the follow-up tap prompt
+      if (this.tapAnywherePrompt) {
+        this.tapAnywherePrompt.destroy();
       }
 
       // Destroy feedback widget

@@ -129,4 +129,16 @@ describe('widget.css — position override structural correctness (v1)', () => {
       expect(allSelectors).not.toContain(selector);
     }
   });
+
+  it('the tap-anywhere prompt is corner-independent, so it needs no override', () => {
+    // It points at the page rather than at the widget, and is centred at the
+    // top of the viewport. An override would be the bug here, not the fix:
+    // it would drag the card into whichever corner the entry button sits in,
+    // where it can cover the very thing it is telling the owner to click.
+    const rules = extractPositionRules(css);
+    const allSelectors = rules.map((r) => r.selectorList).join(' ');
+    expect(allSelectors).not.toContain('.dtc-tap-anywhere-prompt');
+    // ...but it does exist, otherwise the assertion above passes vacuously.
+    expect(css).toContain('.dtc-tap-anywhere-prompt {');
+  });
 });

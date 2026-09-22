@@ -22,6 +22,12 @@ export const FIRST_COMMENT_PARAM = 'tapko_feedback';
 // a later visit through a fresh onboarding link.
 export const DISMISSED_STORAGE_KEY = 'tapko_first_comment_prompt_dismissed';
 
+// The second step of the same guided run: once the owner has pressed the
+// entry button, nothing on screen tells them the next move is to click the
+// page itself. Tracked under its own key so dismissing one prompt does not
+// silently swallow the other.
+export const TAP_PROMPT_DISMISSED_STORAGE_KEY = 'tapko_tap_prompt_dismissed';
+
 // Deliberately permissive about the value ('1' and 'true' both read as "yes"
 // to a human hand-editing the URL) but strict about everything else, so a
 // stray ?tapko_feedback=0 in a shared link can't prompt an ordinary visitor.
@@ -47,15 +53,36 @@ export function shouldShowFirstCommentPrompt(search, isDisabled, storage) {
   // A previous dismissal in this session wins over the parameter — otherwise
   // the prompt returns on every navigation, since the link that carried the
   // parameter is still the page's URL.
+  return !wasDismissed(storage, DISMISSED_STORAGE_KEY);
+}
+
+/**
+ * Whether to show the follow-up prompt, the one that appears after the owner
+ * has actually entered feedback mode and needs to be told to click the page.
+ *
+ * It is deliberately gated on the same guided session rather than on feedback
+ * mode alone: an ordinary visitor on a client's site, or the owner on a later
+ * visit, does not get coached.
+ *
+ * @param {boolean} isGuidedSession - whether this page load came from a Tapko
+ *   onboarding link (i.e. shouldShowFirstCommentPrompt was true at init)
+ * @param {Storage|null} storage - sessionStorage, or null where unavailable
+ * @returns {boolean}
+ */
+export function shouldShowTapPrompt(isGuidedSession, storage) {
+  if (!isGuidedSession) return false;
+  return !wasDismissed(storage, TAP_PROMPT_DISMISSED_STORAGE_KEY);
+}
+
+function wasDismissed(storage, key) {
   try {
-    if (storage && storage.getItem(DISMISSED_STORAGE_KEY) === 'true') return false;
+    return !!storage && storage.getItem(key) === 'true';
   } catch (_) {
     // Storage blocked (private browsing, blocked cookies) — show the prompt
     // rather than suppress it; a repeated prompt is a smaller failure than
     // never showing the one thing telling them what to do.
+    return false;
   }
-
-  return true;
 }
 
 /**
@@ -63,8 +90,17 @@ export function shouldShowFirstCommentPrompt(search, isDisabled, storage) {
  * to remember a dismissal must not break the page.
  */
 export function rememberDismissal(storage) {
+  remember(storage, DISMISSED_STORAGE_KEY);
+}
+
+/** Records a dismissal of the follow-up "click the page" prompt. */
+export function rememberTapDismissal(storage) {
+  remember(storage, TAP_PROMPT_DISMISSED_STORAGE_KEY);
+}
+
+function remember(storage, key) {
   try {
-    if (storage) storage.setItem(DISMISSED_STORAGE_KEY, 'true');
+    if (storage) storage.setItem(key, 'true');
   } catch (_) {
     // Intentionally ignored — see above.
   }
