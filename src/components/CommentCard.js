@@ -596,6 +596,9 @@ class CommentCard {
           debugLogger.info('Calling captureViewportScreenshot');
           // Capture screenshot of current viewport
           const screenshotData = await captureScreenshot({ shadowRoot: this.shadowRoot, renderMode: this.renderMode, screenshotMode: this.screenshotMode });
+          // Every capture path can fail (renderer down, payload too large, no
+          // renderer on HiDPI) and return null — nothing to draw on.
+          if (!screenshotData) throw new Error('No screenshot available');
           debugLogger.info('Screenshot capture returned', {
             hasDataURL: !!screenshotData.dataURL,
             dataURLLength: screenshotData.dataURL?.length
@@ -712,8 +715,8 @@ class CommentCard {
 
         debugLogger.endOperation('Handle draw click', { success: false, error: error.message });
 
-        // Show error to user
-        alert('Failed to capture screenshot. Please try again.');
+        // Inline error, not alert(): a native dialog blocks the host page.
+        this._showError("Couldn't capture a screenshot to draw on. You can still send your comment.");
       }
     } else if (this.onDrawRequested) {
       // Edit existing drawing - pass existing screenshot and annotation data

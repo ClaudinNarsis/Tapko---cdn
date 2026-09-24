@@ -84,7 +84,7 @@ describe('widget.css — position override structural correctness (v1)', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('the 4 persistent elements each get a top-left rule (full corner-flip coverage)', () => {
+  it('the 5 persistent elements each get a top-left rule (full corner-flip coverage)', () => {
     const rules = extractPositionRules(css);
     const topLeftSelectors = rules
       .filter((r) => r.positions.includes('top-left'))
@@ -94,6 +94,22 @@ describe('widget.css — position override structural correctness (v1)', () => {
     expect(topLeftSelectors).toContain('.dtc-widget-view-all-btn');
     expect(topLeftSelectors).toContain('.dtc-widget-hidden-warning');
     expect(topLeftSelectors).toContain('.dtc-feedback-disabled-popup');
+    // The first-comment prompt is corner-anchored to the entry button it
+    // points at, so it flips with it — a corner where the card sits in one
+    // place and its arrow points at empty space is the failure this catches.
+    expect(topLeftSelectors).toContain('.dtc-first-comment-prompt');
+  });
+
+  it('the first-comment prompt and its arrow both flip on every non-default corner', () => {
+    const rules = extractPositionRules(css);
+    for (const position of ['bottom-left', 'top-right', 'top-left']) {
+      const selectors = rules
+        .filter((r) => r.positions.includes(position))
+        .map((r) => r.selectorList)
+        .join(' ');
+      expect(selectors).toContain('.dtc-first-comment-prompt');
+      expect(selectors).toContain('.dtc-first-comment-prompt::after');
+    }
   });
 
   it('none of the session-scoped overlay elements (feedback-overlay, snackbar, screenshot/drawing UI, permission/exit dialogs) are targeted by a position override', () => {
@@ -112,5 +128,17 @@ describe('widget.css — position override structural correctness (v1)', () => {
     for (const selector of sessionScoped) {
       expect(allSelectors).not.toContain(selector);
     }
+  });
+
+  it('the tap-anywhere prompt is corner-independent, so it needs no override', () => {
+    // It points at the page rather than at the widget, and is centred at the
+    // top of the viewport. An override would be the bug here, not the fix:
+    // it would drag the card into whichever corner the entry button sits in,
+    // where it can cover the very thing it is telling the owner to click.
+    const rules = extractPositionRules(css);
+    const allSelectors = rules.map((r) => r.selectorList).join(' ');
+    expect(allSelectors).not.toContain('.dtc-tap-anywhere-prompt');
+    // ...but it does exist, otherwise the assertion above passes vacuously.
+    expect(css).toContain('.dtc-tap-anywhere-prompt {');
   });
 });

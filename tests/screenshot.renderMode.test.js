@@ -54,3 +54,49 @@ describe('captureScreenshot — renderMode branch (T9)', () => {
     );
   });
 });
+
+// screenshotMode 'local' used to be a dead end: HiDPI returned null and a
+// denied getDisplayMedia threw, so feedback was submitted with no screenshot.
+// It must now fall back to DOM serialization (never URL navigation).
+describe('captureScreenshot — screenshotMode "local" fallback', () => {
+  const DOM_FALLBACK_LOG = expect.stringContaining('renderMode is "html" — skipping URL-based screenshot');
+
+  beforeEach(() => {
+    vi.resetModules();
+    vi.stubEnv('RENDERER_URL', 'https://renderer.example.com');
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    delete navigator.mediaDevices;
+    vi.restoreAllMocks();
+    window.devicePixelRatio = 1;
+  });
+
+  it('falls back to DOM serialization on HiDPI instead of returning no screenshot', async () => {
+    window.devicePixelRatio = 2;
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const { captureScreenshot } = await import('../src/utils/screenshot.js');
+
+    await captureScreenshot({ screenshotMode: 'local' });
+
+    expect(logSpy).toHaveBeenCalledWith(DOM_FALLBACK_LOG);
+    expect(logSpy).not.toHaveBeenCalledWith('[Tapko] Attempting URL-based screenshot');
+  });
+
+  it('falls back to DOM serialization when screen capture permission is denied', async () => {
+    window.devicePixelRatio = 1;
+    const denied = Object.assign(new Error('Permission denied'), { name: 'NotAllowedError' });
+    Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getDisplayMedia: vi.fn().mockRejectedValue(denied) } });
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const { captureScreenshot } = await import('../src/utils/screenshot.js');
+
+    await captureScreenshot({ screenshotMode: 'local' });
+
+    expect(navigator.mediaDevices.getDisplayMedia).toHaveBeenCalled();
+    expect(logSpy).toHaveBeenCalledWith(DOM_FALLBACK_LOG);
+    expect(logSpy).not.toHaveBeenCalledWith('[Tapko] Attempting URL-based screenshot');
+  });
+});

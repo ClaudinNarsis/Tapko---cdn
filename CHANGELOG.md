@@ -2,6 +2,16 @@
 
 All notable changes to Tapko CDN Widget are documented here.
 
+## [4.5.0.0] - 2026-09-24
+
+### Added
+- New visitors are guided into feedback mode from a link (e.g. from an install-confirmation email) — pointed at the entry button and told to click the page once they're in, for a smoother first comment
+- Local screenshot mode now falls back to DOM capture when a direct capture attempt fails or the display is HiDPI, instead of submitting with no screenshot at all
+- Inline error shown when Draw mode has no screenshot available to draw on
+
+### Fixed
+- Root-caused and documented the "widget only installs on one page" report — four distinct defects, tracked in `docs/WIDGET_INSTALL_SCOPE.md`
+
 ## [4.4.0.0] - 2026-07-23
 
 ### Added
