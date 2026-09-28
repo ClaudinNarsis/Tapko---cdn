@@ -142,3 +142,46 @@ describe('captureDOMScreenshot — clips the document to the viewport after the 
     expect(sentHtml).toMatch(new RegExp(`<html[^>]*height:\\s*${window.innerHeight}px`));
   });
 });
+
+// Regression test: cloneNode(true) only copies an <iframe src="..."> tag, not
+// its live contentDocument. Sites that render real content inside a
+// same-origin iframe (e.g. an embedded preview pane) ended up with an empty
+// iframe shell in the serialized HTML — the renderer painted only the outer
+// page's background, matching the "blank DOM screenshot" bug report.
+describe('captureDOMScreenshot — inlines same-origin iframe content', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.stubEnv('RENDERER_URL', 'https://renderer.example.com');
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubGlobal('getComputedStyle', vi.fn(() => Object.assign([], { getPropertyValue: () => '' })));
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    document.querySelectorAll('iframe').forEach(el => el.remove());
+  });
+
+  it('replaces a same-origin iframe with its rendered content instead of an empty shell', async () => {
+    const iframe = document.createElement('iframe');
+    document.body.appendChild(iframe);
+    iframe.contentDocument.open();
+    iframe.contentDocument.write('<html><body><div id="preview-content">Rendered preview</div></body></html>');
+    iframe.contentDocument.close();
+
+    let sentHtml = '';
+    vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
+      sentHtml = JSON.parse(init.body).html;
+      return { ok: true, json: async () => ({ format: 'webp', image: 'AAAA' }) };
+    }));
+
+    const { captureScreenshot } = await import('../src/utils/screenshot.js');
+    const result = await captureScreenshot({ renderMode: 'html' });
+
+    expect(result).not.toBeNull();
+    expect(sentHtml).toContain('Rendered preview');
+    expect(sentHtml).not.toContain('<iframe');
+  });
+});
