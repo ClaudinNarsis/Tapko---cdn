@@ -775,6 +775,33 @@ async function captureDOMScreenshot(options = {}) {
     } catch { /* tainted canvas — leave as-is */ }
   });
 
+  // 4j. Inline same-origin <iframe> content. cloneNode(true) only copies the
+  // <iframe src="..."> tag itself — the live contentDocument (where the real
+  // rendered content lives for iframe-embedded apps/previews) is never part
+  // of the clone. Without this, the renderer paints an empty iframe shell —
+  // a blank rectangle where the embedded content should be. Cross-origin
+  // iframes can't be introspected (browser same-origin policy blocks
+  // contentDocument access), so those are left as-is; there's no way to
+  // capture their content from here.
+  const iframeEls = [...clone.querySelectorAll('iframe')];
+  const liveIframes = [...document.querySelectorAll('iframe')];
+  iframeEls.forEach((cloneIframe, i) => {
+    const live = liveIframes[i];
+    if (!live) return;
+    try {
+      const doc = live.contentDocument;
+      if (!doc || !doc.body) return; // cross-origin or not yet loaded
+      const inner = doc.documentElement.cloneNode(true);
+      inner.querySelectorAll('script, noscript').forEach(el => el.remove());
+      const wrapper = document.createElement('div');
+      wrapper.setAttribute('data-tapko-iframe-inline', 'true');
+      const rect = live.getBoundingClientRect();
+      wrapper.style.cssText = `width:${rect.width}px;height:${rect.height}px;overflow:hidden;`;
+      wrapper.appendChild(inner);
+      cloneIframe.replaceWith(wrapper);
+    } catch { /* cross-origin iframe — leave as-is */ }
+  });
+
   // 5. Serialize and minify
   let html = _serialiseClone(clone);
 
