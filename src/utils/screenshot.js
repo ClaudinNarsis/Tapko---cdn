@@ -683,16 +683,21 @@ async function captureDOMScreenshot(options = {}) {
   // 4b. Freeze JS-initialized CSS custom properties AND animations BEFORE
   //     stripping scripts. Appending to the end of <head> ensures these rules
   //     win over earlier stylesheet declarations at the same specificity.
-  //     The animation freeze means entrance animations (opacity:0→1, slide-ins)
-  //     never play in the renderer, so Puppeteer always sees a stable frame
-  //     rather than mid-flight invisible content (plain white screens).
+  //     The renderer opens this HTML as a FRESH document (file:// navigation),
+  //     so every animation starts at t=0. animation-play-state:paused freezes
+  //     it there — at its 0% keyframe — which for any entrance animation
+  //     (opacity:0→1, fill-mode:both) means the element is frozen invisible,
+  //     not "stable". animation-duration:0 instead collapses the animation to
+  //     its end state instantly (0% and 100% both apply within the same
+  //     instant, and the last-declared/100% wins), landing on the fully
+  //     revealed frame regardless of fill-mode.
   {
     const freezeStyle = document.createElement('style');
     const customPropRule = frozenCustomProps.length
       ? `:root{${frozenCustomProps.join(';')}}`
       : '';
     const animationFreezeRule =
-      '*, *::before, *::after{animation-play-state:paused!important;transition-duration:0s!important;}';
+      '*, *::before, *::after{animation-duration:0s!important;animation-delay:0s!important;transition-duration:0s!important;}';
     freezeStyle.textContent = customPropRule + animationFreezeRule;
     clone.querySelector('head')?.appendChild(freezeStyle);
   }

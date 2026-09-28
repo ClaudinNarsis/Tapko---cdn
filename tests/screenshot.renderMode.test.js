@@ -185,3 +185,44 @@ describe('captureDOMScreenshot — inlines same-origin iframe content', () => {
     expect(sentHtml).not.toContain('<iframe');
   });
 });
+
+// Regression test: the injected freeze rule used to be
+// `animation-play-state: paused`, which freezes an animation wherever it
+// currently sits in its timeline. The renderer opens the serialized HTML as
+// a FRESH document (file:// navigation), so every animation starts at t=0 —
+// pausing there locks any entrance animation (opacity 0% at t=0, fill-mode
+// both) permanently invisible instead of "stable". This produced exactly the
+// reported bug: pages using CSS entrance animations (fade-up, slide-in)
+// screenshotted as just their static background, with all animated content
+// invisible. animation-duration:0 collapses the animation to its end state
+// instantly instead of freezing mid-flight.
+describe('captureDOMScreenshot — freezes animations at their end state, not mid-flight', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.stubEnv('RENDERER_URL', 'https://renderer.example.com');
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubGlobal('getComputedStyle', vi.fn(() => Object.assign([], { getPropertyValue: () => '' })));
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('injects animation-duration:0 instead of animation-play-state:paused', async () => {
+    let sentHtml = '';
+    vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
+      sentHtml = JSON.parse(init.body).html;
+      return { ok: true, json: async () => ({ format: 'webp', image: 'AAAA' }) };
+    }));
+
+    const { captureScreenshot } = await import('../src/utils/screenshot.js');
+    const result = await captureScreenshot({ renderMode: 'html' });
+
+    expect(result).not.toBeNull();
+    expect(sentHtml).toContain('animation-duration:0s!important');
+    expect(sentHtml).not.toContain('animation-play-state');
+  });
+});
