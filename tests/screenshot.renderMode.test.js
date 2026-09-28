@@ -100,3 +100,45 @@ describe('captureScreenshot — screenshotMode "local" fallback', () => {
     expect(logSpy).not.toHaveBeenCalledWith('[Tapko] Attempting URL-based screenshot');
   });
 });
+
+// Regression test: when the visitor has scrolled, captureDOMScreenshot() used
+// to shift <body> up via a negative margin without clipping <html> to the
+// viewport. <html> grew to fit the shifted body, so the renderer's unscrolled
+// top-left `width x height` capture landed on blank space above the real
+// content instead of on it — a blank screenshot for any scrollY/scrollX > 0.
+describe('captureDOMScreenshot — clips the document to the viewport after the scroll-offset shift', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.stubEnv('RENDERER_URL', 'https://renderer.example.com');
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('constrains the cloned <html> to viewportWidth x viewportHeight with overflow hidden', async () => {
+    Object.defineProperty(window, 'scrollY', { configurable: true, value: 800 });
+    Object.defineProperty(window, 'scrollX', { configurable: true, value: 0 });
+    // jsdom's CSSStyleDeclaration isn't iterable, unrelated to the fix under
+    // test — stub getComputedStyle so captureDOMScreenshot can run to completion.
+    vi.stubGlobal('getComputedStyle', vi.fn(() => Object.assign([], { getPropertyValue: () => '' })));
+
+    let sentHtml = '';
+    vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
+      sentHtml = JSON.parse(init.body).html;
+      return { ok: true, json: async () => ({ format: 'webp', image: 'AAAA' }) };
+    }));
+
+    const { captureScreenshot } = await import('../src/utils/screenshot.js');
+    const result = await captureScreenshot({ renderMode: 'html' });
+
+    expect(result).not.toBeNull();
+    expect(sentHtml).toMatch(/<html[^>]*overflow:\s*hidden/);
+    expect(sentHtml).toMatch(new RegExp(`<html[^>]*width:\\s*${window.innerWidth}px`));
+    expect(sentHtml).toMatch(new RegExp(`<html[^>]*height:\\s*${window.innerHeight}px`));
+  });
+});

@@ -703,8 +703,14 @@ async function captureDOMScreenshot(options = {}) {
   // 4d. Mask sensitive elements
   clone.querySelectorAll('.mk-mask, [data-mk-mask], .mk-exclude, [data-mk-exclude]').forEach(el => el.remove());
 
-  // 4e. Fix scroll position so renderer paints the correct area
-  clone.style.cssText += `; scroll-behavior: auto !important;`;
+  // 4e. Fix scroll position so renderer paints the correct area.
+  // The renderer screenshots the top-left `viewportWidth x viewportHeight` of
+  // the document, unscrolled. Shifting body up/left by the scroll offset only
+  // works if <html> is clipped to the viewport size — otherwise <html> grows
+  // to fit the shifted body and the renderer's capture lands on the empty
+  // space now sitting above/left of the real content (blank screenshot for
+  // any scrollY/scrollX > 0, i.e. most real-world captures).
+  clone.style.cssText += `; scroll-behavior: auto !important; overflow: hidden !important; width: ${viewportWidth}px !important; height: ${viewportHeight}px !important;`;
   const bodyClone = clone.querySelector('body');
   if (bodyClone) {
     bodyClone.style.setProperty('overflow', 'visible', 'important');
