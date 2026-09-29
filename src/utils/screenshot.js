@@ -473,11 +473,54 @@ async function _fetchAsDataURI(url, maxBytes = 512 * 1024) {
 }
 
 /**
+ * Resolve every @import url(...) in a CSS string by fetching the imported
+ * stylesheet and splicing its text in place, recursively (an @import'd file
+ * can itself @import another). Without this, @font-face rules that a page
+ * pulls in via `@import url('https://fonts.googleapis.com/...')` — common in
+ * bundled/Tailwind CSS — are invisible to the <link>-only inlining below, so
+ * the renderer never sees the font-family declaration at all and silently
+ * falls back to a system font.
+ */
+async function _resolveCSSImports(css, baseUrl, depth = 0) {
+  if (depth > 5) return css; // guard against pathological/circular @import chains
+  // \s* not \s+ — Tailwind v4/Lightning CSS minifies to `@import"url"` with
+  // no space before the quote (confirmed in production: Vite build output).
+  const importPattern = /@import\s*(?:url\(\s*["']?([^"')]+)["']?\s*\)|["']([^"']+)["'])[^;]*;/g;
+  const matches = [...css.matchAll(importPattern)];
+  if (!matches.length) return css;
+  const replacements = await Promise.allSettled(
+    matches.map(async m => {
+      const original = m[0];
+      const href = m[1] || m[2];
+      try {
+        const absolute = new URL(href, baseUrl).href;
+        const res = await fetch(absolute, { mode: 'cors', credentials: 'omit' });
+        if (!res.ok) return { original, replacement: original };
+        const importedCss = await _resolveCSSImports(await res.text(), absolute, depth + 1);
+        return { original, replacement: importedCss };
+      } catch {
+        return { original, replacement: original };
+      }
+    })
+  );
+  let result = css;
+  for (const r of replacements) {
+    if (r.status === 'fulfilled' && r.value.replacement !== r.value.original) {
+      result = result.replace(r.value.original, r.value.replacement);
+    }
+  }
+  return result;
+}
+
+/**
  * Inline all url() references inside a CSS string. Returns the modified CSS.
  * Skips web font resources — they add 200–400 KB each with no meaningful
- * impact on the renderer output (Puppeteer falls back to system fonts).
+ * impact on the renderer output (the renderer fetches them live instead; see
+ * renderController.js _waitAndFreeze, which explicitly waits on
+ * document.fonts.ready for this reason).
  */
 async function _inlineCSSUrls(css, baseUrl) {
+  css = await _resolveCSSImports(css, baseUrl);
   const urlPattern = /url\(\s*["']?([^"')]+)["']?\s*\)/g;
   const matches = [...css.matchAll(urlPattern)];
   const replacements = await Promise.allSettled(
@@ -683,16 +726,21 @@ async function captureDOMScreenshot(options = {}) {
   // 4b. Freeze JS-initialized CSS custom properties AND animations BEFORE
   //     stripping scripts. Appending to the end of <head> ensures these rules
   //     win over earlier stylesheet declarations at the same specificity.
-  //     The animation freeze means entrance animations (opacity:0→1, slide-ins)
-  //     never play in the renderer, so Puppeteer always sees a stable frame
-  //     rather than mid-flight invisible content (plain white screens).
+  //     The renderer opens this HTML as a FRESH document (file:// navigation),
+  //     so every animation starts at t=0. animation-play-state:paused freezes
+  //     it there — at its 0% keyframe — which for any entrance animation
+  //     (opacity:0→1, fill-mode:both) means the element is frozen invisible,
+  //     not "stable". animation-duration:0 instead collapses the animation to
+  //     its end state instantly (0% and 100% both apply within the same
+  //     instant, and the last-declared/100% wins), landing on the fully
+  //     revealed frame regardless of fill-mode.
   {
     const freezeStyle = document.createElement('style');
     const customPropRule = frozenCustomProps.length
       ? `:root{${frozenCustomProps.join(';')}}`
       : '';
     const animationFreezeRule =
-      '*, *::before, *::after{animation-play-state:paused!important;transition-duration:0s!important;}';
+      '*, *::before, *::after{animation-duration:0s!important;animation-delay:0s!important;transition-duration:0s!important;}';
     freezeStyle.textContent = customPropRule + animationFreezeRule;
     clone.querySelector('head')?.appendChild(freezeStyle);
   }
@@ -703,8 +751,14 @@ async function captureDOMScreenshot(options = {}) {
   // 4d. Mask sensitive elements
   clone.querySelectorAll('.mk-mask, [data-mk-mask], .mk-exclude, [data-mk-exclude]').forEach(el => el.remove());
 
-  // 4e. Fix scroll position so renderer paints the correct area
-  clone.style.cssText += `; scroll-behavior: auto !important;`;
+  // 4e. Fix scroll position so renderer paints the correct area.
+  // The renderer screenshots the top-left `viewportWidth x viewportHeight` of
+  // the document, unscrolled. Shifting body up/left by the scroll offset only
+  // works if <html> is clipped to the viewport size — otherwise <html> grows
+  // to fit the shifted body and the renderer's capture lands on the empty
+  // space now sitting above/left of the real content (blank screenshot for
+  // any scrollY/scrollX > 0, i.e. most real-world captures).
+  clone.style.cssText += `; scroll-behavior: auto !important; overflow: hidden !important; width: ${viewportWidth}px !important; height: ${viewportHeight}px !important;`;
   const bodyClone = clone.querySelector('body');
   if (bodyClone) {
     bodyClone.style.setProperty('overflow', 'visible', 'important');
@@ -742,6 +796,18 @@ async function captureDOMScreenshot(options = {}) {
     } catch { /* leave original link if fetch fails */ }
   }));
 
+  // 4g2. Resolve @import inside existing <style> blocks (framework-bundled CSS
+  //      commonly ships this way — e.g. Next.js/Tailwind builds that @import
+  //      a Google Fonts stylesheet at the top of the bundle instead of using
+  //      a <link> tag). Skipped here, the @font-face rule it contains never
+  //      reaches the renderer and the page silently falls back to a system font.
+  const styleEls = [...clone.querySelectorAll('style')];
+  await Promise.allSettled(styleEls.map(async style => {
+    const css = style.textContent;
+    if (!css || !css.includes('@import')) return;
+    style.textContent = await _resolveCSSImports(css, location.href);
+  }));
+
   // 4h. Inline background-image style attributes — skip if result exceeds 100 KB
   const styledEls = [...clone.querySelectorAll('[style]')];
   await Promise.allSettled(styledEls.map(async el => {
@@ -767,6 +833,33 @@ async function captureDOMScreenshot(options = {}) {
       img.height = live.height;
       cloneCanvas.replaceWith(img);
     } catch { /* tainted canvas — leave as-is */ }
+  });
+
+  // 4j. Inline same-origin <iframe> content. cloneNode(true) only copies the
+  // <iframe src="..."> tag itself — the live contentDocument (where the real
+  // rendered content lives for iframe-embedded apps/previews) is never part
+  // of the clone. Without this, the renderer paints an empty iframe shell —
+  // a blank rectangle where the embedded content should be. Cross-origin
+  // iframes can't be introspected (browser same-origin policy blocks
+  // contentDocument access), so those are left as-is; there's no way to
+  // capture their content from here.
+  const iframeEls = [...clone.querySelectorAll('iframe')];
+  const liveIframes = [...document.querySelectorAll('iframe')];
+  iframeEls.forEach((cloneIframe, i) => {
+    const live = liveIframes[i];
+    if (!live) return;
+    try {
+      const doc = live.contentDocument;
+      if (!doc || !doc.body) return; // cross-origin or not yet loaded
+      const inner = doc.documentElement.cloneNode(true);
+      inner.querySelectorAll('script, noscript').forEach(el => el.remove());
+      const wrapper = document.createElement('div');
+      wrapper.setAttribute('data-tapko-iframe-inline', 'true');
+      const rect = live.getBoundingClientRect();
+      wrapper.style.cssText = `width:${rect.width}px;height:${rect.height}px;overflow:hidden;`;
+      wrapper.appendChild(inner);
+      cloneIframe.replaceWith(wrapper);
+    } catch { /* cross-origin iframe — leave as-is */ }
   });
 
   // 5. Serialize and minify
@@ -1050,5 +1143,6 @@ export {
   captureViewportScreenshot,
   generateThumbnail,
   dataURLToBlob,
-  loadHtmlToImage as importHtmlToImage
+  loadHtmlToImage as importHtmlToImage,
+  _resolveCSSImports
 };
