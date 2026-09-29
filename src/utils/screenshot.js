@@ -965,22 +965,29 @@ async function captureURLScreenshot(options = {}) {
  * preserves today's URL-first behavior unchanged.
  *
  * options.screenshotMode: user-set project override, independent of
- * renderMode. 'local' skips the server-side renderer entirely (steps 1 and
- * 2 above are never attempted, regardless of whether a rendererUrl is
- * configured) and goes straight to getDisplayMedia — for projects whose page
- * the renderer can never reach at all. Still subject to the DPR=1-only
- * constraint below: on HiDPI displays getDisplayMedia crashes the GPU
- * process, so capture is skipped there rather than forced.
+ * renderMode. 'local' never attempts URL navigation (step 1) and tries
+ * getDisplayMedia first — for projects whose page the renderer can never
+ * reach at all. If getDisplayMedia is denied, or the display is HiDPI (where
+ * getDisplayMedia crashes the GPU process), it falls back to DOM
+ * serialization (step 2) instead of submitting without a screenshot.
  */
 async function captureScreenshot(options = {}) {
   const dpr = window.devicePixelRatio || 1;
 
   if (options.screenshotMode === 'local') {
     if (dpr > 1) {
-      console.warn('[Tapko] screenshotMode is "local" but device is HiDPI — skipping screenshot');
-      return null;
+      console.warn('[Tapko] screenshotMode is "local" but device is HiDPI — falling back to DOM serialization');
+    } else {
+      try {
+        return await captureViewportScreenshot(options);
+      } catch (localErr) {
+        console.warn('[Tapko] Local capture failed:', localErr.message, '— falling back to DOM serialization');
+      }
     }
-    return await captureViewportScreenshot(options);
+    // DOM serialization renders the visitor's live DOM, so it works even when the
+    // renderer can't reach the page. Only URL navigation must stay skipped.
+    if (!CONFIG.API.rendererUrl) return null;
+    options = { ...options, renderMode: 'html' };
   }
 
   if (CONFIG.API.rendererUrl) {

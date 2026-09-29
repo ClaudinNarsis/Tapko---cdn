@@ -104,3 +104,33 @@ describe('CommentCard — forwards renderMode into captureScreenshot() (T9)', ()
     );
   });
 });
+
+// When every capture path fails, captureScreenshot() returns null. The Draw
+// button used to hit a TypeError on screenshotData.dataURL and fire a native
+// alert() that blocked the host page; it must show an inline error instead.
+describe('CommentCard — Draw click when no screenshot can be captured', () => {
+  beforeEach(() => {
+    captureScreenshotMock.mockReset();
+    captureScreenshotMock.mockResolvedValue(null);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    document.body.innerHTML = '';
+    vi.restoreAllMocks();
+  });
+
+  it('shows an inline error, no alert(), and does not open drawing mode', async () => {
+    const card = makeCard('url');
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(card, '_showError');
+    card.onDrawRequested = vi.fn();
+
+    await card._handleDrawClick();
+
+    expect(alertSpy).not.toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("Couldn't capture a screenshot"));
+    expect(card.onDrawRequested).not.toHaveBeenCalled();
+    expect(card.card.style.display).toBe('');
+  });
+});

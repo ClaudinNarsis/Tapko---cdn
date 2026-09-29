@@ -29,6 +29,14 @@ import { DrawingCanvas } from './components/DrawingCanvas.js';
 import { FeedbackDisabledPopup } from './components/FeedbackDisabledPopup.js';
 import { FeedbackWidget } from './components/FeedbackWidget.js';
 import { dispatchCustomEvent, getUrlParam, resolveWidgetPosition } from './utils/dom.js';
+import {
+  shouldShowFirstCommentPrompt,
+  shouldShowTapPrompt,
+  rememberDismissal,
+  rememberTapDismissal
+} from './utils/firstCommentPrompt.js';
+import { FirstCommentPrompt } from './components/FirstCommentPrompt.js';
+import { TapAnywherePrompt } from './components/TapAnywherePrompt.js';
 import { logManager } from './managers/LogManager.js';
 import { networkLogManager } from './managers/NetworkLogManager.js';
 import { analyticsManager } from './managers/AnalyticsManager.js';
@@ -94,6 +102,11 @@ import debugLogger from './utils/DebugLogger.js';
       this.feedbackOverlay = null;
       this.drawingCanvas = null;
       this.disabledPopup = new FeedbackDisabledPopup();
+      this.firstCommentPrompt = new FirstCommentPrompt();
+      this.tapAnywherePrompt = new TapAnywherePrompt();
+      // True only for a page load that came from a Tapko onboarding link;
+      // it gates the follow-up prompt so no ordinary visitor is coached.
+      this.isGuidedFirstComment = false;
       this.feedbackWidget = null;
 
       // Queue system components (NEW)
@@ -545,6 +558,28 @@ import debugLogger from './utils/DebugLogger.js';
       });
 
       console.log('[Tapko] Widget initialized', CONFIG.VERSION);
+
+      // Guided first-comment entry — a link from Tapko's onboarding points
+      // the owner at the entry button and asks them to press it. It does not
+      // press it for them: the real interaction, the one their clients will
+      // perform, begins with noticing that button, and an owner who never
+      // performs it comes away thinking feedback mode is simply always on.
+      // Non-fatal: a failure here must never break a page that only wanted
+      // the widget present.
+      this.isGuidedFirstComment = shouldShowFirstCommentPrompt(
+        window.location.search,
+        this.isDisabled,
+        this._sessionStorage()
+      );
+      if (this.isGuidedFirstComment) {
+        try {
+          this.firstCommentPrompt.show(this.shadowRoot, () =>
+            rememberDismissal(this._sessionStorage())
+          );
+        } catch (error) {
+          console.warn('[Tapko] Could not show the first-comment prompt:', error.message);
+        }
+      }
     }
 
     /**
@@ -609,6 +644,19 @@ import debugLogger from './utils/DebugLogger.js';
     }
 
     /**
+     * sessionStorage, or null where the browser refuses it (private
+     * browsing, blocked cookies) — merely reading the property can throw,
+     * so every caller goes through here rather than touching it directly.
+     */
+    _sessionStorage() {
+      try {
+        return window.sessionStorage || null;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    /**
      * Toggle feedback mode
      */
     _toggleFeedbackMode() {
@@ -633,6 +681,25 @@ import debugLogger from './utils/DebugLogger.js';
       debugLogger.logUserAction('enter-feedback-mode');
       debugLogger.checkpoint('enter-feedback-mode');
       this.isInFeedbackMode = true;
+
+      // The prompt has been followed rather than rejected, so it is hidden
+      // without recording a dismissal — a later page in the same session
+      // can still show it if they never got as far as commenting.
+      this.firstCommentPrompt.hide();
+
+      // ...and hand over to the follow-up prompt. Feedback mode on its own
+      // is a faint tint and a snackbar saying it is on; neither says that
+      // the next move is to click the page, which is the step between
+      // "installed" and "activated".
+      if (shouldShowTapPrompt(this.isGuidedFirstComment, this._sessionStorage())) {
+        try {
+          this.tapAnywherePrompt.show(this.shadowRoot, () =>
+            rememberTapDismissal(this._sessionStorage())
+          );
+        } catch (error) {
+          console.warn('[Tapko] Could not show the tap prompt:', error.message);
+        }
+      }
 
       // Save original overflow but DON'T lock scroll - allow normal scrolling
       this._originalOverflow = document.body.style.overflow;
@@ -714,6 +781,8 @@ import debugLogger from './utils/DebugLogger.js';
       debugLogger.logUserAction('exit-feedback-mode');
       this.isInFeedbackMode = false;
 
+      this.tapAnywherePrompt.hide();
+
       // Hide pins when exiting feedback mode
       if (this.pinManager) {
         this.pinManager.hide();
@@ -763,6 +832,10 @@ import debugLogger from './utils/DebugLogger.js';
       }
 
       debugLogger.logUserAction('feedback-tap', { tag: element?.tagName, x: Math.round(coordinates?.x), y: Math.round(coordinates?.y) });
+
+      // They have done the thing it asked for, so it goes away without being
+      // recorded as a dismissal.
+      this.tapAnywherePrompt.hide();
       debugLogger.checkpoint('comment-card-create');
 
       // Close existing card
@@ -931,6 +1004,16 @@ import debugLogger from './utils/DebugLogger.js';
       // Destroy disabled popup
       if (this.disabledPopup) {
         this.disabledPopup.destroy();
+      }
+
+      // Destroy the first-comment prompt
+      if (this.firstCommentPrompt) {
+        this.firstCommentPrompt.destroy();
+      }
+
+      // Destroy the follow-up tap prompt
+      if (this.tapAnywherePrompt) {
+        this.tapAnywherePrompt.destroy();
       }
 
       // Destroy feedback widget
