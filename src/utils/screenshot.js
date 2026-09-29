@@ -473,11 +473,54 @@ async function _fetchAsDataURI(url, maxBytes = 512 * 1024) {
 }
 
 /**
+ * Resolve every @import url(...) in a CSS string by fetching the imported
+ * stylesheet and splicing its text in place, recursively (an @import'd file
+ * can itself @import another). Without this, @font-face rules that a page
+ * pulls in via `@import url('https://fonts.googleapis.com/...')` — common in
+ * bundled/Tailwind CSS — are invisible to the <link>-only inlining below, so
+ * the renderer never sees the font-family declaration at all and silently
+ * falls back to a system font.
+ */
+async function _resolveCSSImports(css, baseUrl, depth = 0) {
+  if (depth > 5) return css; // guard against pathological/circular @import chains
+  // \s* not \s+ — Tailwind v4/Lightning CSS minifies to `@import"url"` with
+  // no space before the quote (confirmed in production: Vite build output).
+  const importPattern = /@import\s*(?:url\(\s*["']?([^"')]+)["']?\s*\)|["']([^"']+)["'])[^;]*;/g;
+  const matches = [...css.matchAll(importPattern)];
+  if (!matches.length) return css;
+  const replacements = await Promise.allSettled(
+    matches.map(async m => {
+      const original = m[0];
+      const href = m[1] || m[2];
+      try {
+        const absolute = new URL(href, baseUrl).href;
+        const res = await fetch(absolute, { mode: 'cors', credentials: 'omit' });
+        if (!res.ok) return { original, replacement: original };
+        const importedCss = await _resolveCSSImports(await res.text(), absolute, depth + 1);
+        return { original, replacement: importedCss };
+      } catch {
+        return { original, replacement: original };
+      }
+    })
+  );
+  let result = css;
+  for (const r of replacements) {
+    if (r.status === 'fulfilled' && r.value.replacement !== r.value.original) {
+      result = result.replace(r.value.original, r.value.replacement);
+    }
+  }
+  return result;
+}
+
+/**
  * Inline all url() references inside a CSS string. Returns the modified CSS.
  * Skips web font resources — they add 200–400 KB each with no meaningful
- * impact on the renderer output (Puppeteer falls back to system fonts).
+ * impact on the renderer output (the renderer fetches them live instead; see
+ * renderController.js _waitAndFreeze, which explicitly waits on
+ * document.fonts.ready for this reason).
  */
 async function _inlineCSSUrls(css, baseUrl) {
+  css = await _resolveCSSImports(css, baseUrl);
   const urlPattern = /url\(\s*["']?([^"')]+)["']?\s*\)/g;
   const matches = [...css.matchAll(urlPattern)];
   const replacements = await Promise.allSettled(
@@ -751,6 +794,18 @@ async function captureDOMScreenshot(options = {}) {
       style.textContent = css;
       link.replaceWith(style);
     } catch { /* leave original link if fetch fails */ }
+  }));
+
+  // 4g2. Resolve @import inside existing <style> blocks (framework-bundled CSS
+  //      commonly ships this way — e.g. Next.js/Tailwind builds that @import
+  //      a Google Fonts stylesheet at the top of the bundle instead of using
+  //      a <link> tag). Skipped here, the @font-face rule it contains never
+  //      reaches the renderer and the page silently falls back to a system font.
+  const styleEls = [...clone.querySelectorAll('style')];
+  await Promise.allSettled(styleEls.map(async style => {
+    const css = style.textContent;
+    if (!css || !css.includes('@import')) return;
+    style.textContent = await _resolveCSSImports(css, location.href);
   }));
 
   // 4h. Inline background-image style attributes — skip if result exceeds 100 KB
@@ -1088,5 +1143,6 @@ export {
   captureViewportScreenshot,
   generateThumbnail,
   dataURLToBlob,
-  loadHtmlToImage as importHtmlToImage
+  loadHtmlToImage as importHtmlToImage,
+  _resolveCSSImports
 };
