@@ -28,20 +28,28 @@ class FeedbackModeOverlay {
    * @param {Function} onExitCallback - Callback when user exits feedback mode
    * @param {ShadowRoot} shadowRoot - Shadow root to append the overlay to (defaults to document.body for backward compatibility)
    */
-  create(onTapCallback, onExitCallback, shadowRoot = document.body) {
+  create(onTapCallback, onExitCallback, shadowRoot = document.body, options = {}) {
     if (this.overlay) {
       return; // Already created
     }
 
     this.onTap = onTapCallback;
     this.onExit = onExitCallback;
+    // On an always-on surface the mode can never be off, so there is no state
+    // to announce and nothing to exit to: no tint, no border, no snackbar.
+    this.alwaysOn = options.alwaysOn === true;
 
     // Create overlay container
     this.overlay = createElement('div', `${CONFIG.CLASS_PREFIX}feedback-overlay`);
+    if (this.alwaysOn) {
+      this.overlay.classList.add(`${CONFIG.CLASS_PREFIX}always-on`);
+    }
 
     // Create snackbar for messages (pass shadowRoot)
-    this.snackbar = new Snackbar();
-    this.snackbar.create(shadowRoot);
+    if (!this.alwaysOn) {
+      this.snackbar = new Snackbar();
+      this.snackbar.create(shadowRoot);
+    }
 
     // Attach events
     this._attachEventListeners();
@@ -53,11 +61,13 @@ class FeedbackModeOverlay {
     requestAnimationFrame(() => {
       this.overlay.classList.add(`${CONFIG.CLASS_PREFIX}visible`);
       // Show initial message with integrated exit button
-      this.snackbar.show('Feedback mode ON', {
-        type: 'error',
-        showExitButton: true,
-        onExit: this.onExit
-      });
+      if (this.snackbar) {
+        this.snackbar.show('Feedback mode ON', {
+          type: 'error',
+          showExitButton: true,
+          onExit: this.onExit
+        });
+      }
     });
 
     return this.overlay;
