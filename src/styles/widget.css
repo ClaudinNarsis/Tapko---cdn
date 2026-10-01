@@ -906,6 +906,10 @@
   font-size: 14px;
   line-height: 1.5;
   color: #111827;
+  /* See .dtc-comment-textarea: without these a dark OS theme paints the
+     control dark, leaving dark text on a dark field inside a white card. */
+  background-color: #ffffff;
+  color-scheme: light;
   font-family: inherit;
   resize: vertical;
   min-height: 60px;
@@ -977,6 +981,13 @@
   font-size: 14px;
   line-height: 1.5;
   color: #111827;
+  /* Both halves are required. A textarea with only a color set inherits the
+     UA's form-control background, which a dark OS/browser theme paints dark —
+     dark-on-dark text inside a card whose own white background IS declared.
+     color-scheme pins the rest of the control (caret, resize grip, scrollbar,
+     autofill) to the light palette the widget is drawn in. */
+  background-color: #ffffff;
+  color-scheme: light;
   font-family: inherit;
   resize: vertical;
   min-height: 60px;
