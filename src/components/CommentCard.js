@@ -71,7 +71,10 @@ class CommentCard {
     this.apiClient = apiClient;
     this.shadowRoot = shadowRoot;
     this.pinManager = pinManager; // NEW: Pin manager for persistent pins
-    this.renderMode = renderMode;
+    // An anchored surface (Tapko's canvas page) is never publicly renderable:
+    // URL navigation would load the auth-gated canvas page and capture a blank
+    // white screen. Always serialize the live DOM instead.
+    this.renderMode = anchorEl ? 'html' : renderMode;
     this.screenshotMode = screenshotMode;
     this.placeholderText = placeholderText;
     this.submitButtonText = submitButtonText;
