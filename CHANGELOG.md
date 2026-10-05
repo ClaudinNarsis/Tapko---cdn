@@ -2,6 +2,14 @@
 
 All notable changes to Tapko CDN Widget are documented here.
 
+## [4.6.0.0] - 2026-10-05
+
+### Added
+- `alwaysOn` and `anchorEl` widget modes so Tapko's own canvas page can host the widget: the widget enters feedback mode on load, skips the entry button, and anchors pins to the canvas image instead of the page
+
+### Fixed
+- Comment text boxes are readable again on dark OS/browser themes
+
 ## [4.5.0.0] - 2026-09-24
 
 ### Added

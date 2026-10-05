@@ -507,17 +507,27 @@ import debugLogger from './utils/DebugLogger.js';
         }
       }
 
-      // Cache config + project data in sessionStorage so subsequent pages can auto-restore
-      try {
-        sessionStorage.setItem('tapko_session_config', JSON.stringify({
-          projectId: this.config.projectId,
-          apiKey: this.config.apiKey,
-          userId: this.config.userId,
-          projectData: this.projectData,
-          isDisabled: this.isDisabled
-        }));
-      } catch (e) {
-        // sessionStorage unavailable (private browsing restrictions etc.) — non-fatal
+      // Cache config + project data in sessionStorage so subsequent pages can auto-restore.
+      //
+      // An alwaysOn surface is never cached. Restore replays only the four
+      // fields below, so a restored alwaysOn session would come back WITHOUT
+      // alwaysOn or anchorEl — an ordinary widget with a floating button and
+      // document-pixel coordinates, on a page built for neither. anchorEl is a
+      // live DOM element and cannot be serialized here anyway, and such a host
+      // mounts the widget itself once its anchor has painted, so there is
+      // nothing for the restore path to do but get in its way.
+      if (!this._isAlwaysOn()) {
+        try {
+          sessionStorage.setItem('tapko_session_config', JSON.stringify({
+            projectId: this.config.projectId,
+            apiKey: this.config.apiKey,
+            userId: this.config.userId,
+            projectData: this.projectData,
+            isDisabled: this.isDisabled
+          }));
+        } catch (e) {
+          // sessionStorage unavailable (private browsing restrictions etc.) — non-fatal
+        }
       }
 
       // Create shadow DOM BEFORE injecting styles
@@ -535,12 +545,18 @@ import debugLogger from './utils/DebugLogger.js';
       // Initialize pin manager (NEW - Phase 1)
       await this._initializePinManager();
 
-      // Create floating entry button (pass shadow root)
-      this.floatingButton.create(() => this._toggleFeedbackMode(), this.shadowRoot);
-      if (this.isDisabled) {
-        this.floatingButton.setDisabled(true);
+      // alwaysOn surfaces (Tapko's own canvas page) have no entry button and no
+      // way out: the whole page exists to be commented on, so a button that
+      // toggles commenting would only ever be pressed once. Everywhere else the
+      // button is the discoverable affordance and must stay.
+      if (!this._isAlwaysOn()) {
+        // Create floating entry button (pass shadow root)
+        this.floatingButton.create(() => this._toggleFeedbackMode(), this.shadowRoot);
+        if (this.isDisabled) {
+          this.floatingButton.setDisabled(true);
+        }
+        this.floatingButton.show();
       }
-      this.floatingButton.show();
 
       // Setup ESC key handler
       this._setupEscapeHandler();
@@ -566,7 +582,20 @@ import debugLogger from './utils/DebugLogger.js';
       // performs it comes away thinking feedback mode is simply always on.
       // Non-fatal: a failure here must never break a page that only wanted
       // the widget present.
-      this.isGuidedFirstComment = shouldShowFirstCommentPrompt(
+      // alwaysOn enters feedback mode itself, since nothing else will: there is
+      // no entry button to press. Failure is non-fatal and leaves the canvas
+      // readable, which is the more important half of the page.
+      if (this._isAlwaysOn() && !this.isDisabled) {
+        try {
+          this._enterFeedbackMode();
+        } catch (error) {
+          console.warn('[Tapko] Could not enter always-on feedback mode:', error.message);
+        }
+      }
+
+      // Both onboarding prompts coach the owner toward the entry button, so
+      // they have nothing to point at on an alwaysOn surface.
+      this.isGuidedFirstComment = !this._isAlwaysOn() && shouldShowFirstCommentPrompt(
         window.location.search,
         this.isDisabled,
         this._sessionStorage()
@@ -641,6 +670,37 @@ import debugLogger from './utils/DebugLogger.js';
         }
         this.escPressCount = 0;
       }
+    }
+
+    /**
+     * True when the host asked for an always-in-feedback-mode surface, where
+     * there is no entry button and no exit. Used by Tapko's canvas page.
+     */
+    _isAlwaysOn() {
+      return this.config.alwaysOn === true;
+    }
+
+    /**
+     * The element pins and clicks are measured against, when the host supplied
+     * one. Accepts an element or a selector string, resolved late (at init)
+     * because a host framework may not have painted it when the script loads.
+     * Returns null when absent or unresolvable, which puts the widget back on
+     * its normal document-coordinate path.
+     */
+    _resolveAnchorEl() {
+      const anchor = this.config.anchorEl;
+      if (!anchor) return null;
+
+      if (typeof anchor === 'string') {
+        try {
+          return document.querySelector(anchor);
+        } catch (_) {
+          console.warn('[Tapko] anchorEl is not a valid selector:', anchor);
+          return null;
+        }
+      }
+
+      return typeof anchor.getBoundingClientRect === 'function' ? anchor : null;
     }
 
     /**
@@ -728,7 +788,8 @@ import debugLogger from './utils/DebugLogger.js';
             // User clicked exit - exit feedback mode
             this._exitFeedbackMode();
           },
-          this.shadowRoot
+          this.shadowRoot,
+          { alwaysOn: this._isAlwaysOn() }
         );
 
         // Dispatch event
@@ -777,6 +838,11 @@ import debugLogger from './utils/DebugLogger.js';
      */
     _exitFeedbackMode() {
       if (!this.isInFeedbackMode) return;
+      // No exit on an alwaysOn surface. ESC and the snackbar's exit button both
+      // route here, and either one would leave the page with commenting off and
+      // no button to turn it back on. Cards and drawing still close on ESC via
+      // the first-press branch in _handleEscape.
+      if (this._isAlwaysOn()) return;
 
       debugLogger.logUserAction('exit-feedback-mode');
       this.isInFeedbackMode = false;
@@ -845,14 +911,22 @@ import debugLogger from './utils/DebugLogger.js';
 
       try {
         // Create card in shadow root (pass pinManager for Phase 1)
+        const anchorEl = this._resolveAnchorEl();
+
         const card = new CommentCard(element, coordinates, this.apiClient, this.shadowRoot, this.pinManager, {
           renderMode: this.projectData?.renderMode,
           screenshotMode: this.projectData?.screenshotMode,
           placeholderText: this.projectData?.widgetSettings?.placeholderText,
           submitButtonText: this.projectData?.widgetSettings?.submitButtonText,
+          anchorEl,
+          anchorBasis: this.config.anchorBasis,
+          surface: this.config.surface,
         });
 
-        // Set draw callback to enter drawing mode with screenshot and annotations
+        // Set draw callback to enter drawing mode with screenshot and annotations.
+        // On an anchored surface the "screenshot" is the anchor image itself
+        // (CommentCard._captureFromAnchor), so Draw annotates the canvas rather
+        // than a capture of the page displaying it.
         card.setDrawCallback((onComplete, screenshotData, existingAnnotations) => {
           this._enterDrawingMode(onComplete, screenshotData, existingAnnotations);
         });
@@ -1133,8 +1207,14 @@ import debugLogger from './utils/DebugLogger.js';
       try {
         console.log('[Tapko] Initializing pin manager...');
 
-        // Create pin manager
-        this.pinManager = new PinManager(this.shadowRoot, this.apiClient);
+        // Create pin manager. The anchor, when present, replaces both the
+        // document-coordinate positioning and the viewport-similarity filter —
+        // see PinManager for why each is wrong against a fixed-size image.
+        this.pinManager = new PinManager(this.shadowRoot, this.apiClient, {
+          anchorEl: this._resolveAnchorEl(),
+          anchorBasis: this.config.anchorBasis,
+          surface: this.config.surface
+        });
 
         // Initialize and fetch pins for current page
         await this.pinManager.init(this.config.projectId, window.location.href);
@@ -1164,8 +1244,12 @@ import debugLogger from './utils/DebugLogger.js';
 
           const feedbackData = item.feedbackData;
 
-          if (!feedbackData || !feedbackData.context || !feedbackData.context.commentPosition) {
-            console.warn('[Tapko] No comment position in feedback data, cannot create pin');
+          if (!feedbackData || !feedbackData.context) {
+            console.warn('[Tapko] No context in feedback data, cannot create pin');
+            return;
+          }
+          if (!this.pinManager.buildPosition(feedbackData.context)) {
+            console.warn('[Tapko] No usable comment position in feedback data, cannot create pin');
             return;
           }
 
@@ -1176,12 +1260,7 @@ import debugLogger from './utils/DebugLogger.js';
               queueId: id, // Store queue ID for later updates
               projectId: feedbackData.projectId,
               pageUrl: feedbackData.context.pageUrl,
-              position: {
-                documentX: feedbackData.context.commentPosition.x,
-                documentY: feedbackData.context.commentPosition.y,
-                viewportX: feedbackData.context.commentPosition.x,
-                viewportY: feedbackData.context.commentPosition.y
-              },
+              position: this.pinManager.buildPosition(feedbackData.context),
               comment: {
                 text: feedbackData.description || feedbackData.title || 'No comment text',
                 createdAt: feedbackData.context.timestamp || new Date().toISOString()
@@ -1219,12 +1298,7 @@ import debugLogger from './utils/DebugLogger.js';
                 queueId: id,
                 projectId: feedbackData.projectId,
                 pageUrl: feedbackData.context.pageUrl,
-                position: {
-                  documentX: feedbackData.context.commentPosition.x,
-                  documentY: feedbackData.context.commentPosition.y,
-                  viewportX: feedbackData.context.commentPosition.x,
-                  viewportY: feedbackData.context.commentPosition.y
-                },
+                position: this.pinManager.buildPosition(feedbackData.context),
                 comment: {
                   text: feedbackData.description || feedbackData.title || 'No comment text',
                   createdAt: feedbackData.context.timestamp || new Date().toISOString()
@@ -1353,9 +1427,18 @@ import debugLogger from './utils/DebugLogger.js';
     events: CONFIG.EVENTS
   };
 
+  // A host that calls Tapko.init() itself, with options this script cannot
+  // reconstruct (alwaysOn, anchorEl), marks its script tag data-tapko-manual.
+  // Auto-restore is suppressed for the whole document in that case: it replays
+  // only projectId/userId/projectData/isDisabled, so on such a page it would
+  // race the host's own mount and win with the WRONG configuration — an
+  // ordinary widget, floating button and all, on a page built for neither.
+  const isManualInit = () => !!document.querySelector('script[data-tapko-manual]');
+
   // Restores widget config cached by a prior page in this session/tab.
   // Shared by: no-snippet pages, SPA route changes, and bfcache restores.
   const restoreFromSession = () => {
+    if (isManualInit()) return;
     try {
       const cached = sessionStorage.getItem('tapko_session_config');
       if (cached) {

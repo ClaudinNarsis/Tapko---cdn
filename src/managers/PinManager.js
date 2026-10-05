@@ -8,13 +8,14 @@ import {
   getHiddenFeedbackStats,
   formatHiddenFeedbackMessage
 } from '../utils/deviceMatcher.js';
+import { fromAnchorCoords, readAnchorCoords } from '../utils/anchorCoords.js';
 
 /**
  * PinManager - Manages pin lifecycle (fetch, render, position, click)
  * Phase 1: Local browser only, coordinate-based positioning
  */
 class PinManager {
-  constructor(shadowRoot, apiClient) {
+  constructor(shadowRoot, apiClient, options = {}) {
     this.shadowRoot = shadowRoot;
     this.apiClient = apiClient;
     this.pinStorage = new PinStorage();
@@ -23,6 +24,52 @@ class PinManager {
     this.hiddenFeedbackStats = null; // Stats about hidden feedbacks
     this.currentDeviceInfo = null; // Current device info
     this.isPinsVisible = false; // Track whether pins should be visible
+    // Anchored mode: pins are measured against one element rather than the
+    // document. See utils/anchorCoords.js for why, and _isAnchored() for what
+    // it switches off.
+    this.anchorEl = options.anchorEl || null;
+    this.anchorBasis = Number(options.anchorBasis) || 0;
+    // When set, pins are selected by context.surface instead of pageUrl.
+    this.surface = options.surface || null;
+  }
+
+  /**
+   * True when pins are positioned relative to a supplied anchor element.
+   * @private
+   */
+  _isAnchored() {
+    return !!this.anchorEl;
+  }
+
+  /**
+   * Builds a pin's stored position from a feedback context, in whichever
+   * coordinate system this manager is running in. One place, so the init path
+   * and both queue-event paths in index.js cannot drift apart.
+   * @param {Object} context - feedback.context
+   * @returns {Object|null} position, or null when the context carries none
+   */
+  buildPosition(context) {
+    if (!context) return null;
+
+    if (this._isAnchored()) {
+      const coords = readAnchorCoords(context);
+      if (!coords) return null;
+      return {
+        xPct: coords.xPct,
+        yPx: coords.yPx,
+        basis: coords.basis || this.anchorBasis
+      };
+    }
+
+    const commentPosition = context.commentPosition;
+    if (!commentPosition || !commentPosition.x || !commentPosition.y) return null;
+
+    return {
+      documentX: commentPosition.x,
+      documentY: commentPosition.y,
+      viewportX: commentPosition.x,
+      viewportY: commentPosition.y
+    };
   }
 
   /**
@@ -62,19 +109,33 @@ class PinManager {
         return;
       }
 
-      // 2. Filter feedbacks for current page
-      const feedbacksForPage = backendFeedbacks.filter(feedback => {
-        const feedbackUrl = this._normalizeUrl(feedback.context?.pageUrl || '');
-        return feedbackUrl === normalizedUrl;
-      });
+      // 2. Select the feedbacks that belong on this surface.
+      //
+      // Normally that means "placed on this URL". A surface-scoped manager
+      // matches context.surface instead, because the canvas page's own URL
+      // (/canvas/<id>) is never where its pins were placed — they carry the
+      // project's URL, the site the capture is OF.
+      const feedbacksForPage = this.surface
+        ? backendFeedbacks.filter(feedback => feedback.context?.surface === this.surface)
+        : backendFeedbacks.filter(feedback => {
+            const feedbackUrl = this._normalizeUrl(feedback.context?.pageUrl || '');
+            return feedbackUrl === normalizedUrl;
+          });
 
       console.log(`[PinManager] Found ${feedbacksForPage.length} feedbacks for current page`);
 
-      
-
-      // 3. Filter feedbacks based on device compatibility
+      // 3. Filter feedbacks based on device compatibility.
+      //
+      // Skipped entirely when anchored. The filter scores a feedback's recorded
+      // viewport against this browser's window, which is right for a live site
+      // (a comment on the mobile layout means nothing on desktop) and wrong for
+      // a fixed-size capture: the image is identical at every window size, so
+      // every pin is valid at every window size. Leaving it on would hide
+      // comments based on nothing but the viewer's window dimensions.
       const threshold = 80;
-      const compatibleFeedbacks = feedbacksForPage.filter(feedback => {
+      const compatibleFeedbacks = this._isAnchored()
+        ? feedbacksForPage
+        : feedbacksForPage.filter(feedback => {
         const feedbackDeviceInfo = extractFeedbackDeviceInfo(feedback);
         const feedbackId = feedback.feedbackId || feedback.id;
         const comment = feedback.feedbackTitle || feedback.description || feedback.title || feedback.comment || feedback.message || 'No comment';
@@ -127,14 +188,14 @@ class PinManager {
           continue;
         }
 
-        // Check if feedback has comment position data
-        const commentPosition = feedback.context?.commentPosition;
+        // Check if feedback carries position data in this manager's coordinate
+        // system (anchor-relative when anchored, document pixels otherwise).
+        const position = this.buildPosition(feedback.context);
 
-        if (!commentPosition || !commentPosition.x || !commentPosition.y) {
+        if (!position) {
           console.log(`[PinManager] Skipping feedback ${feedbackId} - no position data`, {
             hasContext: !!feedback.context,
-            hasCommentPosition: !!commentPosition,
-            commentPosition: commentPosition
+            anchored: this._isAnchored()
           });
           skippedNoPosition++;
           continue;
@@ -164,12 +225,7 @@ class PinManager {
             id: feedbackId,
             projectId: projectId,
             pageUrl: normalizedUrl,
-            position: {
-              documentX: commentPosition.x,
-              documentY: commentPosition.y,
-              viewportX: commentPosition.x,
-              viewportY: commentPosition.y
-            },
+            position,
             comment: {
               text: commentText,
               createdAt: feedback.createdAt || new Date().toISOString()
@@ -246,8 +302,10 @@ class PinManager {
     }
 
     try {
-      // Calculate position
-      const position = this._calculatePinPosition(pinData);
+      // Calculate position. Anchored pins return null until the anchor has
+      // painted; render at 0,0 but hidden-until-positioned would flash a pin in
+      // the corner, so fall back to a no-op and let the next frame place it.
+      const position = this._calculatePinPosition(pinData) || { left: 0, top: 0 };
 
       // Create pin element
       const pinElement = createElement('div', `${CONFIG.CLASS_PREFIX}comment-pin`);
@@ -286,6 +344,12 @@ class PinManager {
    * @private
    */
   _calculatePinPosition(pinData) {
+    if (this._isAnchored()) {
+      // Measured off the anchor's live rect, so resize and scroll are both
+      // handled without this manager tracking either.
+      return fromAnchorCoords(this.anchorEl, pinData.position);
+    }
+
     const scrollX = window.pageXOffset || document.documentElement.scrollLeft || 0;
     const scrollY = window.pageYOffset || document.documentElement.scrollTop || 0;
 
@@ -301,6 +365,10 @@ class PinManager {
   updateAllPinPositions() {
     this.pins.forEach(({ data, element }) => {
       const position = this._calculatePinPosition(data);
+      // Anchored positions are null until the anchor has layout (an image that
+      // has not painted yet). Leaving the pin where it is beats moving it to
+      // NaN, and the next scroll/resize frame will place it.
+      if (!position) return;
       element.style.left = `${position.left}px`;
       element.style.top = `${position.top}px`;
     });
@@ -621,7 +689,9 @@ class PinManager {
    * @private
    */
   _positionDetailCard(card, pinData) {
-    const position = this._calculatePinPosition(pinData);
+    // A card can only be opened by clicking a rendered pin, so the anchor has
+    // layout by now; the fallback is belt-and-braces against a 0-width anchor.
+    const position = this._calculatePinPosition(pinData) || { left: 0, top: 0 };
 
     // Position to the right of the pin by default
     let left = position.left + 20;

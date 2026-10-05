@@ -16,6 +16,7 @@ import { logManager } from '../managers/LogManager.js';
 import { networkLogManager } from '../managers/NetworkLogManager.js';
 import debugLogger from '../utils/DebugLogger.js';
 import { dataURLToBlob, captureScreenshot, generateThumbnail } from '../utils/screenshot.js';
+import { toAnchorCoords } from '../utils/anchorCoords.js';
 import {
   createElement,
   removeElement,
@@ -52,17 +53,34 @@ class CommentCard {
   // the server-side renderer entirely (both URL-navigation and DOM
   // serialization) and captures via the browser's own getDisplayMedia
   // instead — for projects whose page the renderer can never reach.
+  // options.anchorEl / options.anchorBasis: when present, the comment's stored
+  // position is measured against that element instead of the document — see
+  // utils/anchorCoords.js. Set by alwaysOn surfaces (Tapko's canvas page).
   constructor(target, coordinates, apiClient, shadowRoot = document.body, pinManager = null, options = {}) {
-    const { renderMode = 'url', screenshotMode = 'auto', placeholderText, submitButtonText } = options;
+    const {
+      renderMode = 'url',
+      screenshotMode = 'auto',
+      placeholderText,
+      submitButtonText,
+      anchorEl = null,
+      anchorBasis = 0,
+      surface = null
+    } = options;
     this.target = target;
     this.coordinates = coordinates;
     this.apiClient = apiClient;
     this.shadowRoot = shadowRoot;
     this.pinManager = pinManager; // NEW: Pin manager for persistent pins
-    this.renderMode = renderMode;
+    // An anchored surface (Tapko's canvas page) is never publicly renderable:
+    // URL navigation would load the auth-gated canvas page and capture a blank
+    // white screen. Always serialize the live DOM instead.
+    this.renderMode = anchorEl ? 'html' : renderMode;
     this.screenshotMode = screenshotMode;
     this.placeholderText = placeholderText;
     this.submitButtonText = submitButtonText;
+    this.anchorEl = anchorEl;
+    this.anchorBasis = anchorBasis;
+    this.surface = surface;
     this.feedbackWidget = null; // NEW: Feedback widget reference for hiding during screenshot
     this.card = null;
     this.pinMarker = null;
@@ -942,6 +960,45 @@ class CommentCard {
   /**
    * Set draw request callback
    */
+  /**
+   * The position fields this comment contributes to feedback.context.
+   *
+   * Anchored cards emit xPct/yPx/canvasHeight (a fraction of the anchor's width
+   * plus pixels down a fixed basis) instead of commentPosition's document
+   * pixels, because the anchor is an image scaled to fit the window: a document
+   * pixel means a different point on it in every window size. Same field names
+   * the canvas page used before the widget took this over, so existing pins
+   * keep rendering.
+   * @private
+   */
+  _positionContext() {
+    if (this.anchorEl) {
+      const coords = toAnchorCoords(
+        this.anchorEl,
+        this.coordinates.x,
+        this.coordinates.y,
+        this.anchorBasis
+      );
+      // No layout on the anchor means no honest position to record. The comment
+      // still submits — losing someone's text over a geometry failure is worse
+      // than a comment that lands in the list without a pin.
+      if (!coords) return {};
+      return {
+        surface: this.surface || 'canvas',
+        xPct: coords.xPct,
+        yPx: coords.yPx,
+        canvasHeight: coords.basis
+      };
+    }
+
+    return {
+      commentPosition: {
+        x: this.coordinates.x + (window.pageXOffset || document.documentElement.scrollLeft),
+        y: this.coordinates.y + (window.pageYOffset || document.documentElement.scrollTop)
+      }
+    };
+  }
+
   setDrawCallback(callback) {
     this.onDrawRequested = callback;
   }
@@ -1083,10 +1140,7 @@ class CommentCard {
         browserInfo,
         breakpoint,
         feedbackPosition,
-        commentPosition: {
-          x: this.coordinates.x + (window.pageXOffset || document.documentElement.scrollLeft),
-          y: this.coordinates.y + (window.pageYOffset || document.documentElement.scrollTop)
-        }
+        ...this._positionContext()
       },
       idempotencyKey: `${this.apiClient.userId}-${Date.now()}-${Math.random().toString(36).substring(7)}`,
       projectId: this.apiClient.projectId,
@@ -1251,10 +1305,7 @@ class CommentCard {
         browserInfo,
         breakpoint,
         feedbackPosition,
-        commentPosition: {
-          x: this.coordinates.x + (window.pageXOffset || document.documentElement.scrollLeft),
-          y: this.coordinates.y + (window.pageYOffset || document.documentElement.scrollTop)
-        }
+        ...this._positionContext()
       },
       idempotencyKey: `${this.apiClient.userId}-${Date.now()}-${Math.random().toString(36).substring(7)}`,
       projectId: this.apiClient.projectId,

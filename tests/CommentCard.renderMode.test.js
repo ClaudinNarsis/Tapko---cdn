@@ -134,3 +134,18 @@ describe('CommentCard — Draw click when no screenshot can be captured', () => 
     expect(card.card.style.display).toBe('');
   });
 });
+
+describe('CommentCard — anchored surface (canvas page)', () => {
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('forces renderMode "html" when anchorEl is set, even if the project says "url"', () => {
+    const anchorEl = document.createElement('img');
+    const card = new CommentCard(makeTarget(), { x: 1, y: 1 }, { userId: 'u1', projectId: 'p1' }, document.body, null, {
+      renderMode: 'url',
+      anchorEl,
+    });
+    expect(card.renderMode).toBe('html');
+  });
+});
