@@ -455,17 +455,24 @@ class PinManager {
     const card = createElement('div', `${CONFIG.CLASS_PREFIX}pin-detail`);
 
     const createdDate = new Date(pinData.comment.createdAt).toLocaleDateString();
-    const status = pinData.status || 'pending';
+    // status comes from the API/cache: only known values become a class name,
+    // and anything else is escaped before it reaches innerHTML.
+    const status = String(pinData.status || 'pending');
 
     const statusLabels = {
       'pending': 'Pending',
+      'needs_clarification': 'Needs Clarification',
       'in_progress': 'In Progress',
       'resolved': 'Resolved',
       'closed': 'Closed',
       'open': 'Open'
     };
 
-    const statusLabel = statusLabels[status] || status.charAt(0).toUpperCase() + status.slice(1);
+    const isKnownStatus = Object.prototype.hasOwnProperty.call(statusLabels, status);
+    const statusClass = isKnownStatus ? status : 'unknown';
+    const statusLabel = isKnownStatus
+      ? statusLabels[status]
+      : this._escapeHTML(status.charAt(0).toUpperCase() + status.slice(1));
     const editedBadge = pinData.editedAt
       ? `<span class="${CONFIG.CLASS_PREFIX}pin-detail-edited">Edited</span>`
       : '';
@@ -481,7 +488,7 @@ class PinManager {
         <div class="${CONFIG.CLASS_PREFIX}pin-detail-meta">
           <span class="${CONFIG.CLASS_PREFIX}pin-detail-date">${createdDate}</span>
           ${editedBadge}
-          <span class="${CONFIG.CLASS_PREFIX}pin-detail-status ${CONFIG.CLASS_PREFIX}pin-detail-status-${status}">${statusLabel}</span>
+          <span class="${CONFIG.CLASS_PREFIX}pin-detail-status ${CONFIG.CLASS_PREFIX}pin-detail-status-${statusClass}">${statusLabel}</span>
         </div>
         <button class="${CONFIG.CLASS_PREFIX}pin-detail-close" aria-label="Close">×</button>
       </div>

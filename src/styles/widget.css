@@ -754,11 +754,17 @@
   border-radius: 12px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  white-space: nowrap;
 }
 
 .dtc-pin-detail-status-pending {
   background-color: #fef3c7;
   color: #92400e;
+}
+
+.dtc-pin-detail-status-needs_clarification {
+  background-color: #ede9fe;
+  color: #5b21b6;
 }
 
 .dtc-pin-detail-status-in_progress {
