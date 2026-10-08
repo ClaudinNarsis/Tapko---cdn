@@ -2,6 +2,15 @@
 
 All notable changes to Tapko CDN Widget are documented here.
 
+## [4.7.0.0] - 2026-10-08
+
+### Added
+- Pin detail cards show a "Needs Clarification" badge
+
+### Fixed
+- A status the widget doesn't recognize is shown as plain text instead of being inserted into the page as HTML
+- Status badges stay on one line on narrow pin cards
+
 ## [4.6.0.0] - 2026-10-05
 
 ### Added
