@@ -28,15 +28,17 @@ jobs:
           node-version: '18'
           cache: 'npm'
 
-      - name: Install dependencies and build widget
+      # npm ci must run without NODE_ENV=production, or devDependencies (esbuild) are skipped
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build widget
         env:
           NODE_ENV: production
           API_URL: ${{ secrets.API_URL }}
           FEEDBACK_URL: ${{ secrets.PROD_FEEDBACK_URL }}
           RENDERER_URL: ${{ secrets.PROD_RENDERER_URL }}
-        run: |
-          npm ci
-          npm run build
+        run: npm run build
 
       - name: Assemble deployment directory
         run: |
