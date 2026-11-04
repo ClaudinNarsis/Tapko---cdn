@@ -1119,7 +1119,8 @@ class CommentCard {
 
     const feedbackData = {
       title: this._generateFeedbackTitle(text),
-      description: sanitizeHTML(text),
+      // Raw text: every render site escapes (PinManager._escapeHTML, app, ClickUp).
+      description: text,
       screenshot: screenshotBlob,              // Unmerged screenshot blob
       annotationData: this.annotationData,     // NEW: Annotation data
       logs: logsBlob,
@@ -1291,7 +1292,8 @@ class CommentCard {
 
     const payload = {
       title: this._generateFeedbackTitle(text),
-      description: sanitizeHTML(text),
+      // Raw text: every render site escapes (PinManager._escapeHTML, app, ClickUp).
+      description: text,
       assets: uploadedAssets,
       context: {
         pageUrl: window.location.href,
