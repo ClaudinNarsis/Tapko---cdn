@@ -2,6 +2,12 @@
 
 All notable changes to Tapko CDN Widget are documented here.
 
+## [4.7.1.0] - 2026-11-09
+
+### Fixed
+- Feedback text with `&`, `<` or quotes no longer shows up as `&amp;` and similar in the tapko.app dashboard and in ClickUp. The widget now stores the text exactly as typed and escapes it only when displaying it
+- The GitHub Pages deploy installs build tools correctly again
+
 ## [4.7.0.0] - 2026-10-08
 
 ### Added
