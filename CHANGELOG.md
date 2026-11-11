@@ -7,6 +7,8 @@ All notable changes to Tapko CDN Widget are documented here.
 ### Fixed
 - Feedback text with `&`, `<` or quotes no longer shows up as `&amp;` and similar in the tapko.app dashboard and in ClickUp. The widget now stores the text exactly as typed and escapes it only when displaying it
 - The GitHub Pages deploy installs build tools correctly again
+- Comments sent from Safari and DuckDuckGo are no longer lost. Queued screenshots and logs are saved in a form WebKit can upload, and if an upload still fails, the comment is submitted anyway with whatever did upload
+- Screenshots of login-protected pages (session cookie or staging password) include the site's own images and styles, such as the logo, instead of showing them broken
 
 ## [4.7.0.0] - 2026-10-08
 
