@@ -205,42 +205,6 @@ class APIClient {
   }
 
   /**
-   * Upload voice recording
-   */
-  async uploadVoiceRecording(audioBlob, commentId) {
-    const formData = new FormData();
-    formData.append('audio', audioBlob, 'recording.webm');
-    formData.append('commentId', commentId);
-    formData.append('projectId', this.projectId);
-    if (this.userId) {
-      formData.append('userId', this.userId);
-    }
-
-    const url = this._buildUrl('/comments/voice');
-
-    const headers = {
-      'Authorization': this.apiKey ? `Bearer ${this.apiKey}` : undefined,
-      'X-Project-ID': this.projectId
-    };
-
-    if (this.userId) {
-      headers['X-User-ID'] = this.userId;
-    }
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: formData
-    });
-
-    if (!response.ok) {
-      throw new Error(`Upload failed: ${response.status}`);
-    }
-
-    return await response.json();
-  }
-
-  /**
    * Get presigned URL for S3 upload
    * @param {Object} fileData - { folderName, fileName, fileType }
    */

@@ -110,6 +110,7 @@ class FeedbackQueueManager {
           annotationData: feedbackData.annotationData, // NEW: Annotation data {paths, strokeColor, strokeWidth}
           logs: await this._toStored(feedbackData.logs),
           networkLogs: await this._toStored(feedbackData.networkLogs),
+          video: await this._toStored(feedbackData.video),
           context: feedbackData.context,
           idempotencyKey: feedbackData.idempotencyKey,
           projectId: feedbackData.projectId,
@@ -130,6 +131,12 @@ class FeedbackQueueManager {
             bucket: null
           },
           networkLogs: {
+            status: 'pending',
+            url: null,
+            key: null,
+            bucket: null
+          },
+          video: {
             status: 'pending',
             url: null,
             key: null,
@@ -334,10 +341,12 @@ class FeedbackQueueManager {
       const steps = [
         ['screenshot', 'image/jpeg', 'screenshot'],
         ['logs', 'text/plain', 'logs'],
-        ['networkLogs', 'text/plain', 'logs']
+        ['networkLogs', 'text/plain', 'logs'],
+        ['video', 'video/webm', 'video']
       ];
       for (const [step, mimeType, type] of steps) {
-        if (item.uploadProgress[step].status === 'completed' || !item.feedbackData[step]) continue;
+        // Data check first: items queued before a step existed have no uploadProgress entry for it.
+        if (!item.feedbackData[step] || item.uploadProgress[step]?.status === 'completed') continue;
         try {
           console.log(`[FeedbackQueue] Uploading ${step} for item ${item.id}...`);
           let blob = await this._toBlob(item.feedbackData[step], mimeType);
@@ -360,6 +369,8 @@ class FeedbackQueueManager {
           await this.updateItem(item.id, item);
           this.emit('queue:step-completed', { id: item.id, step });
         } catch (error) {
+          // A recording-only comment is empty without its video: retry the item instead.
+          if (step === 'video' && !item.feedbackData.description) throw error;
           console.error(`[FeedbackQueue] ${step} upload failed for item ${item.id}, submitting without it:`, error);
         }
       }
@@ -396,6 +407,15 @@ class FeedbackQueueManager {
             url: item.uploadProgress.networkLogs.url,
             bucket: item.uploadProgress.networkLogs.bucket,
             mimeType: 'text/plain'
+          };
+        }
+
+        if (item.uploadProgress.video?.status === 'completed' && item.uploadProgress.video.key) {
+          assets.video = {
+            key: item.uploadProgress.video.key,
+            url: item.uploadProgress.video.url,
+            bucket: item.uploadProgress.video.bucket,
+            mimeType: 'video/webm'
           };
         }
 
@@ -533,11 +553,11 @@ class FeedbackQueueManager {
     // Generate file name
     const timestamp = Date.now();
     const random = Math.random().toString(36).substring(7);
-    const extension = mimeType === 'image/jpeg' ? 'jpg' : 'txt';
+    const extension = { 'image/jpeg': 'jpg', 'video/webm': 'webm' }[mimeType] || 'txt';
     const fileName = `${timestamp}-${random}.${extension}`;
 
     // Determine folder name based on type
-    const folderName = type === 'screenshot' ? 'screenshots' : 'logs';
+    const folderName = { screenshot: 'screenshots', video: 'recordings' }[type] || 'logs';
 
     // Get presigned URL
     const presignedData = await this.apiClient.getPresignedUrl({

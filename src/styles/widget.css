@@ -1193,6 +1193,45 @@
   height: 16px;
 }
 
+.dtc-record-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 13px;
+  color: #4b5563;
+}
+
+.dtc-btn-record,
+.dtc-remove-recording {
+  border: none;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  background: #f3f4f6;
+  color: #4b5563;
+}
+
+.dtc-btn-record.dtc-recording {
+  background: #dc2626;
+  color: #ffffff;
+  font-variant-numeric: tabular-nums;
+}
+
+.dtc-record-mic {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.dtc-btn-draw:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .dtc-btn-submit {
   background: #4f46e5;
   color: #ffffff;

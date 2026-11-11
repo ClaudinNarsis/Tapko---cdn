@@ -15,7 +15,7 @@ tapko-widget/
 │   ├── components/
 │   │   └── CommentCard.js        # Comment card UI component
 │   ├── managers/
-│   │   └── RecordingManager.js   # Voice recording functionality
+│   │   └── RecordingManager.js   # Screen recording (tab + optional mic, 60 s max)
 │   ├── utils/
 │   │   └── dom.js                # DOM manipulation helpers
 │   └── styles/
@@ -71,7 +71,6 @@ Tapko.isReady()              // Check initialization status
 - Widget-specific endpoints:
   - `getWidgetConfig()` - Fetch widget settings
   - `submitComment()` - Submit text/emoji comments
-  - `uploadVoiceRecording()` - Upload audio files
 
 ### src/components/CommentCard.js
 **Purpose:** Comment card UI and interaction logic
