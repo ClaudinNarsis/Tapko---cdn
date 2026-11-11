@@ -453,11 +453,25 @@ function dataURLToBlob(dataURL) {
 }
 
 /**
+ * Credentials mode for a snapshot asset fetch. Same-origin assets can sit
+ * behind the page's own auth (session cookie, staging basic auth), and with
+ * 'omit' they 401, stay un-inlined, and render broken. Only the page's own
+ * origin gets credentials; every cross-origin asset stays 'omit'.
+ */
+function _credentialsFor(url) {
+  try {
+    return new URL(url, location.href).origin === location.origin ? 'same-origin' : 'omit';
+  } catch {
+    return 'omit';
+  }
+}
+
+/**
  * Fetch a URL and return a base64 data-URI, or null on failure / size limit.
  */
 async function _fetchAsDataURI(url, maxBytes = 512 * 1024) {
   try {
-    const res = await fetch(url, { mode: 'cors', credentials: 'omit' });
+    const res = await fetch(url, { mode: 'cors', credentials: _credentialsFor(url) });
     if (!res.ok) return null;
     const blob = await res.blob();
     if (blob.size > maxBytes) return null;
@@ -494,7 +508,7 @@ async function _resolveCSSImports(css, baseUrl, depth = 0) {
       const href = m[1] || m[2];
       try {
         const absolute = new URL(href, baseUrl).href;
-        const res = await fetch(absolute, { mode: 'cors', credentials: 'omit' });
+        const res = await fetch(absolute, { mode: 'cors', credentials: _credentialsFor(absolute) });
         if (!res.ok) return { original, replacement: original };
         const importedCss = await _resolveCSSImports(await res.text(), absolute, depth + 1);
         return { original, replacement: importedCss };
@@ -784,7 +798,7 @@ async function captureDOMScreenshot(options = {}) {
     if (!href) return;
     try {
       const absolute = new URL(href, location.href).href;
-      const res = await fetch(absolute, { mode: 'cors', credentials: 'omit' });
+      const res = await fetch(absolute, { mode: 'cors', credentials: _credentialsFor(absolute) });
       if (!res.ok) return;
       let css = await res.text();
       if (_measureBytes(css) > 200 * 1024) return; // leave <link> tag, skip inlining
@@ -1144,5 +1158,7 @@ export {
   generateThumbnail,
   dataURLToBlob,
   loadHtmlToImage as importHtmlToImage,
-  _resolveCSSImports
+  _resolveCSSImports,
+  _credentialsFor,
+  _fetchAsDataURI
 };
