@@ -16,7 +16,7 @@ tapko-widget/
 │   ├── components/
 │   │   └── CommentCard.js              # Comment UI component
 │   ├── managers/
-│   │   └── RecordingManager.js         # Voice recording handler
+│   │   └── RecordingManager.js         # Screen recording (tab + optional mic, 60 s max)
 │   ├── utils/
 │   │   └── dom.js                      # DOM utilities & helpers
 │   └── styles/
@@ -218,7 +218,6 @@ Your backend needs these endpoints:
 
 **Required:**
 - `POST /v1/comments` - Save comments
-- `POST /v1/comments/voice` - Upload audio files
 
 **Optional:**
 - `GET /v1/widget/config` - Widget configuration
@@ -258,7 +257,7 @@ src/
 ├── components/       → UI components
 │   └── CommentCard   → Comment card logic & UI
 ├── managers/         → Business logic
-│   └── RecordingManager → Voice recording
+│   └── RecordingManager → Screen recording
 ├── utils/dom.js      → DOM helpers (positioning, sanitization, etc.)
 └── styles/widget.css → All widget styles
 ```
