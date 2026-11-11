@@ -103,11 +103,8 @@ class CommentCard {
     this._priorityDropdownMatches = [];
     this._priorityDropdownHighlight = -1;
 
-    // Recording UI elements
-    this.micIcon = null;
-    this.recordingPill = null;
-    this.timerSpan = null;
-    this.timerInterval = null;
+    // Attached screen recording: { blob, duration } (RecordingManager.onStop)
+    this.recording = null;
 
     // Callbacks
     this.onDrawRequested = null;
@@ -212,6 +209,7 @@ class CommentCard {
           <span class="${CONFIG.CLASS_PREFIX}priority-chip" hidden></span>
           <div class="${CONFIG.CLASS_PREFIX}comment-micro-label">Tip: /high /medium /low sets priority</div>
         </div>
+        ${RecordingManager.isSupported() ? `<div class="${CONFIG.CLASS_PREFIX}record-row"></div>` : ''}
         <div class="${CONFIG.CLASS_PREFIX}comment-actions">
           <button type="button" class="${CONFIG.CLASS_PREFIX}btn-cancel">Cancel</button>
           <button type="button" class="${CONFIG.CLASS_PREFIX}btn-draw">
@@ -338,6 +336,8 @@ class CommentCard {
       });
     }
 
+    this._renderRecordRow();
+
     // Draw button
     const drawBtn = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}btn-draw`);
     if (drawBtn) {
@@ -438,6 +438,57 @@ class CommentCard {
         this._priorityDropdownHighlight = Number(item.dataset.index);
         this._acceptPriorityDropdownHighlight();
       });
+    }
+  }
+
+  /**
+   * Record row (only rendered when RecordingManager.isSupported()), drawn from
+   * instance state so it survives _renderBubbleContent() re-renders.
+   * States: idle (Record + Mic), recording (Stop + countdown), attached.
+   */
+  _renderRecordRow() {
+    const row = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}record-row`);
+    if (!row) return;
+    const p = CONFIG.CLASS_PREFIX;
+    const rm = this.recordingManager;
+    const fmt = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+
+    if (rm.isRecording) {
+      row.innerHTML = `<button type="button" class="${p}btn-record ${p}recording" aria-live="polite">Stop ${fmt(rm.getRemainingSeconds())}</button>`;
+      row.querySelector('button').addEventListener('click', () => rm.stopRecording());
+    } else if (this.recording) {
+      row.innerHTML = `<span class="${p}record-attached">Recording attached (${fmt(Math.round(this.recording.duration / 1000))})</span>
+        <button type="button" class="${p}remove-recording" title="Remove recording" aria-label="Remove recording">✕</button>`;
+      row.querySelector('button').addEventListener('click', () => {
+        this.recording = null;
+        this._renderRecordRow();
+      });
+    } else {
+      row.innerHTML = `<button type="button" class="${p}btn-record">Record screen</button>
+        <label class="${p}record-mic"><input type="checkbox" checked /> Mic</label>`;
+      row.querySelector('button').addEventListener('click', () => this._startRecording(row.querySelector('input').checked));
+    }
+
+    // Draw starts its own capture; never run both at once.
+    const drawBtn = this.card.querySelector(`.${p}btn-draw`);
+    if (drawBtn) drawBtn.disabled = rm.isRecording;
+  }
+
+  async _startRecording(withMic) {
+    const rm = this.recordingManager;
+    rm.onTick = (remaining) => {
+      const btn = this.card.querySelector(`.${CONFIG.CLASS_PREFIX}btn-record.${CONFIG.CLASS_PREFIX}recording`);
+      if (btn) btn.textContent = `Stop ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}`;
+    };
+    rm.onStop = (result) => {
+      this.recording = result;
+      this._renderRecordRow();
+    };
+    debugLogger.logUserAction('comment-card-record-click', { withMic });
+    try {
+      if (await rm.startRecording({ withMic })) this._renderRecordRow();
+    } catch (error) {
+      this._showError(error.message);
     }
   }
 
@@ -841,6 +892,7 @@ class CommentCard {
         <div class="${CONFIG.CLASS_PREFIX}comment-micro-label">Tip: /high /medium /low sets priority</div>
       </div>
       ${screenshotPreviewHTML}
+      ${RecordingManager.isSupported() ? `<div class="${CONFIG.CLASS_PREFIX}record-row"></div>` : ''}
       <div class="${CONFIG.CLASS_PREFIX}comment-actions">
         <button type="button" class="${CONFIG.CLASS_PREFIX}btn-cancel">Cancel</button>
         ${!this.screenshotProvider ? `
@@ -1044,7 +1096,11 @@ class CommentCard {
     this.priority = priority;
 
     // Validate input
-    if (!text && !this.drawingData) {
+    if (this.recordingManager.isRecording) {
+      this._showError('Stop the recording first');
+      return;
+    }
+    if (!text && !this.drawingData && !this.recording) {
       this._showError('Please enter a comment or add a drawing');
       return;
     }
@@ -1080,7 +1136,7 @@ class CommentCard {
     this._showLoading('Preparing...');
 
     // 1. Auto-capture screenshot if not already present
-    if (!this.screenshot) {
+    if (!this.screenshot && !this._recordingReplacesCapture()) {
       if (this.screenshotProvider) {
         // Use external provider (integrated flow)
         const data = await this.screenshotProvider();
@@ -1124,6 +1180,7 @@ class CommentCard {
       annotationData: this.annotationData,     // NEW: Annotation data
       logs: logsBlob,
       networkLogs: networkLogsBlob,
+      video: this.recording ? this.recording.blob : null,
       context: {
         pageUrl: window.location.href,
         userAgent: navigator.userAgent,
@@ -1168,7 +1225,7 @@ class CommentCard {
       hasEmoji: !!this.selectedEmoji,
       hasScreenshot: !!this.screenshot,
       hasDrawing: !!this.drawingData,
-      hasRecording: this.recordingManager.hasRecording(),
+      hasRecording: !!this.recording,
       targetTag: this.target.tagName,
       commentLength: text.length,
       wasQueued: true
@@ -1193,7 +1250,7 @@ class CommentCard {
 
     // 0. Auto-capture screenshot if not already present
     const screenshotStart = performance.now();
-    if (!this.screenshot) {
+    if (!this.screenshot && !this._recordingReplacesCapture()) {
       await this._captureScreenshot(textarea);
     }
     const screenshotEnd = performance.now();
@@ -1231,6 +1288,11 @@ class CommentCard {
     const networkLogsBlob = networkLogManager.getNetworkLogsAsJsonBlob();
     const networkLogsFileName = `${Date.now()}-${Math.random().toString(36).substring(7)}-network.txt`;
     assets.networkLogs = { blob: networkLogsBlob, fileName: networkLogsFileName, type: 'text/plain', folder: 'logs' };
+
+    // 1d. Screen recording
+    if (this.recording) {
+      assets.video = { blob: this.recording.blob, fileName: `${Date.now()}-${Math.random().toString(36).substring(7)}.webm`, type: 'video/webm', folder: 'recordings' };
+    }
 
     const prepareEnd = performance.now();
     console.log(`[Tapko Timing] Asset preparation: ${(prepareEnd - prepareStart).toFixed(2)}ms`);
@@ -1330,7 +1392,7 @@ class CommentCard {
       hasEmoji: !!this.selectedEmoji,
       hasScreenshot: !!this.screenshot,
       hasDrawing: !!this.drawingData,
-      hasRecording: this.recordingManager.hasRecording(),
+      hasRecording: !!this.recording,
       targetTag: this.target.tagName,
       commentLength: text.length,
       wasQueued: false
@@ -1576,8 +1638,16 @@ class CommentCard {
   /**
    * Generate a feedback title from the text content
    */
+  /**
+   * A local capture would open a second getDisplayMedia prompt right after
+   * the recording; the recording already shows the page, so skip it then.
+   */
+  _recordingReplacesCapture() {
+    return !!this.recording && (this.screenshotMode === 'local' || !CONFIG.API.rendererUrl);
+  }
+
   _generateFeedbackTitle(text) {
-    if (!text) return 'Drawing feedback';
+    if (!text) return this.recording ? 'Screen recording' : 'Drawing feedback';
 
     // Use first 50 characters as title
     const title = text.substring(0, 50);
@@ -1691,9 +1761,6 @@ class CommentCard {
    * Cleanup resources
    */
   _cleanup() {
-    if (this.timerInterval) {
-      clearInterval(this.timerInterval);
-    }
     if (this.recordingManager) {
       this.recordingManager.destroy();
     }

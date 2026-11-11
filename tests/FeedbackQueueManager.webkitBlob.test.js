@@ -130,3 +130,40 @@ describe('FeedbackQueueManager — WebKit-safe asset storage', () => {
     expect(payload.assets.logs).toBeDefined();
   });
 });
+
+describe('FeedbackQueueManager — screen recording (assets.video)', () => {
+  it('uploads the recording to recordings/ as video/webm and attaches assets.video', async () => {
+    const api = makeApiClient();
+    const manager = new FeedbackQueueManager(api, { autoCleanup: false });
+    await manager.init();
+    const id = await manager.enqueue({ ...feedback(), video: new Blob(['v'], { type: 'video/webm' }) });
+    await manager.processSingleItem(await manager.db.get(id));
+
+    expect(api.getPresignedUrl).toHaveBeenCalledWith(expect.objectContaining({ folderName: 'recordings', fileType: 'video/webm', fileName: expect.stringMatching(/\.webm$/) }));
+    const { assets } = api.submitFeedback.mock.calls[0][0];
+    expect(assets.video).toEqual(expect.objectContaining({ key: expect.stringMatching(/^recordings\//), mimeType: 'video/webm' }));
+  });
+
+  it('still processes an item queued before recordings existed (no uploadProgress.video)', async () => {
+    const api = makeApiClient();
+    const manager = new FeedbackQueueManager(api, { autoCleanup: false });
+    await manager.init();
+    const id = await manager.enqueue(feedback());
+    const item = await manager.db.get(id);
+    delete item.uploadProgress.video;
+    delete item.feedbackData.video;
+    await manager.processSingleItem(item);
+    expect((await manager.db.get(id)).status).toBe('completed');
+  });
+
+  it('retries a recording-only comment whose video upload failed instead of submitting it empty', async () => {
+    const api = makeApiClient();
+    api.uploadToS3.mockImplementation(async (url) => { if (url.includes('/recordings/')) throw new TypeError('Load failed'); });
+    const manager = new FeedbackQueueManager(api, { autoCleanup: false, baseRetryDelay: 60000 });
+    await manager.init();
+    const id = await manager.enqueue({ ...feedback(), description: '', video: new Blob(['v'], { type: 'video/webm' }) });
+    await manager.processSingleItem(await manager.db.get(id));
+    expect(api.submitFeedback).not.toHaveBeenCalled();
+    expect((await manager.db.get(id)).status).not.toBe('completed');
+  });
+});

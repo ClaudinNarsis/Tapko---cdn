@@ -1,177 +1,152 @@
 /**
  * Recording Manager
- * Manages voice recording functionality
+ * Records the current tab (getDisplayMedia) with optional mic narration into
+ * a .webm, hard-capped at MAX_DURATION_MS.
  */
 
 import { CONFIG } from '../config.js';
 import { dispatchCustomEvent } from '../utils/dom.js';
 
+const MAX_DURATION_MS = 60000;
+const MIME_TYPE = 'video/webm';
+
 class RecordingManager {
   constructor() {
     this.mediaRecorder = null;
-    this.audioChunks = [];
-    this.stream = null;
+    this.chunks = [];
+    this.streams = [];
     this.isRecording = false;
     this.startTime = null;
     this.timerInterval = null;
+    this.capTimeout = null;
+    this.onTick = null; // (remainingSeconds) => void, once per second
+    this.onStop = null; // ({ blob, duration, size }) => void, on any stop (button, cap, browser "Stop sharing")
   }
 
   /**
-   * Check if browser supports recording
+   * getDisplayMedia + webm MediaRecorder. False on iOS (no getDisplayMedia)
+   * and on browsers that can only record mp4.
    */
   static isSupported() {
-    return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+    return !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) &&
+      typeof MediaRecorder !== 'undefined' &&
+      MediaRecorder.isTypeSupported(MIME_TYPE);
   }
 
   /**
-   * Start recording
+   * Start recording the current tab, plus the mic when withMic is true.
+   * Resolves false if the user cancels the share picker.
    */
-  async startRecording() {
-    if (this.isRecording) {
-      console.warn('[Tapko] Recording already in progress');
+  async startRecording({ withMic = false } = {}) {
+    if (this.isRecording) return false;
+    if (!RecordingManager.isSupported()) {
+      throw new Error('Screen recording is not supported in this browser');
+    }
+
+    let screen;
+    try {
+      // Same 720p cap as screenshot.js (GPU memory on HiDPI); displaySurface /
+      // monitorTypeSurfaces steer the picker to this tab, not the whole screen.
+      screen = await navigator.mediaDevices.getDisplayMedia({
+        video: { width: { max: 1280 }, height: { max: 720 }, frameRate: { max: 15 }, displaySurface: 'browser' },
+        audio: false,
+        preferCurrentTab: true,
+        monitorTypeSurfaces: 'exclude'
+      });
+    } catch (error) {
+      console.warn('[Tapko] Screen recording cancelled:', error.message);
       return false;
     }
+    this.streams = [screen];
 
-    if (!RecordingManager.isSupported()) {
-      throw new Error('Audio recording is not supported in this browser');
+    let mic = null;
+    if (withMic) {
+      try {
+        mic = await navigator.mediaDevices.getUserMedia({ audio: true });
+        this.streams.push(mic);
+      } catch (error) {
+        console.warn('[Tapko] Mic unavailable, recording without narration:', error.message);
+      }
     }
 
-    try {
-      // Request microphone access
-      this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const tracks = [...screen.getVideoTracks(), ...(mic ? mic.getAudioTracks() : [])];
+    // ~1 Mbps keeps 60 s near 8 MB (IndexedDB queue, upload, storage).
+    this.mediaRecorder = new MediaRecorder(new MediaStream(tracks), { mimeType: MIME_TYPE, videoBitsPerSecond: 1e6 });
+    this.chunks = [];
+    this.mediaRecorder.addEventListener('dataavailable', (event) => {
+      if (event.data.size > 0) this.chunks.push(event.data);
+    });
+    this.mediaRecorder.addEventListener('stop', () => this._finish());
 
-      // Create media recorder
-      const options = { mimeType: 'audio/webm' };
-      this.mediaRecorder = new MediaRecorder(this.stream, options);
+    // The browser's own "Stop sharing" button ends the video track.
+    screen.getVideoTracks()[0]?.addEventListener('ended', () => this.stopRecording());
 
-      this.audioChunks = [];
-      this.startTime = Date.now();
+    this.mediaRecorder.start(1000);
+    this.isRecording = true;
+    this.startTime = Date.now();
+    this.capTimeout = setTimeout(() => this.stopRecording(), MAX_DURATION_MS);
+    this.timerInterval = setInterval(() => this.onTick && this.onTick(this.getRemainingSeconds()), 1000);
+    if (this.onTick) this.onTick(this.getRemainingSeconds());
 
-      // Handle data available
-      this.mediaRecorder.addEventListener('dataavailable', (event) => {
-        if (event.data.size > 0) {
-          this.audioChunks.push(event.data);
-        }
-      });
-
-      // Handle recording stop
-      this.mediaRecorder.addEventListener('stop', () => {
-        this._cleanup();
-      });
-
-      // Start recording
-      this.mediaRecorder.start();
-      this.isRecording = true;
-
-      // Dispatch event
-      dispatchCustomEvent(CONFIG.EVENTS.RECORDING_STARTED, {
-        timestamp: this.startTime
-      });
-
-      return true;
-    } catch (error) {
-      console.error('[Tapko] Failed to start recording:', error);
-      this._cleanup();
-      throw new Error('Failed to access microphone. Please check permissions.');
-    }
+    dispatchCustomEvent(CONFIG.EVENTS.RECORDING_STARTED, { timestamp: this.startTime });
+    return true;
   }
 
   /**
-   * Stop recording
+   * Stop recording; onStop receives the result.
    */
   stopRecording() {
-    return new Promise((resolve, reject) => {
-      if (!this.isRecording || !this.mediaRecorder) {
-        reject(new Error('No recording in progress'));
-        return;
-      }
-
-      this.mediaRecorder.addEventListener('stop', () => {
-        try {
-          const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
-          const duration = Date.now() - this.startTime;
-
-          dispatchCustomEvent(CONFIG.EVENTS.RECORDING_STOPPED, {
-            duration,
-            audioBlob: audioBlob
-          });
-
-          resolve({
-            blob: audioBlob,
-            duration,
-            size: audioBlob.size
-          });
-        } catch (error) {
-          reject(error);
-        }
-      }, { once: true });
-
-      this.mediaRecorder.stop();
-      this.isRecording = false;
-    });
+    if (!this.isRecording) return;
+    this.isRecording = false;
+    this._clearTimers();
+    if (this.mediaRecorder.state !== 'inactive') this.mediaRecorder.stop();
   }
 
   /**
    * Cancel recording without saving
    */
   cancelRecording() {
-    if (this.mediaRecorder && this.isRecording) {
-      this.mediaRecorder.stop();
-      this.isRecording = false;
-      this.audioChunks = [];
-      this._cleanup();
-    }
+    this.onStop = null;
+    this.stopRecording();
+    this.chunks = [];
+    this._cleanup();
+  }
+
+  _finish() {
+    this._cleanup();
+    if (!this.chunks.length) return;
+    // Exactly MIME_TYPE, never blob.type with codecs: the presigned PUT signs this string.
+    const blob = new Blob(this.chunks, { type: MIME_TYPE });
+    const duration = Math.min(Date.now() - this.startTime, MAX_DURATION_MS);
+    dispatchCustomEvent(CONFIG.EVENTS.RECORDING_STOPPED, { duration });
+    if (this.onStop) this.onStop({ blob, duration, size: blob.size });
+  }
+
+  getRemainingSeconds() {
+    if (!this.startTime) return MAX_DURATION_MS / 1000;
+    return Math.max(0, Math.ceil((MAX_DURATION_MS - (Date.now() - this.startTime)) / 1000));
+  }
+
+  _clearTimers() {
+    clearTimeout(this.capTimeout);
+    clearInterval(this.timerInterval);
+    this.capTimeout = null;
+    this.timerInterval = null;
   }
 
   /**
-   * Check if there is a recording available
-   */
-  hasRecording() {
-    return this.audioChunks.length > 0;
-  }
-
-  /**
-   * Get recording duration in seconds
-   */
-  getDuration() {
-    if (!this.startTime) return 0;
-    return Math.floor((Date.now() - this.startTime) / 1000);
-  }
-
-  /**
-   * Format duration as MM:SS
-   */
-  getFormattedDuration() {
-    const seconds = this.getDuration();
-    const minutes = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  }
-
-  /**
-   * Cleanup resources
+   * Stop every screen and mic track, so the browser's sharing indicator goes away.
    */
   _cleanup() {
-    if (this.stream) {
-      this.stream.getTracks().forEach(track => track.stop());
-      this.stream = null;
-    }
-
-    if (this.timerInterval) {
-      clearInterval(this.timerInterval);
-      this.timerInterval = null;
-    }
+    this._clearTimers();
+    this.streams.forEach(stream => stream.getTracks().forEach(track => track.stop()));
+    this.streams = [];
   }
 
-  /**
-   * Destroy and cleanup all resources
-   */
   destroy() {
     this.cancelRecording();
-    this._cleanup();
-    this.audioChunks = [];
     this.mediaRecorder = null;
   }
 }
 
-export { RecordingManager };
+export { RecordingManager, MAX_DURATION_MS };
