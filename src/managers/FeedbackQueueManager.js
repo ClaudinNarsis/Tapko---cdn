@@ -104,10 +104,12 @@ class FeedbackQueueManager {
         feedbackData: {
           title: feedbackData.title,
           description: feedbackData.description,
-          screenshot: feedbackData.screenshot, // Blob (unmerged)
+          // Assets are stored as { data: ArrayBuffer, type }, not Blobs: WebKit
+          // often can't use a Blob read back from IndexedDB as a fetch body.
+          screenshot: await this._toStored(feedbackData.screenshot), // unmerged
           annotationData: feedbackData.annotationData, // NEW: Annotation data {paths, strokeColor, strokeWidth}
-          logs: feedbackData.logs, // Blob
-          networkLogs: feedbackData.networkLogs, // Blob
+          logs: await this._toStored(feedbackData.logs),
+          networkLogs: await this._toStored(feedbackData.networkLogs),
           context: feedbackData.context,
           idempotencyKey: feedbackData.idempotencyKey,
           projectId: feedbackData.projectId,
@@ -325,77 +327,41 @@ class FeedbackQueueManager {
     this.emit('queue:item-processing', { id: item.id });
 
     try {
-      // Step 1: Upload screenshot to S3 (merge annotations if needed)
-      if (item.uploadProgress.screenshot.status !== 'completed' && item.feedbackData.screenshot) {
-        console.log(`[FeedbackQueue] Uploading screenshot for item ${item.id}...`);
+      // Steps 1-3: Upload screenshot (merging annotations), logs, network logs.
+      // A failed asset never blocks the comment: it's logged and skipped, and the
+      // feedback is submitted with whatever did upload. If the submit itself
+      // fails, the item retry re-attempts any asset still not completed.
+      const steps = [
+        ['screenshot', 'image/jpeg', 'screenshot'],
+        ['logs', 'text/plain', 'logs'],
+        ['networkLogs', 'text/plain', 'logs']
+      ];
+      for (const [step, mimeType, type] of steps) {
+        if (item.uploadProgress[step].status === 'completed' || !item.feedbackData[step]) continue;
+        try {
+          console.log(`[FeedbackQueue] Uploading ${step} for item ${item.id}...`);
+          let blob = await this._toBlob(item.feedbackData[step], mimeType);
+          if (!blob) throw new Error(`${step} unreadable from queue storage`);
 
-        // Merge annotations if they exist
-        let screenshotToUpload = item.feedbackData.screenshot;
-        if (item.feedbackData.annotationData && item.feedbackData.annotationData.paths && item.feedbackData.annotationData.paths.length > 0) {
-          console.log(`[FeedbackQueue] Merging ${item.feedbackData.annotationData.paths.length} annotations before upload...`);
-          screenshotToUpload = await this._mergeAnnotationsToScreenshot(
-            item.feedbackData.screenshot,
-            item.feedbackData.annotationData
-          );
+          const annotations = item.feedbackData.annotationData;
+          if (step === 'screenshot' && annotations && annotations.paths && annotations.paths.length > 0) {
+            console.log(`[FeedbackQueue] Merging ${annotations.paths.length} annotations before upload...`);
+            blob = await this._mergeAnnotationsToScreenshot(blob, annotations);
+          }
+
+          const result = await this.uploadAsset(blob, mimeType, type);
+          item.uploadProgress[step] = {
+            status: 'completed',
+            url: result.url,
+            key: result.key,
+            bucket: result.bucket
+          };
+
+          await this.updateItem(item.id, item);
+          this.emit('queue:step-completed', { id: item.id, step });
+        } catch (error) {
+          console.error(`[FeedbackQueue] ${step} upload failed for item ${item.id}, submitting without it:`, error);
         }
-
-        const screenshotResult = await this.uploadAsset(
-          screenshotToUpload,  // Upload merged screenshot
-          'image/jpeg',
-          'screenshot'
-        );
-
-        item.uploadProgress.screenshot = {
-          status: 'completed',
-          url: screenshotResult.url,
-          key: screenshotResult.key,
-          bucket: screenshotResult.bucket
-        };
-
-        await this.updateItem(item.id, item);
-        this.emit('queue:step-completed', { id: item.id, step: 'screenshot' });
-      }
-
-      // Step 2: Upload logs to S3
-      if (item.uploadProgress.logs.status !== 'completed' && item.feedbackData.logs) {
-        console.log(`[FeedbackQueue] Uploading logs for item ${item.id}...`);
-
-        const logsResult = await this.uploadAsset(
-          item.feedbackData.logs,
-          'text/plain',
-          'logs'
-        );
-
-        item.uploadProgress.logs = {
-          status: 'completed',
-          url: logsResult.url,
-          key: logsResult.key,
-          bucket: logsResult.bucket
-        };
-
-        await this.updateItem(item.id, item);
-        this.emit('queue:step-completed', { id: item.id, step: 'logs' });
-      }
-
-      // Step 3: Upload network logs to S3
-      if (item.uploadProgress.networkLogs.status !== 'completed' && item.feedbackData.networkLogs) {
-        console.log(`[FeedbackQueue] Uploading network logs for item ${item.id}...`);
-
-        const networkLogsResult = await this.uploadAsset(
-          item.feedbackData.networkLogs,
-          'text/plain',
-          'logs'
-        );
-
-        item.uploadProgress.networkLogs = {
-          status: 'completed',
-          url: networkLogsResult.url,
-          key: networkLogsResult.key,
-          bucket: networkLogsResult.bucket
-        };
-
-        await this.updateItem(item.id, item);
-        this.emit('queue:step-completed', { id: item.id, step: 'networkLogs' });
       }
 
       // Step 4: Submit feedback payload
@@ -535,6 +501,28 @@ class FeedbackQueueManager {
           attempts: item.attempts
         });
       }
+    }
+  }
+
+  /**
+   * Blob -> { data: ArrayBuffer, type } for IndexedDB (WebKit-safe)
+   */
+  async _toStored(blob) {
+    if (!blob) return blob;
+    return { data: await blob.arrayBuffer(), type: blob.type };
+  }
+
+  /**
+   * Stored asset -> fresh Blob for upload. Items queued by older builds hold a
+   * raw Blob; WebKit may fail to read it, so an unreadable one returns null.
+   */
+  async _toBlob(stored, fallbackType) {
+    try {
+      const data = stored instanceof Blob ? await stored.arrayBuffer() : stored.data;
+      return new Blob([data], { type: stored.type || fallbackType });
+    } catch (error) {
+      console.warn('[FeedbackQueue] Could not read queued asset:', error);
+      return null;
     }
   }
 
