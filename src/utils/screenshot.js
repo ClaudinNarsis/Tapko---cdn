@@ -466,12 +466,73 @@ function _credentialsFor(url) {
   }
 }
 
+// Time budgets so a heavy page can never hold the user hostage during capture.
+const RENDER_TIMEOUT_MS = 12000;   // renderer POST (URL and html modes)
+const INLINE_BUDGET_MS = 5000;     // total DOM asset-inlining time
+const INLINE_CONCURRENCY = 8;      // parallel asset fetches while inlining
+
+let _inlineSignal = null;          // set only while a DOM capture is inlining
+let _inlineActive = 0;
+const _inlineWaiters = [];
+
+function _startInlineBudget() {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => {
+    console.warn(`[Tapko] DOM inlining budget (${INLINE_BUDGET_MS}ms) hit, continuing with partial inlining`);
+    ctrl.abort();
+  }, INLINE_BUDGET_MS);
+  _inlineSignal = ctrl.signal;
+  return () => { clearTimeout(timer); _inlineSignal = null; };
+}
+
+/** fetch() for snapshot assets: concurrency-capped, aborted when the inline budget expires. */
+async function _assetFetch(url) {
+  if (_inlineActive >= INLINE_CONCURRENCY) await new Promise(r => _inlineWaiters.push(r));
+  _inlineActive++;
+  try {
+    const opts = { mode: 'cors', credentials: _credentialsFor(url) };
+    if (_inlineSignal) opts.signal = _inlineSignal;
+    return await fetch(url, opts);
+  } finally {
+    _inlineActive--;
+    _inlineWaiters.shift()?.();
+  }
+}
+
+/**
+ * POST a render request with a hard timeout. Rejects with name 'TimeoutError'
+ * on timeout, or the caller signal's reason (AbortError) when cancelled.
+ */
+async function _postRender(body, signal) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(
+    () => ctrl.abort(new DOMException(`Renderer timed out after ${RENDER_TIMEOUT_MS}ms`, 'TimeoutError')),
+    RENDER_TIMEOUT_MS
+  );
+  const onAbort = () => ctrl.abort(signal.reason);
+  if (signal) {
+    if (signal.aborted) onAbort();
+    else signal.addEventListener('abort', onAbort, { once: true });
+  }
+  try {
+    return await fetch(CONFIG.API.rendererUrl + '/render', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: ctrl.signal
+    });
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', onAbort);
+  }
+}
+
 /**
  * Fetch a URL and return a base64 data-URI, or null on failure / size limit.
  */
 async function _fetchAsDataURI(url, maxBytes = 512 * 1024) {
   try {
-    const res = await fetch(url, { mode: 'cors', credentials: _credentialsFor(url) });
+    const res = await _assetFetch(url);
     if (!res.ok) return null;
     const blob = await res.blob();
     if (blob.size > maxBytes) return null;
@@ -508,7 +569,7 @@ async function _resolveCSSImports(css, baseUrl, depth = 0) {
       const href = m[1] || m[2];
       try {
         const absolute = new URL(href, baseUrl).href;
-        const res = await fetch(absolute, { mode: 'cors', credentials: _credentialsFor(absolute) });
+        const res = await _assetFetch(absolute);
         if (!res.ok) return { original, replacement: original };
         const importedCss = await _resolveCSSImports(await res.text(), absolute, depth + 1);
         return { original, replacement: importedCss };
@@ -1095,6 +1156,8 @@ async function captureDOMScreenshot(options = {}) {
     await (options.snapshot || _snapshotDOM());
   const timingSnapshot = performance.now();
 
+  const endInlineBudget = _startInlineBudget();
+
   // 4f. Inline <img> srcs as base64 (existing 512 KB per-asset cap applies)
   const imgEls = [...clone.querySelectorAll('img[src]')];
   await Promise.allSettled(imgEls.map(async img => {
@@ -1113,7 +1176,7 @@ async function captureDOMScreenshot(options = {}) {
     if (!href) return;
     try {
       const absolute = new URL(href, location.href).href;
-      const res = await fetch(absolute, { mode: 'cors', credentials: _credentialsFor(absolute) });
+      const res = await _assetFetch(absolute);
       if (!res.ok) return;
       let css = await res.text();
       if (_measureBytes(css) > 200 * 1024) return; // leave <link> tag, skip inlining
@@ -1146,6 +1209,8 @@ async function captureDOMScreenshot(options = {}) {
     if (_measureBytes(inlined) > 100 * 1024) return; // too large, keep original
     el.setAttribute('style', inlined);
   }));
+
+  endInlineBudget();
 
   // 5. Serialize
   _dedupeStyleDataURIs(clone);
@@ -1189,11 +1254,7 @@ async function captureDOMScreenshot(options = {}) {
     const requestBody = buildRequestBody(html);
     console.log(`[Tapko] DOM renderer POST attempt ${attempt + 1} (${(payloadBytes / 1024 / 1024).toFixed(2)} MB)`);
 
-    response = await fetch(CONFIG.API.rendererUrl + '/render', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody)
-    });
+    response = await _postRender(requestBody, options.signal);
 
     if (response.ok) break;
 
@@ -1259,90 +1320,79 @@ async function captureDOMScreenshot(options = {}) {
   };
 }
 
-/**
- * Capture screenshot by sending the live page URL to the server-side renderer.
- * Puppeteer navigates the real URL directly — no DOM serialization, no asset
- * inlining, no payload limits. Works for any publicly accessible page and
- * produces the most faithful render because JS runs and CSS/fonts load natively.
- *
- * @param {Object} options
- * @param {Object} [options.widgetOverlay] - Pin and card overlay data
- */
-async function captureURLScreenshot(options = {}) {
-  const timingStart = performance.now();
-
-  const scrollX = window.scrollX || window.pageXOffset;
-  const scrollY = window.scrollY || window.pageYOffset;
-  const viewportWidth = window.innerWidth;
-  const viewportHeight = window.innerHeight;
-  const { widgetOverlay } = options;
-
-  // The renderer gives up at its own 27 s deadline; waiting past ~20 s only
-  // delays the DOM fallback, whose snapshot was already taken at click time.
-  const controller = new AbortController();
-  const abortTimer = setTimeout(() => controller.abort(), URL_CAPTURE_TIMEOUT_MS);
-  const response = await fetch(CONFIG.API.rendererUrl + '/render', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    signal: controller.signal,
-    body: JSON.stringify({
-      url: location.href,
-      format: 'webp',
-      width: viewportWidth,
-      height: viewportHeight,
-      devicePixelRatio: window.devicePixelRatio || 1,
-      scrollX,
-      scrollY,
-    })
-  });
-
-  let json;
-  try {
-    if (!response.ok) throw new Error(`URL renderer responded with ${response.status}`);
-    json = await response.json();
-  } finally {
-    clearTimeout(abortTimer);
-  }
-  let dataURL = `data:image/${json.format};base64,${json.image}`;
-
-  if (widgetOverlay) {
-    dataURL = await new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0);
-        const scale = img.width / viewportWidth;
-        _drawWidgetOverlay(ctx, widgetOverlay, scale);
-        resolve(canvas.toDataURL('image/jpeg', 0.85));
-      };
-      img.onerror = () => reject(new Error('Failed to load renderer image for overlay'));
-      img.src = dataURL;
-    });
-  }
-
-  const timingEnd = performance.now();
-  console.log(`[Tapko] URL screenshot captured in ${(timingEnd - timingStart).toFixed(0)}ms`);
-
+/** Page state a URL render is a function of. Serializable, so the queue can persist it. */
+function getRenderParams() {
   return {
-    dataURL,
-    metadata: {
-      scrollX,
-      scrollY,
-      viewportWidth,
-      viewportHeight,
-      devicePixelRatio: window.devicePixelRatio || 1,
-      timestamp: new Date().toISOString(),
-      url: location.href,
-      userAgent: navigator.userAgent,
-      method: 'url-navigation'
-    }
+    url: location.href,
+    scrollX: window.scrollX || window.pageXOffset,
+    scrollY: window.scrollY || window.pageYOffset,
+    width: window.innerWidth,
+    height: window.innerHeight,
+    devicePixelRatio: window.devicePixelRatio || 1
   };
 }
 
-const URL_CAPTURE_TIMEOUT_MS = 20000;
+/** True while the page still matches the state `params` were captured at. */
+function renderParamsMatchPage(params) {
+  const now = getRenderParams();
+  return ['url', 'scrollX', 'scrollY', 'width', 'height', 'devicePixelRatio'].every(k => now[k] === params[k]);
+}
+
+/**
+ * Ask the renderer for a raw (no overlay) image of the live URL. Always asks
+ * for DPR 1: a DPR 2 screen would otherwise render 4x the pixels, which was the
+ * cause of 15-30s captures, and the screenshot only needs to be legible.
+ * @returns {Promise<string>} data URL
+ */
+async function renderURLImage(params, signal) {
+  const response = await _postRender({
+    url: params.url,
+    format: 'webp',
+    width: params.width,
+    height: params.height,
+    devicePixelRatio: Math.min(params.devicePixelRatio || 1, 1),
+    scrollX: params.scrollX,
+    scrollY: params.scrollY,
+  }, signal);
+
+  if (!response.ok) throw new Error(`URL renderer responded with ${response.status}`);
+
+  const json = await response.json();
+  return `data:image/${json.format};base64,${json.image}`;
+}
+
+/** Paint the pin/card overlay onto a rendered image. Returns a JPEG data URL. */
+function compositeWidgetOverlay(dataURL, widgetOverlay) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      const scale = img.width / window.innerWidth;
+      _drawWidgetOverlay(ctx, widgetOverlay, scale);
+      resolve(canvas.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = () => reject(new Error('Failed to load renderer image for overlay'));
+    img.src = dataURL;
+  });
+}
+
+function _urlMetadata(params) {
+  return {
+    scrollX: params.scrollX,
+    scrollY: params.scrollY,
+    viewportWidth: params.width,
+    viewportHeight: params.height,
+    devicePixelRatio: params.devicePixelRatio,
+    timestamp: new Date().toISOString(),
+    url: params.url,
+    userAgent: navigator.userAgent,
+    method: 'url-navigation'
+  };
+}
 
 // Pages (origin + path) where URL capture already failed in this page load.
 // A page the renderer can't load in time (bos.studiofreight.dev: a WebGL
@@ -1390,6 +1440,25 @@ function _urlSkipReason() {
   const reason = _viewportHasLiveCanvas() ? 'a live canvas fills the viewport' : null;
   if (reason) _urlSkipPages.set(key, reason);
   return reason;
+}
+
+/**
+ * Capture screenshot by sending the live page URL to the server-side renderer.
+ * Puppeteer navigates the real URL directly: no DOM serialization, no asset
+ * inlining, no payload limits.
+ *
+ * @param {Object} options
+ * @param {Object} [options.widgetOverlay] - Pin and card overlay data
+ * @param {Object} [options.renderParams] - Reuse params from getRenderParams()
+ * @param {AbortSignal} [options.signal]
+ */
+async function captureURLScreenshot(options = {}) {
+  const timingStart = performance.now();
+  const params = options.renderParams || getRenderParams();
+  let dataURL = await renderURLImage(params, options.signal);
+  if (options.widgetOverlay) dataURL = await compositeWidgetOverlay(dataURL, options.widgetOverlay);
+  console.log(`[Tapko] URL screenshot captured in ${(performance.now() - timingStart).toFixed(0)}ms`);
+  return { dataURL, metadata: _urlMetadata(params) };
 }
 
 /**
@@ -1462,7 +1531,12 @@ async function captureScreenshot(options = {}) {
           console.log('[Tapko] Attempting URL-based screenshot');
           return await captureURLScreenshot(options);
         } catch (urlErr) {
-          _urlCaptureFailed.add(_pageKey());
+          if (urlErr.name !== 'AbortError') _urlCaptureFailed.add(_pageKey());
+          if (urlErr.name === 'TimeoutError' || urlErr.name === 'AbortError') {
+            // The renderer is slow or the caller cancelled; the DOM fallback hits the same renderer.
+            console.warn('[Tapko] URL capture gave up:', urlErr.message, '- submitting without waiting further');
+            return null;
+          }
           console.warn('[Tapko] URL capture failed:', urlErr.message, '— falling back to DOM serialization');
         }
       } else {
@@ -1503,6 +1577,10 @@ async function captureScreenshot(options = {}) {
 export {
   captureScreenshot,
   captureURLScreenshot,
+  getRenderParams,
+  renderParamsMatchPage,
+  renderURLImage,
+  compositeWidgetOverlay,
   captureViewportScreenshot,
   generateThumbnail,
   dataURLToBlob,
