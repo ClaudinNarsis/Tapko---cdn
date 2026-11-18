@@ -609,7 +609,8 @@ function _stripHiddenElements(rootEl) {
   rootEl.querySelectorAll('[hidden]').forEach(el => el.remove());
   rootEl.querySelectorAll('[style]').forEach(el => {
     const s = el.getAttribute('style') || '';
-    if (/display\s*:\s*none/i.test(s) || /visibility\s*:\s*hidden/i.test(s)) {
+    // (?<![\w-]): `backface-visibility: hidden` is not `visibility: hidden` (jjettas.com's hero wrapper).
+    if (/(?<![\w-])display\s*:\s*none/i.test(s) || /(?<![\w-])visibility\s*:\s*hidden/i.test(s)) {
       el.remove();
     }
   });

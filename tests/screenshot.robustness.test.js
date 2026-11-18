@@ -169,6 +169,14 @@ describe('heavy page payload reduction', () => {
     expect(clone.querySelector('#s').hasAttribute('data-track')).toBe(false);
   });
 
+  it('does not strip an element whose style merely contains backface-visibility: hidden', async () => {
+    const { _reducePayload } = await import('../src/utils/screenshot.js');
+    const clone = doc('<div id="hero" style="transform: translate3d(0px, 0px, 0px); backface-visibility: hidden"></div><div id="gone" style="color:red; visibility: hidden"></div>');
+    _reducePayload(clone, 0, 900, 1);
+    expect(clone.querySelector('#hero')).not.toBeNull();
+    expect(clone.querySelector('#gone')).toBeNull();
+  });
+
   it('keeps aria-hidden decorative elements (hero canvases/backgrounds) at level 1', async () => {
     const { _reducePayload } = await import('../src/utils/screenshot.js');
     const clone = doc('<img id="bg" aria-hidden="true" src="x.jpg"><div id="gone" hidden></div><div id="gone2" style="display:none"></div>');
