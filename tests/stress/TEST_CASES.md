@@ -89,9 +89,8 @@ Run `npm run stress -- <url> --quick` on each. To test a renderer change without
 | extrafazant.nl | entrance-animated hero headline in URL mode | open, see Known limits |
 
 Known limits found here:
-- WebGL canvases drawn on demand (grail `_acceptBg`, sweet-tape hero scene) read back blank after their frame is
-  presented, so the DOM capture can't contain them. A fully transparent readback is now skipped instead of
-  becoming an opaque black box. Local screenshot mode (getDisplayMedia) is the way to get these.
+- WebGL canvases drawn on demand read back blank after their frame is presented. See "Capture fidelity pass" below
+  for what the frame-synced read recovers and what stays blank. (Local getDisplayMedia is not an option: product decision.)
 - Canvases fed by cross-origin video (zrk hero) are tainted and can't be read.
 
 ## Class A: URL capture "succeeds" with a wrong/blank frame (2026-11-18)
@@ -112,3 +111,32 @@ can be the wrong section or one flat colour with a 200 (sweet-tape #2-#4, zrk #3
 Re-run (local renderer, quick, M2 url): sweet-tape 1/5, zrk 5/5 (hero video black = known limit), santalarch 4/5,
 jjettas 2/5, grail 2/5, extrafazant 4/5 via URL at 3.6 s. No blank/black frame is reported as success any more;
 remaining misses are the known hard limits.
+
+## Capture fidelity pass (2026-11-18, branch fix/capture-fidelity)
+
+Scorer: `tests/stress/score.py <run-dir>` (also printed by run.sh). 8x5 luminance tile grid, comment card/pin and the
+"View All Feedback" button masked; a comment FAILS at >= 7 bad tiles. Calibrated on hosted-115900 (M2): reproduces
+27/30 labels (16/30 strict matches). Known disagreements: santalarch #2 and extrafazant #3 are false FAILs (gear/photo
+detail), zrk #2 is a missed miss (one small 3D object). Treat it as a flag and still read sheet.png.
+
+WebGL spike (grail-app.com, headless + headed, DPR 2, 40 trials per strategy, canvas read via drawImage/toDataURL):
+- Outside a rAF callback: 0/40 non-blank (sync read).
+- In rAF: grail scene canvas 17/40 headless, 10/40 headed; resize+doubleRAF no better (9-18/40); scroll nudge / wheel
+  event: no change. So one scheduled read is a coin flip, but polling frame by frame reads it within a few frames.
+- sweet-tape hero canvas: 30/30 on the first rAF.
+- grail lilac background canvas (#1/#2): 0/40 in every strategy at sy 2700 and 5409, headless and headed. Unreadable; stays blank.
+- zrk hero canvas: tainted by cross-origin video (SecurityError). Unreadable.
+Implemented: `_snapshotDOM` polls rAF (<=300 ms) and caches each big canvas's first readable frame (`_collectCanvasFrames`).
+
+Fixed in this pass:
+- jjettas #0: `_stripHiddenElements` matched `visibility: hidden` inside `backface-visibility: hidden` and deleted the hero
+  wrapper (not `_stampStickyOffsets`: the request had zero sticky stamps).
+- jjettas #1 player cards, grail #0 floating cards: frame-synced WebGL read.
+- sweet-tape #0 black box: JPEG of a canvas with transparent areas is opaque black; canvases with alpha are now WebP.
+- grail #1 timer / animation replay: animated elements get their current computed values, clone gets `animation:none`.
+- Image boxes stamped on every `<img>` (width/height/object-fit/position).
+
+Still open: grail lilac bg (#1/#2, unreadable canvas), zrk drone (tainted), sweet-tape #0 tape roll + oversized logo, #1 headline
+shift, #2/#3 pinned content, jjettas #3 (footer panel lands in the viewport: layout of pinned sections, baking image
+boxes did not fix it), extrafazant URL #0 reduced-motion headline. The dev renderer returned 500 "Target closed" for
+jjettas M2 #0 and once for santalarch (replaying a payload that succeeded earlier also 500s), unrelated to the widget.
