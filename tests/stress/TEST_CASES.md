@@ -133,8 +133,9 @@ Fixed in this pass:
   wrapper (not `_stampStickyOffsets`: the request had zero sticky stamps).
 - jjettas #1 player cards, grail #0 floating cards: frame-synced WebGL read.
 - sweet-tape #0 black box: JPEG of a canvas with transparent areas is opaque black; canvases with alpha are now WebP.
-- grail #1 timer / animation replay: animated elements get their current computed values, clone gets `animation:none`.
-- Image boxes stamped on every `<img>` (width/height/object-fit/position).
+
+Tried and dropped (no visible change on any sheet): stamping animated elements' current computed values with
+`animation:none` in the clone (aimed at grail #1 timer, sweet-tape #1), and baking every `<img>` box (aimed at jjettas #3).
 
 Still open: grail lilac bg (#1/#2, unreadable canvas), zrk drone (tainted), sweet-tape #0 tape roll + oversized logo, #1 headline
 shift, #2/#3 pinned content, jjettas #3 (footer panel lands in the viewport: layout of pinned sections, baking image

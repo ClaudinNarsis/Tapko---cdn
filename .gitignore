@@ -39,3 +39,4 @@ cookies.txt
 # Stress harness output
 tests/stress/runs/
 .claude/settings.local.json
+__pycache__/
