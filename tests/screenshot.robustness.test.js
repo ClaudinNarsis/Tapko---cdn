@@ -169,6 +169,14 @@ describe('heavy page payload reduction', () => {
     expect(clone.querySelector('#s').hasAttribute('data-track')).toBe(false);
   });
 
+  it('does not strip an element whose style merely contains backface-visibility: hidden', async () => {
+    const { _reducePayload } = await import('../src/utils/screenshot.js');
+    const clone = doc('<div id="hero" style="transform: translate3d(0px, 0px, 0px); backface-visibility: hidden"></div><div id="gone" style="color:red; visibility: hidden"></div>');
+    _reducePayload(clone, 0, 900, 1);
+    expect(clone.querySelector('#hero')).not.toBeNull();
+    expect(clone.querySelector('#gone')).toBeNull();
+  });
+
   it('keeps aria-hidden decorative elements (hero canvases/backgrounds) at level 1', async () => {
     const { _reducePayload } = await import('../src/utils/screenshot.js');
     const clone = doc('<img id="bg" aria-hidden="true" src="x.jpg"><div id="gone" hidden></div><div id="gone2" style="display:none"></div>');
@@ -224,5 +232,31 @@ describe('heavy page payload reduction', () => {
     const { clone } = _snapshotDOMSync();
     expect(clone.querySelector('canvas')).toBeNull();
     expect(clone.querySelector('img#gl').getAttribute('src')).toBe('data:image/jpeg;base64,SMALL');
+  });
+
+  it('keeps the first readable frame of each canvas; an always-blank canvas does not lose it', async () => {
+    const { _snapshotDOM } = await import('../src/utils/screenshot.js');
+    document.body.innerHTML = '<canvas id="gl" width="1440" height="900"></canvas><canvas id="blank" width="1440" height="900"></canvas>';
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue(rect(0, 0, window.innerWidth, window.innerHeight));
+    let glProbes = 0; // #gl is drawn only in its 3rd probed frame; blank again at snapshot time (buffer cleared)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => {
+      let drawn = false;
+      return { drawImage(src) { drawn = src.id === 'gl' && ++glProbes === 3; }, getImageData: () => ({ data: new Uint8ClampedArray(16 * 9 * 4).fill(drawn ? 255 : 0) }) };
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/jpeg;base64,GLFRAME');
+    const { clone } = await _snapshotDOM(200);
+    expect(clone.querySelector('img#gl').getAttribute('src')).toBe('data:image/jpeg;base64,GLFRAME');
+    expect(clone.querySelector('canvas#blank')).not.toBeNull();
+  });
+
+  it('encodes a canvas that has transparent areas as WebP, not JPEG (JPEG makes them an opaque black box)', async () => {
+    const { _snapshotDOMSync } = await import('../src/utils/screenshot.js');
+    document.body.innerHTML = '<canvas id="gl" width="1440" height="900"></canvas>';
+    const px = new Uint8ClampedArray(64 * 36 * 4).fill(255); px[3] = 0; // one transparent pixel, the rest opaque
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ drawImage() {}, getImageData: () => ({ data: px }) });
+    const enc = vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockImplementation(t => `data:${t};base64,X`);
+    const { clone } = _snapshotDOMSync();
+    expect(clone.querySelector('img#gl').getAttribute('src')).toBe('data:image/webp;base64,X');
+    expect(enc).not.toHaveBeenCalledWith('image/jpeg', expect.anything());
   });
 });

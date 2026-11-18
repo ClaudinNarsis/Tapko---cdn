@@ -609,7 +609,8 @@ function _stripHiddenElements(rootEl) {
   rootEl.querySelectorAll('[hidden]').forEach(el => el.remove());
   rootEl.querySelectorAll('[style]').forEach(el => {
     const s = el.getAttribute('style') || '';
-    if (/display\s*:\s*none/i.test(s) || /visibility\s*:\s*hidden/i.test(s)) {
+    // (?<![\w-]): `backface-visibility: hidden` is not `visibility: hidden` (jjettas.com's hero wrapper).
+    if (/(?<![\w-])display\s*:\s*none/i.test(s) || /(?<![\w-])visibility\s*:\s*hidden/i.test(s)) {
       el.remove();
     }
   });
@@ -783,7 +784,13 @@ function _canvasReadsTransparent(live) {
  * renderer's DPR upscale costs a little sharpness instead of the scene.
  */
 function _canvasToDataURI(live) {
-  const full = live.toDataURL('image/jpeg', 0.7);
+  // A canvas with transparent areas (sweet-tape's hero: just the tape on a
+  // transparent buffer, the green page is DOM behind it) must keep its alpha:
+  // JPEG turns transparent into an opaque black box over the page. WebP keeps
+  // alpha at JPEG-like size (browsers that cannot encode it return PNG, which
+  // then steps down below).
+  const type = _canvasHasAlpha(live) ? 'image/webp' : 'image/jpeg';
+  const full = live.toDataURL(type, 0.7);
   if (full.length <= CANVAS_SNAPSHOT_MAX_BYTES) return full;
   const rect = live.getBoundingClientRect();
   const css = Math.min(1, rect.width / live.width || 1, rect.height / live.height || 1);
@@ -795,11 +802,24 @@ function _canvasToDataURI(live) {
     small.width = Math.max(1, Math.round(live.width * css * k));
     small.height = Math.max(1, Math.round(live.height * css * k));
     small.getContext('2d').drawImage(live, 0, 0, small.width, small.height);
-    const reduced = small.toDataURL('image/jpeg', q);
+    const reduced = small.toDataURL(type, q);
     small.width = small.height = 0;
     if (reduced.length <= CANVAS_SNAPSHOT_MAX_BYTES) return reduced;
   }
   return null;
+}
+
+/** True when any sampled pixel of the canvas is not fully opaque. */
+function _canvasHasAlpha(live) {
+  try {
+    const probe = document.createElement('canvas');
+    probe.width = 64; probe.height = 36;
+    const ctx = probe.getContext('2d');
+    ctx.drawImage(live, 0, 0, 64, 36);
+    const d = ctx.getImageData(0, 0, 64, 36).data;
+    for (let i = 3; i < d.length; i += 4) if (d[i] < 255) return true;
+  } catch { /* tainted: toDataURL will throw too */ }
+  return false;
 }
 
 /**
@@ -843,12 +863,42 @@ function _stampStickyOffsets() {
  * which was registered a frame earlier). Everything after this works on the
  * detached clone only.
  */
-async function _snapshotDOM() {
-  await _nextFrame();
-  return _snapshotDOMSync();
+async function _snapshotDOM(maxWaitMs = 300) {
+  return new Promise(resolve => {
+    const t0 = Date.now(); let done = false;
+    const frames = new Map(); // live canvas -> JPEG data URI read in a frame where it was drawn
+    const finish = () => { if (done) return; done = true; clearTimeout(timer); resolve(_snapshotDOMSync(frames)); };
+    // rAF throttled (background tab): snapshot anyway.
+    const timer = setTimeout(finish, maxWaitMs + 300);
+    // A WebGL canvas without preserveDrawingBuffer only reads back inside the
+    // frame its own render callback ran in (grail-app.com: ~40% of frames, 0%
+    // outside rAF; sweet-tape.com: every frame). Poll frame by frame and keep
+    // the first non-transparent read of each big on-screen canvas. Canvases
+    // that never read (empty overlays) just run the wait out.
+    const tick = () => {
+      if (done) return;
+      if (_collectCanvasFrames(frames) || Date.now() - t0 > maxWaitMs) return finish();
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
 }
 
-function _snapshotDOMSync() {
+/** Cache a readable frame of each on-screen canvas covering >=10% of the viewport. True when all are cached. */
+function _collectCanvasFrames(frames, minFraction = 0.1) {
+  const vw = window.innerWidth, vh = window.innerHeight; let all = true;
+  for (const c of document.querySelectorAll('canvas')) {
+    if (frames.has(c)) continue;
+    const r = c.getBoundingClientRect();
+    const w = Math.min(r.right, vw) - Math.max(r.left, 0), h = Math.min(r.bottom, vh) - Math.max(r.top, 0);
+    if (!(w > 0 && h > 0 && c.width && c.height && (w * h) / (vw * vh) >= minFraction)) continue;
+    if (_canvasReadsTransparent(c)) { all = false; continue; }
+    try { const uri = _canvasToDataURI(c); if (uri) frames.set(c, uri); } catch { /* tainted */ }
+  }
+  return all;
+}
+
+function _snapshotDOMSync(glFrames) {
   // 1. Capture scroll position before any DOM mutations
   const scrollX = window.scrollX || window.pageXOffset;
   const scrollY = window.scrollY || window.pageYOffset;
@@ -917,8 +967,7 @@ function _snapshotDOMSync() {
     const live = liveCanvases[i];
     if (!live || !live.width || !live.height) return;
     try {
-      if (_canvasReadsTransparent(live)) return;
-      const dataURI = _canvasToDataURI(live);
+      const dataURI = (glFrames && glFrames.get(live)) || (_canvasReadsTransparent(live) ? null : _canvasToDataURI(live));
       if (!dataURI) return;
       const img = document.createElement('img');
       for (const attr of cloneCanvas.attributes) img.setAttribute(attr.name, attr.value);
@@ -1462,6 +1511,7 @@ export {
   _credentialsFor,
   _fetchAsDataURI,
   _serialiseClone,
+  _snapshotDOM,
   _snapshotDOMSync,
   _fixParagraphNesting,
   _reducePayload,
