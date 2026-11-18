@@ -784,7 +784,13 @@ function _canvasReadsTransparent(live) {
  * renderer's DPR upscale costs a little sharpness instead of the scene.
  */
 function _canvasToDataURI(live) {
-  const full = live.toDataURL('image/jpeg', 0.7);
+  // A canvas with transparent areas (sweet-tape's hero: just the tape on a
+  // transparent buffer, the green page is DOM behind it) must keep its alpha:
+  // JPEG turns transparent into an opaque black box over the page. WebP keeps
+  // alpha at JPEG-like size (browsers that cannot encode it return PNG, which
+  // then steps down below).
+  const type = _canvasHasAlpha(live) ? 'image/webp' : 'image/jpeg';
+  const full = live.toDataURL(type, 0.7);
   if (full.length <= CANVAS_SNAPSHOT_MAX_BYTES) return full;
   const rect = live.getBoundingClientRect();
   const css = Math.min(1, rect.width / live.width || 1, rect.height / live.height || 1);
@@ -796,11 +802,24 @@ function _canvasToDataURI(live) {
     small.width = Math.max(1, Math.round(live.width * css * k));
     small.height = Math.max(1, Math.round(live.height * css * k));
     small.getContext('2d').drawImage(live, 0, 0, small.width, small.height);
-    const reduced = small.toDataURL('image/jpeg', q);
+    const reduced = small.toDataURL(type, q);
     small.width = small.height = 0;
     if (reduced.length <= CANVAS_SNAPSHOT_MAX_BYTES) return reduced;
   }
   return null;
+}
+
+/** True when any sampled pixel of the canvas is not fully opaque. */
+function _canvasHasAlpha(live) {
+  try {
+    const probe = document.createElement('canvas');
+    probe.width = 64; probe.height = 36;
+    const ctx = probe.getContext('2d');
+    ctx.drawImage(live, 0, 0, 64, 36);
+    const d = ctx.getImageData(0, 0, 64, 36).data;
+    for (let i = 3; i < d.length; i += 4) if (d[i] < 255) return true;
+  } catch { /* tainted: toDataURL will throw too */ }
+  return false;
 }
 
 /**

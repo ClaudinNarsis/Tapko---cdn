@@ -278,4 +278,15 @@ describe('heavy page payload reduction', () => {
     expect(clone.querySelector('img#gl').getAttribute('src')).toBe('data:image/jpeg;base64,GLFRAME');
     expect(clone.querySelector('canvas#blank')).not.toBeNull();
   });
+
+  it('encodes a canvas that has transparent areas as WebP, not JPEG (JPEG makes them an opaque black box)', async () => {
+    const { _snapshotDOMSync } = await import('../src/utils/screenshot.js');
+    document.body.innerHTML = '<canvas id="gl" width="1440" height="900"></canvas>';
+    const px = new Uint8ClampedArray(64 * 36 * 4).fill(255); px[3] = 0; // one transparent pixel, the rest opaque
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ drawImage() {}, getImageData: () => ({ data: px }) });
+    const enc = vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockImplementation(t => `data:${t};base64,X`);
+    const { clone } = _snapshotDOMSync();
+    expect(clone.querySelector('img#gl').getAttribute('src')).toBe('data:image/webp;base64,X');
+    expect(enc).not.toHaveBeenCalledWith('image/jpeg', expect.anything());
+  });
 });
