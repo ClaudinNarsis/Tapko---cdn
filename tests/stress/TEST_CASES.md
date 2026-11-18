@@ -72,3 +72,43 @@ Viewports from real reports: 745x868 and 1014x868 at DPR 2, scroll 0 and 9781.
 - Inline stage measured 11-35 s with three WebGL Chromes in parallel, 1-3 s solo; no budget added (leftover URLs would break localhost/auth-walled projects).
 - After one URL-capture failure (incl. a single transient 5xx, or a public page needing 20-27 s), the rest of that page session uses DOM capture.
 - Any page with a canvas covering >=25% of the viewport now uses DOM capture instead of URL capture.
+
+## Awwwards sweep (2026-11-18): heavy / animated pages
+
+Run `npm run stress -- <url> --quick` on each. To test a renderer change without deploying, serve
+`Tapko-backend` `render()` on localhost and set `STRESS_RENDER_URL=http://localhost:3999/render`
+(harness forwards `/render` calls there instead of the dev Lambda).
+
+| Site | What it exercises | Fixed by |
+|------|-------------------|----------|
+| sweet-tape.com | 16 MB payload (68 inlined webp); reduction used to delete the site CSS -> unstyled page | images shed before stylesheets (`_reducePayload`) |
+| zrk.technology | 13.6 MB payload; level 4 stripped every data-URI image incl. canvas snapshots | canvas snapshots protected, canvas JPEG steps down instead of giving up |
+| jjettas.com | one 434 KB texture repeated 4x in CSS; `aria-hidden` WebGL hero removed at level 1; renderer ENOSPC/ERR_FAILED on file:// | `_dedupeStyleDataURIs`, aria-hidden kept, HTML served from memory |
+| grail-app.com | `Navigating frame was detached` on one comment in five | renderer retries once on browser death |
+| santalarch.com | tall page (30 000 px), payload near the 5.5 MB limit | below-fold pruning now actually runs (data-* strip erased its stamp) |
+| extrafazant.nl | entrance-animated hero headline in URL mode | open, see Known limits |
+
+Known limits found here:
+- WebGL canvases drawn on demand (grail `_acceptBg`, sweet-tape hero scene) read back blank after their frame is
+  presented, so the DOM capture can't contain them. A fully transparent readback is now skipped instead of
+  becoming an opaque black box. Local screenshot mode (getDisplayMedia) is the way to get these.
+- Canvases fed by cross-origin video (zrk hero) are tainted and can't be read.
+
+## Class A: URL capture "succeeds" with a wrong/blank frame (2026-11-18)
+
+Scroll-animated pages (GSAP pins, Lenis, scroll reveals) load fresh in the renderer and jump to scrollY, so the frame
+can be the wrong section or one flat colour with a 200 (sweet-tape #2-#4, zrk #3-#4, santalarch #3).
+
+- Widget: `_urlSkipReason` (src/utils/screenshot.js) makes the live-canvas skip sticky per page session, so a canvas
+  at the hero skips URL mode for every later comment (sweet-tape, zrk, jjettas, grail, santalarch).
+- Renderer: feedback URL mode returns 422 `page_not_ready` when the frame is >=99.5% one colour
+  (`isNearUniformFrame`, 96x60 nearest-neighbour sample decoded on a blank tab); the widget then falls back to DOM
+  and `_urlCaptureFailed` keeps later comments on DOM. Not applied to html/verify/canvas mode.
+- Tried and dropped: skipping on `.pin-spacer` / `html.lenis` / `[data-scroll-container]`. extrafazant.nl has both
+  and URL mode is fine there (4/5, ~3 s), so markers alone regress good pages.
+- Threshold 0.97 was tried first and wrongly 422'd extrafazant's hero (headline hidden by its entrance animation,
+  measured 0.986); 0.995 passes it.
+
+Re-run (local renderer, quick, M2 url): sweet-tape 1/5, zrk 5/5 (hero video black = known limit), santalarch 4/5,
+jjettas 2/5, grail 2/5, extrafazant 4/5 via URL at 3.6 s. No blank/black frame is reported as success any more;
+remaining misses are the known hard limits.

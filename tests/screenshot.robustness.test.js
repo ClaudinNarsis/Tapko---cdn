@@ -58,6 +58,21 @@ describe('_viewportHasLiveCanvas', () => {
   });
 });
 
+describe('_urlSkipReason — sticky live canvas', () => {
+  beforeEach(() => { vi.resetModules(); document.body.innerHTML = ''; document.documentElement.className = ''; });
+  afterEach(() => vi.restoreAllMocks());
+
+  it('stays skipped once a live canvas was seen, even after it leaves the viewport', async () => {
+    const { _urlSkipReason } = await import('../src/utils/screenshot.js');
+    document.body.innerHTML = '<canvas width="10" height="10"></canvas>';
+    const c = document.querySelector('canvas');
+    c.getBoundingClientRect = () => rect(0, 0, window.innerWidth, window.innerHeight);
+    expect(_urlSkipReason()).toMatch(/live canvas/);
+    document.body.innerHTML = '<p>static</p>';
+    expect(_urlSkipReason()).toMatch(/live canvas/);
+  });
+});
+
 describe('captureScreenshot — URL capture is not retried on a page where it failed', () => {
   beforeEach(() => { vi.resetModules(); vi.stubEnv('RENDERER_URL', 'https://renderer.example.com'); document.body.innerHTML = '<p>hi</p>'; });
   afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
@@ -111,5 +126,103 @@ describe('parse-hostile nesting and doctype', () => {
     const { clone } = _snapshotDOMSync();
     expect(clone.querySelector('p.plain')).not.toBeNull();
     expect(_serialiseClone(clone).startsWith('<!DOCTYPE html>')).toBe(true);
+  });
+});
+
+// Heavy-page captures (sweet-tape.com, zrk.technology, jjettas.com, 2026-11-18)
+describe('heavy page payload reduction', () => {
+  beforeEach(() => { vi.resetModules(); document.body.innerHTML = ''; });
+  afterEach(() => vi.restoreAllMocks());
+
+  const doc = (body, head = '') => { const d = document.implementation.createHTMLDocument(''); d.head.innerHTML = head; d.body.innerHTML = body; return d.documentElement; };
+
+  it('sheds offscreen inlined images before dropping the site stylesheet', async () => {
+    const { _reducePayload } = await import('../src/utils/screenshot.js');
+    const clone = doc('<img id="on" data-tapko-inview="1" src="data:image/png;base64,AAAA"><img id="off" src="data:image/png;base64,BBBB">', '<style>body{color:red}</style>');
+    _reducePayload(clone, 0, 900, 2);
+    expect(clone.querySelector('#on').getAttribute('src')).toBe('data:image/png;base64,AAAA');
+    expect(clone.querySelector('#off').hasAttribute('src')).toBe(false);
+    expect(clone.querySelector('style')).not.toBeNull();
+  });
+
+  it('keeps canvas snapshots through level 3, which drops other inlined images', async () => {
+    const { _reducePayload } = await import('../src/utils/screenshot.js');
+    const clone = doc('<img id="cv" data-tapko-canvas="1" data-tapko-inview="1" src="data:image/jpeg;base64,CC"><img id="pic" data-tapko-inview="1" src="data:image/png;base64,DD">');
+    _reducePayload(clone, 0, 900, 3);
+    expect(clone.querySelector('#cv').hasAttribute('src')).toBe(true);
+    expect(clone.querySelector('#pic').hasAttribute('src')).toBe(false);
+  });
+
+  it('actually prunes content far below the fold (data-* strip used to erase its position stamp)', async () => {
+    const { _reducePayload } = await import('../src/utils/screenshot.js');
+    const clone = doc('<section id="near" data-tapko-rect-top="100"></section><section id="far" data-tapko-rect-top="90000"></section>');
+    _reducePayload(clone, 0, 900, 1);
+    expect(clone.querySelector('#near')).not.toBeNull();
+    expect(clone.querySelector('#far')).toBeNull();
+  });
+
+  it('keeps data-* attributes that stylesheets select on (Vue scoped styles), strips the rest', async () => {
+    const { _reducePayload } = await import('../src/utils/screenshot.js');
+    const clone = doc('<section id="s" data-v-f0db7165 data-track="x"></section>', '<style>.door[data-v-f0db7165]{height:var(--height)}</style>');
+    _reducePayload(clone, 0, 900, 1);
+    expect(clone.querySelector('#s').hasAttribute('data-v-f0db7165')).toBe(true);
+    expect(clone.querySelector('#s').hasAttribute('data-track')).toBe(false);
+  });
+
+  it('keeps aria-hidden decorative elements (hero canvases/backgrounds) at level 1', async () => {
+    const { _reducePayload } = await import('../src/utils/screenshot.js');
+    const clone = doc('<img id="bg" aria-hidden="true" src="x.jpg"><div id="gone" hidden></div><div id="gone2" style="display:none"></div>');
+    _reducePayload(clone, 0, 900, 1);
+    expect(clone.querySelector('#bg')).not.toBeNull();
+    expect(clone.querySelector('#gone')).toBeNull();
+    expect(clone.querySelector('#gone2')).toBeNull();
+  });
+
+  it('bakes a stuck position:sticky offset into the clone (nothing scrolls in the renderer)', async () => {
+    const { _snapshotDOMSync } = await import('../src/utils/screenshot.js');
+    document.body.innerHTML = '<div><section id="pane" style="position:sticky;top:0"></section><p id="plain"></p></div>';
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function () {
+      const top = this.id === 'pane' ? (this.style.position === 'relative' ? 1200 : 0) : 50; // unstuck spot 1200, stuck at 0
+      return rect(0, top, 100, 100);
+    });
+    const { clone } = _snapshotDOMSync();
+    const pane = clone.querySelector('#pane');
+    expect(pane.style.getPropertyValue('top')).toBe('-1200px');
+    expect(pane.style.getPropertyValue('position')).toBe('relative');
+    expect(pane.hasAttribute('data-tapko-sticky')).toBe(false);
+    expect(document.querySelector('#pane').getAttribute('style')).toBe('position:sticky;top:0');
+    expect(clone.querySelector('#plain').style.getPropertyValue('position')).toBe('');
+  });
+
+  it('hoists a data URI repeated across style rules into one custom property', async () => {
+    const { _dedupeStyleDataURIs } = await import('../src/utils/screenshot.js');
+    const uri = 'data:image/webp;base64,' + 'A'.repeat(30000);
+    const clone = doc('', `<style>.a{background-image:url("${uri}")}.b:before{background:url("${uri}") 0 0}</style>`);
+    document.documentElement.replaceWith(clone); // helpers create nodes via the global document
+    _dedupeStyleDataURIs(clone);
+    const css = [...clone.querySelectorAll('style')].map(x => x.textContent).join('');
+    expect(css.split(uri).length - 1).toBe(1);
+    expect(css).toContain('.a{background-image:var(--tapko-d0)}');
+  });
+
+  it('does not turn a canvas that reads fully transparent into an opaque black JPEG', async () => {
+    const { _snapshotDOMSync } = await import('../src/utils/screenshot.js');
+    document.body.innerHTML = '<canvas id="gl" width="1440" height="900"></canvas>';
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ drawImage() {}, getImageData: () => ({ data: new Uint8ClampedArray(16 * 9 * 4) }) });
+    vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/jpeg;base64,BLACK');
+    const { clone } = _snapshotDOMSync();
+    expect(clone.querySelector('img#gl')).toBeNull();
+    expect(clone.querySelector('canvas#gl')).not.toBeNull();
+  });
+
+  it('keeps a canvas snapshot by stepping quality down when the first JPEG is over the cap', async () => {
+    const { _snapshotDOMSync } = await import('../src/utils/screenshot.js');
+    document.body.innerHTML = '<canvas id="gl" width="1440" height="900"></canvas>';
+    let calls = 0;
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ drawImage() {} });
+    vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockImplementation(() => (++calls < 4 ? 'data:image/jpeg;base64,' + 'A'.repeat(600 * 1024) : 'data:image/jpeg;base64,SMALL'));
+    const { clone } = _snapshotDOMSync();
+    expect(clone.querySelector('canvas')).toBeNull();
+    expect(clone.querySelector('img#gl').getAttribute('src')).toBe('data:image/jpeg;base64,SMALL');
   });
 });
