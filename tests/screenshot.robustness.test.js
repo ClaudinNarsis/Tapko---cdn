@@ -58,6 +58,21 @@ describe('_viewportHasLiveCanvas', () => {
   });
 });
 
+describe('_urlSkipReason — sticky live canvas', () => {
+  beforeEach(() => { vi.resetModules(); document.body.innerHTML = ''; document.documentElement.className = ''; });
+  afterEach(() => vi.restoreAllMocks());
+
+  it('stays skipped once a live canvas was seen, even after it leaves the viewport', async () => {
+    const { _urlSkipReason } = await import('../src/utils/screenshot.js');
+    document.body.innerHTML = '<canvas width="10" height="10"></canvas>';
+    const c = document.querySelector('canvas');
+    c.getBoundingClientRect = () => rect(0, 0, window.innerWidth, window.innerHeight);
+    expect(_urlSkipReason()).toMatch(/live canvas/);
+    document.body.innerHTML = '<p>static</p>';
+    expect(_urlSkipReason()).toMatch(/live canvas/);
+  });
+});
+
 describe('captureScreenshot — URL capture is not retried on a page where it failed', () => {
   beforeEach(() => { vi.resetModules(); vi.stubEnv('RENDERER_URL', 'https://renderer.example.com'); document.body.innerHTML = '<p>hi</p>'; });
   afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });

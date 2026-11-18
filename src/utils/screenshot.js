@@ -1327,6 +1327,22 @@ function _viewportHasLiveCanvas(minFraction = 0.25) {
   return false;
 }
 
+// Pin-spacer / Lenis / Locomotive markers were tried as skip signals and dropped:
+// extrafazant.nl has both and its URL capture is fine (4/5), so markers alone regress
+// good pages. Scroll-animated pages that blank out are caught by the renderer's
+// uniform-frame 422 (-> DOM fallback, sticky via _urlCaptureFailed).
+// Sticky per page session: once a page showed a live canvas, the rest of the session
+// skips URL capture even when the current view looks static (sweet-tape: canvas hero only
+// at the top, blank/wrong frames further down).
+const _urlSkipPages = new Map();
+function _urlSkipReason() {
+  const key = _pageKey();
+  if (_urlSkipPages.has(key)) return _urlSkipPages.get(key);
+  const reason = _viewportHasLiveCanvas() ? 'a live canvas fills the viewport' : null;
+  if (reason) _urlSkipPages.set(key, reason);
+  return reason;
+}
+
 /**
  * Orchestrator — priority order when a renderer URL is configured:
  *   1. URL navigation  — renderer loads the live public page directly (best quality)
@@ -1389,7 +1405,7 @@ async function captureScreenshot(options = {}) {
       let skipReason = null;
       if (options.renderMode === 'html') skipReason = 'renderMode is "html"';
       else if (_urlCaptureFailed.has(_pageKey())) skipReason = 'URL capture already failed on this page';
-      else if (_viewportHasLiveCanvas()) skipReason = 'a live canvas fills the viewport';
+      else skipReason = _urlSkipReason();
 
       if (!skipReason) {
         try {
@@ -1452,5 +1468,7 @@ export {
   _canvasReadsTransparent,
   _dedupeStyleDataURIs,
   _viewportHasLiveCanvas,
+  _urlSkipReason,
+  _urlSkipPages,
   _urlCaptureFailed
 };

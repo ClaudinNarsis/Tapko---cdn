@@ -93,3 +93,22 @@ Known limits found here:
   presented, so the DOM capture can't contain them. A fully transparent readback is now skipped instead of
   becoming an opaque black box. Local screenshot mode (getDisplayMedia) is the way to get these.
 - Canvases fed by cross-origin video (zrk hero) are tainted and can't be read.
+
+## Class A: URL capture "succeeds" with a wrong/blank frame (2026-11-18)
+
+Scroll-animated pages (GSAP pins, Lenis, scroll reveals) load fresh in the renderer and jump to scrollY, so the frame
+can be the wrong section or one flat colour with a 200 (sweet-tape #2-#4, zrk #3-#4, santalarch #3).
+
+- Widget: `_urlSkipReason` (src/utils/screenshot.js) makes the live-canvas skip sticky per page session, so a canvas
+  at the hero skips URL mode for every later comment (sweet-tape, zrk, jjettas, grail, santalarch).
+- Renderer: feedback URL mode returns 422 `page_not_ready` when the frame is >=99.5% one colour
+  (`isNearUniformFrame`, 96x60 nearest-neighbour sample decoded on a blank tab); the widget then falls back to DOM
+  and `_urlCaptureFailed` keeps later comments on DOM. Not applied to html/verify/canvas mode.
+- Tried and dropped: skipping on `.pin-spacer` / `html.lenis` / `[data-scroll-container]`. extrafazant.nl has both
+  and URL mode is fine there (4/5, ~3 s), so markers alone regress good pages.
+- Threshold 0.97 was tried first and wrongly 422'd extrafazant's hero (headline hidden by its entrance animation,
+  measured 0.986); 0.995 passes it.
+
+Re-run (local renderer, quick, M2 url): sweet-tape 1/5, zrk 5/5 (hero video black = known limit), santalarch 4/5,
+jjettas 2/5, grail 2/5, extrafazant 4/5 via URL at 3.6 s. No blank/black frame is reported as success any more;
+remaining misses are the known hard limits.
