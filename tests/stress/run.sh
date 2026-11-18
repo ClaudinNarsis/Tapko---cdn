@@ -55,6 +55,7 @@ wait
 for d in "$OUT"/*/; do
   [ "$(basename "$d")" = ".profiles" ] && continue
   ls "$d"/upload-* >/dev/null 2>&1 && python3 tests/stress/sheet.py "${d%/}" >/dev/null
+  ls "$d"/results.json >/dev/null 2>&1 && echo "score $(basename "$d"): $(python3 tests/stress/score.py "${d%/}" | tail -1)"
 done
 rm -rf "$OUT/.profiles"
 node tests/stress/summary.js "$OUT"
