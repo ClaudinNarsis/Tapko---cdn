@@ -261,9 +261,9 @@ describe('heavy page payload reduction', () => {
     document.body.innerHTML = '<canvas id="gl" width="1440" height="900"></canvas><canvas id="blank" width="1440" height="900"></canvas>';
     vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue(rect(0, 0, window.innerWidth, window.innerHeight));
     let glProbes = 0; // #gl is drawn only in its 3rd probed frame; blank again at snapshot time (buffer cleared)
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function () {
-      const drawn = this.id === 'gl' && ++glProbes === 3;
-      return { drawImage() {}, getImageData: () => ({ data: new Uint8ClampedArray(16 * 9 * 4).fill(drawn ? 255 : 0) }) };
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => {
+      let drawn = false;
+      return { drawImage(src) { drawn = src.id === 'gl' && ++glProbes === 3; }, getImageData: () => ({ data: new Uint8ClampedArray(16 * 9 * 4).fill(drawn ? 255 : 0) }) };
     });
     vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/jpeg;base64,GLFRAME');
     const { clone } = await _snapshotDOM(200);
