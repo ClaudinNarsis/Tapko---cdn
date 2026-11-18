@@ -651,12 +651,15 @@ import debugLogger from './utils/DebugLogger.js';
       this.escPressCount++;
 
       if (this.escPressCount === 1) {
-        // First ESC: close active card or drawing
-        if (this.activeCard) {
+        // First ESC: close the top layer. Drawing mode is opened from a card
+        // and sits over it, so it goes first; closing the card underneath
+        // left the full-screen drawing layer up, swallowing every later
+        // click (no new comment card could open).
+        if (this.drawingCanvas) {
+          this._exitDrawingMode();
+        } else if (this.activeCard) {
           this.activeCard.close();
           this.activeCard = null;
-        } else if (this.drawingCanvas) {
-          this._exitDrawingMode();
         }
 
         // Reset count after 1 second

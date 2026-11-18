@@ -35,3 +35,7 @@ temp/
 # Browser cookie exports
 cookies.txt
 *.cookies.txt
+
+# Stress harness output
+tests/stress/runs/
+.claude/settings.local.json
