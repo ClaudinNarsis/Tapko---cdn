@@ -72,3 +72,24 @@ Viewports from real reports: 745x868 and 1014x868 at DPR 2, scroll 0 and 9781.
 - Inline stage measured 11-35 s with three WebGL Chromes in parallel, 1-3 s solo; no budget added (leftover URLs would break localhost/auth-walled projects).
 - After one URL-capture failure (incl. a single transient 5xx, or a public page needing 20-27 s), the rest of that page session uses DOM capture.
 - Any page with a canvas covering >=25% of the viewport now uses DOM capture instead of URL capture.
+
+## Awwwards sweep (2026-11-18): heavy / animated pages
+
+Run `npm run stress -- <url> --quick` on each. To test a renderer change without deploying, serve
+`Tapko-backend` `render()` on localhost and set `STRESS_RENDER_URL=http://localhost:3999/render`
+(harness forwards `/render` calls there instead of the dev Lambda).
+
+| Site | What it exercises | Fixed by |
+|------|-------------------|----------|
+| sweet-tape.com | 16 MB payload (68 inlined webp); reduction used to delete the site CSS -> unstyled page | images shed before stylesheets (`_reducePayload`) |
+| zrk.technology | 13.6 MB payload; level 4 stripped every data-URI image incl. canvas snapshots | canvas snapshots protected, canvas JPEG steps down instead of giving up |
+| jjettas.com | one 434 KB texture repeated 4x in CSS; `aria-hidden` WebGL hero removed at level 1; renderer ENOSPC/ERR_FAILED on file:// | `_dedupeStyleDataURIs`, aria-hidden kept, HTML served from memory |
+| grail-app.com | `Navigating frame was detached` on one comment in five | renderer retries once on browser death |
+| santalarch.com | tall page (30 000 px), payload near the 5.5 MB limit | below-fold pruning now actually runs (data-* strip erased its stamp) |
+| extrafazant.nl | entrance-animated hero headline in URL mode | open, see Known limits |
+
+Known limits found here:
+- WebGL canvases drawn on demand (grail `_acceptBg`, sweet-tape hero scene) read back blank after their frame is
+  presented, so the DOM capture can't contain them. A fully transparent readback is now skipped instead of
+  becoming an opaque black box. Local screenshot mode (getDisplayMedia) is the way to get these.
+- Canvases fed by cross-origin video (zrk hero) are tainted and can't be read.

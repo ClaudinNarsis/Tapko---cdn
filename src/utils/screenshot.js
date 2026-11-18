@@ -575,11 +575,24 @@ const PAYLOAD_LIMIT_BYTES = 5.5 * 1024 * 1024;
 // DOM reduction helpers — all operate on the *cloned* node, never the live page
 // ---------------------------------------------------------------------------
 
-/** Strip all data-* attributes (zero visual impact, highest byte-reduction ROI). */
+/**
+ * Strip data-* attributes that no stylesheet selects on. Not all of them:
+ * Vue scoped styles are `.door[data-v-f0db7165]{height:var(--height)}`, and
+ * Radix/Tailwind state styles are `[data-state=open]`; with the attributes
+ * gone those rules stop matching and sections collapse (santalarch.com: page
+ * 15 000 px shorter, so every pinned section landed elsewhere).
+ * data-tapko-* are our own snapshot stamps that later levels read.
+ */
 function _stripDataAttributes(rootEl) {
+  // A stylesheet left as <link> (too big to inline) can select on any of them.
+  if (rootEl.querySelector('link[rel="stylesheet"]')) return;
+  const used = new Set();
+  rootEl.querySelectorAll('style').forEach(st => {
+    for (const m of (st.textContent || '').matchAll(/\[\s*(data-[\w-]+)/g)) used.add(m[1]);
+  });
   rootEl.querySelectorAll('*').forEach(el => {
     [...el.attributes]
-      .filter(a => a.name.startsWith('data-'))
+      .filter(a => a.name.startsWith('data-') && !a.name.startsWith('data-tapko-') && !used.has(a.name))
       .forEach(a => el.removeAttribute(a.name));
   });
 }
@@ -590,7 +603,10 @@ function _stripDataAttributes(rootEl) {
  * getComputedStyle() returns empty values on detached nodes.
  */
 function _stripHiddenElements(rootEl) {
-  rootEl.querySelectorAll('[aria-hidden="true"], [hidden]').forEach(el => el.remove());
+  // Not [aria-hidden]: that is an accessibility hint, not visibility. Sites mark
+  // their decorative hero canvases/backgrounds with it (jjettas.com's WebGL
+  // hero, grail-app.com's backdrop), and removing them blanked the capture.
+  rootEl.querySelectorAll('[hidden]').forEach(el => el.remove());
   rootEl.querySelectorAll('[style]').forEach(el => {
     const s = el.getAttribute('style') || '';
     if (/display\s*:\s*none/i.test(s) || /visibility\s*:\s*hidden/i.test(s)) {
@@ -699,12 +715,17 @@ function _fixParagraphNesting(clone) {
  * Level 1 — zero visual impact:
  *   data-* attributes, aria-hidden/hidden/inline-display:none elements,
  *   elements > 3 viewport heights below the fold
- * Level 2 — minor impact (fonts / large framework CSS):
- *   Tighten below-viewport buffer to 2×, strip <style> blocks > 100 KB
- * Level 3 — moderate impact (unstyled render):
- *   Tighten below-viewport buffer to 1×, remove all <style> blocks
- * Level 4 — significant impact (no inlined images):
- *   Remove all inlined <img src="data:…"> to drop base64 image weight
+ * Level 2 — no visible change in the viewport:
+ *   inlined images that are not on screen (their layout box stays, the
+ *   renderer clip never shows them), below-viewport buffer 2×
+ * Level 3 — minor impact:
+ *   every inlined image except canvas snapshots, <style> blocks > 100 KB,
+ *   below-viewport buffer 1×
+ * Level 4 — significant impact (unstyled render):
+ *   all <style> blocks, below-viewport buffer 0
+ * Images go before stylesheets: dropping the site's CSS was the first thing
+ * that happened to every page over the limit (sweet-tape.com: 16 MB of
+ * inlined images, rendered as unstyled HTML).
  *
  * @param {Element} clone         - The mutable document clone
  * @param {number}  scrollY       - Vertical scroll position at capture time
@@ -720,19 +741,39 @@ function _reducePayload(clone, scrollY, viewportHeight, level) {
   }
   if (level >= 2) {
     _stripBelowViewport(clone, scrollY, viewportHeight, 1);
-    _stripLargeStyleBlocks(clone, 100 * 1024);
+    clone.querySelectorAll('img[src^="data:"]:not([data-tapko-inview])').forEach(img => img.removeAttribute('src'));
   }
   if (level >= 3) {
-    _stripBelowViewport(clone, scrollY, viewportHeight, 0);
-    clone.querySelectorAll('style').forEach(el => el.remove());
+    clone.querySelectorAll('img[src^="data:"]:not([data-tapko-canvas])').forEach(img => img.removeAttribute('src'));
+    _stripLargeStyleBlocks(clone, 100 * 1024);
   }
   if (level >= 4) {
-    clone.querySelectorAll('img[src^="data:"]').forEach(img => img.removeAttribute('src'));
+    _stripBelowViewport(clone, scrollY, viewportHeight, 0);
+    clone.querySelectorAll('style').forEach(el => el.remove());
   }
   return _serialiseClone(clone);
 }
 
 const CANVAS_SNAPSHOT_MAX_BYTES = 500 * 1024;
+
+/**
+ * True when every pixel of the canvas reads back fully transparent. A WebGL
+ * canvas without preserveDrawingBuffer reads like that once its frame has
+ * been presented, and JPEG-encoding it gives an opaque black box that hides
+ * the page behind it (sweet-tape.com's hero). Skipped snapshots leave the
+ * transparent <canvas>, which is closer to what the user saw than black.
+ */
+function _canvasReadsTransparent(live) {
+  try {
+    const probe = document.createElement('canvas');
+    probe.width = 16; probe.height = 9;
+    const ctx = probe.getContext('2d');
+    ctx.drawImage(live, 0, 0, 16, 9);
+    const d = ctx.getImageData(0, 0, 16, 9).data;
+    for (let i = 3; i < d.length; i += 4) if (d[i] !== 0) return false;
+    return true;
+  } catch { return false; }
+}
 
 /**
  * JPEG data URI of a live canvas, or null (tainted / still too big). A
@@ -745,14 +786,20 @@ function _canvasToDataURI(live) {
   const full = live.toDataURL('image/jpeg', 0.7);
   if (full.length <= CANVAS_SNAPSHOT_MAX_BYTES) return full;
   const rect = live.getBoundingClientRect();
-  const scale = Math.min(1, rect.width / live.width || 1, rect.height / live.height || 1);
-  const small = document.createElement('canvas');
-  small.width = Math.max(1, Math.round(live.width * scale));
-  small.height = Math.max(1, Math.round(live.height * scale));
-  small.getContext('2d').drawImage(live, 0, 0, small.width, small.height);
-  const reduced = small.toDataURL('image/jpeg', 0.6);
-  small.width = small.height = 0;
-  return reduced.length <= CANVAS_SNAPSHOT_MAX_BYTES ? reduced : null;
+  const css = Math.min(1, rect.width / live.width || 1, rect.height / live.height || 1);
+  // Grainy video-frame canvases (zrk.technology) stay over the cap at CSS
+  // size and quality 0.6, and used to be dropped to a blank <canvas>; keep
+  // stepping down, a soft scene beats an empty one.
+  for (const [k, q] of [[1, 0.6], [0.75, 0.5], [0.5, 0.5], [0.35, 0.4]]) {
+    const small = document.createElement('canvas');
+    small.width = Math.max(1, Math.round(live.width * css * k));
+    small.height = Math.max(1, Math.round(live.height * css * k));
+    small.getContext('2d').drawImage(live, 0, 0, small.width, small.height);
+    const reduced = small.toDataURL('image/jpeg', q);
+    small.width = small.height = 0;
+    if (reduced.length <= CANVAS_SNAPSHOT_MAX_BYTES) return reduced;
+  }
+  return null;
 }
 
 /**
@@ -763,6 +810,27 @@ function _nextFrame(ms = 100) {
   return new Promise(resolve => {
     const timer = setTimeout(resolve, ms);
     requestAnimationFrame(() => { clearTimeout(timer); resolve(); });
+  });
+}
+
+/**
+ * Stamp every currently-stuck position:sticky element with its displacement
+ * (dx,dy) from its unstuck position. Measured by briefly making the element
+ * position:relative;top:0;left:0 and restoring its inline style, all inside
+ * the synchronous snapshot.
+ */
+function _stampStickyOffsets() {
+  document.querySelectorAll('body *').forEach(el => {
+    if (getComputedStyle(el).position !== 'sticky') return;
+    const now = el.getBoundingClientRect();
+    const saved = el.getAttribute('style');
+    el.style.setProperty('position', 'relative', 'important');
+    el.style.setProperty('top', '0px', 'important');
+    el.style.setProperty('left', '0px', 'important');
+    const home = el.getBoundingClientRect();
+    if (saved === null) el.removeAttribute('style'); else el.setAttribute('style', saved);
+    const dx = Math.round(now.left - home.left), dy = Math.round(now.top - home.top);
+    if (dx || dy) el.setAttribute('data-tapko-sticky', `${dx},${dy}`);
   });
 }
 
@@ -809,12 +877,32 @@ function _snapshotDOMSync() {
     const rect = el.getBoundingClientRect();
     el.setAttribute('data-tapko-rect-top', (rect.top + scrollY).toFixed(0));
   });
+  // position:sticky offsets. The renderer lays the snapshot out with nothing
+  // scrolling (the body is shifted by margin-top instead), so a stuck element
+  // would jump back to its natural spot, often a whole section away from where
+  // the user saw it (santalarch.com, jjettas.com pinned panes). Measure how far
+  // each one is displaced from its unstuck position and bake that in.
+  _stampStickyOffsets();
+  // Images on screen: reduction level 2 drops only the other inlined images.
+  document.querySelectorAll('img').forEach(el => {
+    const r = el.getBoundingClientRect();
+    if (r.bottom > 0 && r.top < viewportHeight && r.right > 0 && r.left < viewportWidth) el.setAttribute('data-tapko-inview', '1');
+  });
 
   // 3. Deep clone the full document, then immediately clean up the live DOM
   const clone = document.documentElement.cloneNode(true);
-  document.querySelectorAll('[data-tapko-rect-top]').forEach(el =>
-    el.removeAttribute('data-tapko-rect-top')
-  );
+  document.querySelectorAll('[data-tapko-rect-top],[data-tapko-inview],[data-tapko-sticky]').forEach(el => {
+    el.removeAttribute('data-tapko-rect-top');
+    el.removeAttribute('data-tapko-inview');
+    el.removeAttribute('data-tapko-sticky');
+  });
+  clone.querySelectorAll('[data-tapko-sticky]').forEach(el => {
+    const [dx, dy] = el.getAttribute('data-tapko-sticky').split(',');
+    el.style.setProperty('position', 'relative', 'important');
+    el.style.setProperty('top', `${dy}px`, 'important');
+    el.style.setProperty('left', `${dx}px`, 'important');
+    el.removeAttribute('data-tapko-sticky');
+  });
   _fixParagraphNesting(clone);
 
   // 3b. (before anything is removed from the clone, so clone and live
@@ -829,12 +917,16 @@ function _snapshotDOMSync() {
     const live = liveCanvases[i];
     if (!live || !live.width || !live.height) return;
     try {
+      if (_canvasReadsTransparent(live)) return;
       const dataURI = _canvasToDataURI(live);
       if (!dataURI) return;
       const img = document.createElement('img');
       for (const attr of cloneCanvas.attributes) img.setAttribute(attr.name, attr.value);
       img.setAttribute('width', live.width);
       img.setAttribute('height', live.height);
+      img.setAttribute('data-tapko-canvas', '1'); // survives reduction level 3
+      const r = live.getBoundingClientRect();
+      if (r.bottom > 0 && r.top < viewportHeight && r.right > 0 && r.left < viewportWidth) img.setAttribute('data-tapko-inview', '1');
       img.src = dataURI;
       cloneCanvas.replaceWith(img);
     } catch { /* tainted canvas — leave as-is */ }
@@ -918,6 +1010,27 @@ function _snapshotDOMSync() {
 }
 
 /**
+ * The same big data URI repeated across <style> rules (jjettas.com: one
+ * 434 KB texture used by four rules, 4.9 MB in total) becomes one custom
+ * property on :root that every rule references with var().
+ */
+function _dedupeStyleDataURIs(clone, minBytes = 20 * 1024) {
+  const re = /url\(\s*(["']?)(data:[^"')]+)\1\s*\)/g;
+  const styles = [...clone.querySelectorAll('style')];
+  const counts = new Map();
+  styles.forEach(st => { for (const m of st.textContent.matchAll(re)) if (m[2].length >= minBytes) counts.set(m[2], (counts.get(m[2]) || 0) + 1); });
+  const dups = [...counts].filter(([, n]) => n > 1).map(([uri]) => uri);
+  if (!dups.length) return;
+  const names = new Map(dups.map((uri, i) => [uri, `--tapko-d${i}`]));
+  styles.forEach(st => {
+    st.textContent = st.textContent.replace(re, (all, q, uri) => (names.has(uri) ? `var(${names.get(uri)})` : all));
+  });
+  const holder = document.createElement('style');
+  holder.textContent = `:root{${dups.map(uri => `${names.get(uri)}:url("${uri}")`).join(';')}}`;
+  clone.querySelector('head')?.prepend(holder);
+}
+
+/**
  * Capture screenshot by serializing the DOM, inlining assets, and sending
  * the HTML to the configured server-side renderer.
  *
@@ -986,6 +1099,7 @@ async function captureDOMScreenshot(options = {}) {
   }));
 
   // 5. Serialize
+  _dedupeStyleDataURIs(clone);
   const timingInlined = performance.now();
   let html = _serialiseClone(clone);
 
@@ -1334,6 +1448,9 @@ export {
   _serialiseClone,
   _snapshotDOMSync,
   _fixParagraphNesting,
+  _reducePayload,
+  _canvasReadsTransparent,
+  _dedupeStyleDataURIs,
   _viewportHasLiveCanvas,
   _urlCaptureFailed
 };

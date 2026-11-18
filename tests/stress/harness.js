@@ -38,6 +38,8 @@ const results = [];
   const ctx = await chromium.launchPersistentContext(PROFILE, {
     channel: 'chrome', headless: args.headed ? false : true,
     viewport: { width: W, height: H }, deviceScaleFactor: DPR,
+    // STRESS_VIDEO=1: record the run (footage for marketing cuts). Off by default.
+    recordVideo: process.env.STRESS_VIDEO ? { dir: OUT, size: { width: W, height: H } } : undefined,
     args: ['--auto-accept-this-tab-capture', '--use-fake-ui-for-media-stream', '--enable-usermedia-screen-capturing'],
   });
   const page = ctx.pages()[0] || await ctx.newPage();
@@ -79,7 +81,8 @@ const results = [];
     if (u.endsWith('/render')) {
       const body = JSON.parse(req.postData() || '{}');
       const t0 = Date.now();
-      const r = await route.fetch({ timeout: 60000 }).catch(e => ({ err: e }));
+      // STRESS_RENDER_URL=http://localhost:3999/render: test a local renderer instead of the dev Lambda.
+      const r = await route.fetch({ timeout: 60000, ...(process.env.STRESS_RENDER_URL ? { url: process.env.STRESS_RENDER_URL } : {}) }).catch(e => ({ err: e }));
       if (r.err) { renders.push({ kind: body.url ? 'url' : 'html', err: r.err.message }); return route.abort(); }
       const txt = await r.text();
       const rec = { kind: body.url ? 'url' : 'html', status: r.status(), ms: Date.now() - t0, reqScrollY: body.scrollY, w: body.width, h: body.height, dpr: body.devicePixelRatio, htmlKB: body.html ? Math.round(body.html.length / 1024) : undefined };
