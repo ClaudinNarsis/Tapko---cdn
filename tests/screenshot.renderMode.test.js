@@ -211,7 +211,7 @@ describe('captureDOMScreenshot — freezes animations at their end state, not mi
     vi.unstubAllGlobals();
   });
 
-  it('injects animation-duration:0 instead of animation-play-state:paused', async () => {
+  it('injects animation:none instead of animation-play-state:paused', async () => {
     let sentHtml = '';
     vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
       sentHtml = JSON.parse(init.body).html;
@@ -222,7 +222,7 @@ describe('captureDOMScreenshot — freezes animations at their end state, not mi
     const result = await captureScreenshot({ renderMode: 'html' });
 
     expect(result).not.toBeNull();
-    expect(sentHtml).toContain('animation-duration:0s!important');
+    expect(sentHtml).toContain('animation:none!important;transition:none!important');
     expect(sentHtml).not.toContain('animation-play-state');
   });
 });

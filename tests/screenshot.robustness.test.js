@@ -225,4 +225,48 @@ describe('heavy page payload reduction', () => {
     expect(clone.querySelector('canvas')).toBeNull();
     expect(clone.querySelector('img#gl').getAttribute('src')).toBe('data:image/jpeg;base64,SMALL');
   });
+
+  it('stamps an on-screen animation\'s current values on the clone (it replays from frame 0 in the renderer)', async () => {
+    const { _snapshotDOMSync } = await import('../src/utils/screenshot.js');
+    document.body.innerHTML = '<div id="timer" style="opacity:1"></div><div id="off"></div>';
+    const timer = document.getElementById('timer'), off = document.getElementById('off');
+    document.getAnimations = () => [timer, off].map(target => ({ effect: { target, getKeyframes: () => [{ offset: 0, opacity: '1', transform: 'none', easing: 'linear', composite: 'auto' }] } }));
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function () { return this.id === 'off' ? rect(0, 5000, 10, 10) : rect(0, 0, 100, 100); });
+    vi.stubGlobal('getComputedStyle', () => ({ position: 'static', length: 0, getPropertyValue: p => (p === 'opacity' ? '0.12' : 'translateY(7px)') }));
+    const { clone } = _snapshotDOMSync();
+    delete document.getAnimations;
+    vi.unstubAllGlobals();
+    expect(clone.querySelector('#timer').style.getPropertyValue('opacity')).toBe('0.12');
+    expect(clone.querySelector('#timer').style.getPropertyValue('transform')).toBe('translateY(7px)');
+    expect(clone.querySelector('#off').getAttribute('style')).toBeNull();
+    expect(document.querySelector('#timer').hasAttribute('data-tapko-anim')).toBe(false);
+  });
+
+  it('bakes the rendered box of an on-screen <img> (layout box is lost in the clone)', async () => {
+    const { _snapshotDOMSync } = await import('../src/utils/screenshot.js');
+    document.body.innerHTML = '<picture><img id="boot" src="a.jpg"></picture><img id="far" src="b.jpg">';
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function () { return this.id === 'far' ? rect(0, 5000, 10, 10) : rect(0, 100, 300, 200); });
+    vi.stubGlobal('getComputedStyle', el => ({ position: 'static', length: 0, getPropertyValue: () => '', display: 'block', width: '300px', height: '200px', objectFit: 'cover', objectPosition: '50% 50%' }));
+    const { clone } = _snapshotDOMSync();
+    vi.unstubAllGlobals();
+    const boot = clone.querySelector('#boot');
+    expect(boot.style.getPropertyValue('width')).toBe('300px');
+    expect(boot.style.getPropertyValue('height')).toBe('200px');
+    expect(boot.style.getPropertyValue('object-fit')).toBe('cover');
+    expect(clone.querySelector('#far').style.getPropertyValue('width')).toBe('');
+  });
+
+  it('waits for a frame where a WebGL canvas reads back before snapshotting', async () => {
+    const { _snapshotDOM } = await import('../src/utils/screenshot.js');
+    document.body.innerHTML = '<canvas id="gl" width="1440" height="900"></canvas>';
+    let frames = 0;
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue(rect(0, 0, window.innerWidth, window.innerHeight));
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => {
+      frames++; // blank for the first 3 probes, then the frame readable
+      return { drawImage() {}, getImageData: () => ({ data: new Uint8ClampedArray(16 * 9 * 4).fill(frames > 3 ? 255 : 0) }) };
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/jpeg;base64,GL');
+    const { clone } = await _snapshotDOM();
+    expect(clone.querySelector('img#gl')).not.toBeNull();
+  });
 });

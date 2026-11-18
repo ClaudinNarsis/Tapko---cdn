@@ -813,6 +813,46 @@ function _nextFrame(ms = 100) {
   });
 }
 
+const _ANIM_SKIP = new Set(['offset', 'computedOffset', 'easing', 'composite']);
+
+/**
+ * Running/finished-with-fill CSS animations, transitions and WAAPI animations
+ * on on-screen elements: stamp their CURRENT computed values (as
+ * data-tapko-anim) so the clone shows what the user saw. The renderer loads
+ * the clone as a fresh document, where every animation would restart at frame 0
+ * (sweet-tape's splash, grail's faint timer); the clone then disables animation
+ * entirely, so the stamped values are all that is left.
+ */
+function _stampAnimatedStyles(vw, vh) {
+  let anims = [];
+  try { anims = document.getAnimations(); } catch { return; }
+  for (const a of anims) {
+    const eff = a.effect, el = eff && eff.target;
+    if (!el || eff.pseudoElement || !el.getBoundingClientRect) continue;
+    const r = el.getBoundingClientRect();
+    if (!(r.bottom > 0 && r.top < vh && r.right > 0 && r.left < vw)) continue;
+    const cs = getComputedStyle(el);
+    const list = JSON.parse(el.getAttribute('data-tapko-anim') || '[]');
+    for (const kf of eff.getKeyframes()) for (const key of Object.keys(kf)) {
+      if (_ANIM_SKIP.has(key)) continue;
+      const prop = key === 'cssFloat' ? 'float' : key.replace(/[A-Z]/g, m => '-' + m.toLowerCase());
+      if (!list.some(x => x[0] === prop)) list.push([prop, cs.getPropertyValue(prop)]);
+    }
+    if (list.length) el.setAttribute('data-tapko-anim', JSON.stringify(list));
+  }
+}
+
+/** Rendered box of every on-screen <img> (lost when the clone re-lays out without the page's JS/CSS state). */
+function _stampImageBoxes(vw, vh) {
+  document.querySelectorAll('img').forEach(el => {
+    const r = el.getBoundingClientRect();
+    if (!(r.bottom > 0 && r.top < vh && r.right > 0 && r.left < vw)) return;
+    const cs = getComputedStyle(el);
+    if (cs.display === 'none' || !/px$/.test(cs.width) || !/px$/.test(cs.height)) return;
+    el.setAttribute('data-tapko-imgbox', JSON.stringify([cs.width, cs.height, cs.objectFit, cs.objectPosition]));
+  });
+}
+
 /**
  * Stamp every currently-stuck position:sticky element with its displacement
  * (dx,dy) from its unstuck position. Measured by briefly making the element
@@ -843,9 +883,34 @@ function _stampStickyOffsets() {
  * which was registered a frame earlier). Everything after this works on the
  * detached clone only.
  */
-async function _snapshotDOM() {
-  await _nextFrame();
-  return _snapshotDOMSync();
+async function _snapshotDOM(maxWaitMs = 400) {
+  return new Promise(resolve => {
+    const t0 = Date.now(); let done = false;
+    const finish = () => { if (done) return; done = true; clearTimeout(timer); resolve(_snapshotDOMSync()); };
+    // rAF throttled (background tab): snapshot anyway.
+    const timer = setTimeout(finish, maxWaitMs + 300);
+    // A WebGL canvas without preserveDrawingBuffer only reads back inside the
+    // frame its own render callback ran in (measured on grail-app.com: ~40% of
+    // frames, 0% outside rAF; sweet-tape.com: every frame). Poll frame by frame
+    // and snapshot in the first rAF where every big on-screen canvas reads
+    // non-transparent, so the read and the clone happen in that same callback.
+    const tick = () => {
+      if (done) return;
+      if (!_viewportCanvasBlank() || Date.now() - t0 > maxWaitMs) return finish();
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+}
+
+/** True when an on-screen canvas covering >=10% of the viewport reads fully transparent. */
+function _viewportCanvasBlank(minFraction = 0.1) {
+  const vw = window.innerWidth, vh = window.innerHeight;
+  return [...document.querySelectorAll('canvas')].some(c => {
+    const r = c.getBoundingClientRect();
+    const w = Math.min(r.right, vw) - Math.max(r.left, 0), h = Math.min(r.bottom, vh) - Math.max(r.top, 0);
+    return w > 0 && h > 0 && c.width && c.height && (w * h) / (vw * vh) >= minFraction && _canvasReadsTransparent(c);
+  });
 }
 
 function _snapshotDOMSync() {
@@ -883,6 +948,8 @@ function _snapshotDOMSync() {
   // the user saw it (santalarch.com, jjettas.com pinned panes). Measure how far
   // each one is displaced from its unstuck position and bake that in.
   _stampStickyOffsets();
+  _stampAnimatedStyles(viewportWidth, viewportHeight);
+  _stampImageBoxes(viewportWidth, viewportHeight);
   // Images on screen: reduction level 2 drops only the other inlined images.
   document.querySelectorAll('img').forEach(el => {
     const r = el.getBoundingClientRect();
@@ -891,7 +958,9 @@ function _snapshotDOMSync() {
 
   // 3. Deep clone the full document, then immediately clean up the live DOM
   const clone = document.documentElement.cloneNode(true);
-  document.querySelectorAll('[data-tapko-rect-top],[data-tapko-inview],[data-tapko-sticky]').forEach(el => {
+  document.querySelectorAll('[data-tapko-rect-top],[data-tapko-inview],[data-tapko-sticky],[data-tapko-anim],[data-tapko-imgbox]').forEach(el => {
+    el.removeAttribute('data-tapko-anim');
+    el.removeAttribute('data-tapko-imgbox');
     el.removeAttribute('data-tapko-rect-top');
     el.removeAttribute('data-tapko-inview');
     el.removeAttribute('data-tapko-sticky');
@@ -902,6 +971,17 @@ function _snapshotDOMSync() {
     el.style.setProperty('top', `${dy}px`, 'important');
     el.style.setProperty('left', `${dx}px`, 'important');
     el.removeAttribute('data-tapko-sticky');
+  });
+  clone.querySelectorAll('[data-tapko-anim]').forEach(el => {
+    for (const [prop, val] of JSON.parse(el.getAttribute('data-tapko-anim'))) el.style.setProperty(prop, val, 'important');
+    el.removeAttribute('data-tapko-anim');
+  });
+  clone.querySelectorAll('[data-tapko-imgbox]').forEach(el => {
+    const [w, h, fit, pos] = JSON.parse(el.getAttribute('data-tapko-imgbox'));
+    el.style.setProperty('width', w, 'important');
+    el.style.setProperty('height', h, 'important');
+    if (fit && fit !== 'fill') { el.style.setProperty('object-fit', fit, 'important'); el.style.setProperty('object-position', pos, 'important'); }
+    el.removeAttribute('data-tapko-imgbox');
   });
   _fixParagraphNesting(clone);
 
@@ -980,7 +1060,7 @@ function _snapshotDOMSync() {
       ? `:root{${frozenCustomProps.join(';')}}`
       : '';
     const animationFreezeRule =
-      '*, *::before, *::after{animation-duration:0s!important;animation-delay:0s!important;transition-duration:0s!important;}';
+      '*, *::before, *::after{animation:none!important;transition:none!important;}';
     freezeStyle.textContent = customPropRule + animationFreezeRule;
     clone.querySelector('head')?.appendChild(freezeStyle);
   }
@@ -1462,6 +1542,7 @@ export {
   _credentialsFor,
   _fetchAsDataURI,
   _serialiseClone,
+  _snapshotDOM,
   _snapshotDOMSync,
   _fixParagraphNesting,
   _reducePayload,
