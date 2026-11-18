@@ -29,7 +29,7 @@ describe('captureScreenshot — renderMode branch (T9)', () => {
 
     expect(logSpy).toHaveBeenCalledWith('[Tapko] Attempting URL-based screenshot');
     expect(logSpy).not.toHaveBeenCalledWith(
-      expect.stringContaining('skipping URL-based screenshot')
+      expect.stringContaining('Skipping URL-based screenshot')
     );
   });
 
@@ -50,7 +50,7 @@ describe('captureScreenshot — renderMode branch (T9)', () => {
 
     expect(logSpy).not.toHaveBeenCalledWith('[Tapko] Attempting URL-based screenshot');
     expect(logSpy).toHaveBeenCalledWith(
-      expect.stringContaining('renderMode is "html" — skipping URL-based screenshot')
+      expect.stringContaining('Skipping URL-based screenshot (renderMode is "html")')
     );
   });
 });
@@ -59,7 +59,7 @@ describe('captureScreenshot — renderMode branch (T9)', () => {
 // denied getDisplayMedia threw, so feedback was submitted with no screenshot.
 // It must now fall back to DOM serialization (never URL navigation).
 describe('captureScreenshot — screenshotMode "local" fallback', () => {
-  const DOM_FALLBACK_LOG = expect.stringContaining('renderMode is "html" — skipping URL-based screenshot');
+  const DOM_FALLBACK_LOG = expect.stringContaining('Skipping URL-based screenshot (renderMode is "html")');
 
   beforeEach(() => {
     vi.resetModules();
