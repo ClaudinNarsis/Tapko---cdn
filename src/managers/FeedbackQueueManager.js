@@ -1,4 +1,5 @@
 import IndexedDBWrapper from '../db/IndexedDBWrapper.js';
+import { renderURLImage, compositeWidgetOverlay, dataURLToBlob } from '../utils/screenshot.js';
 
 /**
  * FeedbackQueueManager - Manages the feedback submission queue
@@ -24,6 +25,10 @@ class FeedbackQueueManager {
     this.processingInterval = null;
     this.eventListeners = {};
     this.initialized = false;
+    // In-flight screenshot captures handed over by the comment card, keyed by
+    // queue id. In memory only: after a page unload the persisted captureParams
+    // are used to re-render instead.
+    this._pendingCaptures = new Map();
   }
 
   /**
@@ -70,8 +75,14 @@ class FeedbackQueueManager {
 
   /**
    * Add feedback to the queue
+   *
+   * Deferred screenshot: when feedbackData.screenshot is null but
+   * feedbackData.captureParams (renderer params + widget overlay) is set, the
+   * worker finishes the capture in the background. opts.capturePromise is the
+   * card's already-running capture (resolves to a data URL or null); without it
+   * (e.g. after a reload) the worker re-renders from captureParams.
    */
-  async enqueue(feedbackData) {
+  async enqueue(feedbackData, opts = {}) {
     if (!this.initialized) {
       throw new Error('Queue manager not initialized');
     }
@@ -92,6 +103,7 @@ class FeedbackQueueManager {
 
       // Generate unique ID
       const id = this.generateId();
+      if (opts.capturePromise) this._pendingCaptures.set(id, opts.capturePromise);
 
       // Create queue item
       const queueItem = {
@@ -110,6 +122,7 @@ class FeedbackQueueManager {
           annotationData: feedbackData.annotationData, // NEW: Annotation data {paths, strokeColor, strokeWidth}
           logs: await this._toStored(feedbackData.logs),
           networkLogs: await this._toStored(feedbackData.networkLogs),
+          ...(feedbackData.captureParams ? { captureParams: feedbackData.captureParams } : {}),
           context: feedbackData.context,
           idempotencyKey: feedbackData.idempotencyKey,
           projectId: feedbackData.projectId,
@@ -262,36 +275,39 @@ class FeedbackQueueManager {
 
     try {
       // Get all pending items, sorted by creation time (FIFO)
-      const pendingItems = await this.db.getAll({ index: 'status', value: 'pending' });
+      let batch = await this.db.getAll({ index: 'status', value: 'pending' });
 
-      if (pendingItems.length === 0) {
+      if (batch.length === 0) {
         console.log('[FeedbackQueue] No pending items');
         this.emit('queue:empty');
         return;
       }
 
-      // Sort by createdAt (oldest first)
-      pendingItems.sort((a, b) => a.createdAt - b.createdAt);
+      // Items enqueued while this run is busy are picked up right after the
+      // current batch (no 5s re-poll). Retries of failed items are not in the
+      // next batch (already seen), so they still wait for processInterval.
+      const seen = new Set();
+      while (batch.length > 0) {
+        batch.sort((a, b) => a.createdAt - b.createdAt);
 
-      console.log(`[FeedbackQueue] Processing ${pendingItems.length} items...`);
-      this.emit('queue:started', { count: pendingItems.length });
+        console.log(`[FeedbackQueue] Processing ${batch.length} items...`);
+        this.emit('queue:started', { count: batch.length });
 
-      // Process items one by one
-      for (let i = 0; i < pendingItems.length; i++) {
-        const item = pendingItems[i];
+        for (let i = 0; i < batch.length; i++) {
+          const item = batch[i];
+          seen.add(item.id);
 
-        this.emit('queue:progress', {
-          id: item.id,
-          current: i + 1,
-          total: pendingItems.length
-        });
+          this.emit('queue:progress', {
+            id: item.id,
+            current: i + 1,
+            total: batch.length
+          });
 
-        await this.processSingleItem(item);
-
-        // Small delay between items to avoid rate limiting
-        if (i < pendingItems.length - 1) {
-          await this.delay(1000);
+          await this.processSingleItem(item);
         }
+
+        const pending = await this.db.getAll({ index: 'status', value: 'pending' });
+        batch = pending.filter(item => !seen.has(item.id));
       }
 
       console.log('[FeedbackQueue] All items processed');
@@ -336,8 +352,13 @@ class FeedbackQueueManager {
         ['logs', 'text/plain', 'logs'],
         ['networkLogs', 'text/plain', 'logs']
       ];
-      for (const [step, mimeType, type] of steps) {
-        if (item.uploadProgress[step].status === 'completed' || !item.feedbackData[step]) continue;
+      // Deferred capture (card closed before the screenshot was ready).
+      await this._resolveDeferredCapture(item);
+
+      // Upload the three assets in parallel. updateItem writes the whole
+      // in-memory item, so concurrent writes can't lose each other's progress.
+      await Promise.all(steps.map(async ([step, mimeType, type]) => {
+        if (item.uploadProgress[step].status === 'completed' || !item.feedbackData[step]) return;
         try {
           console.log(`[FeedbackQueue] Uploading ${step} for item ${item.id}...`);
           let blob = await this._toBlob(item.feedbackData[step], mimeType);
@@ -362,7 +383,7 @@ class FeedbackQueueManager {
         } catch (error) {
           console.error(`[FeedbackQueue] ${step} upload failed for item ${item.id}, submitting without it:`, error);
         }
-      }
+      }));
 
       // Step 4: Submit feedback payload
       if (item.uploadProgress.feedback.status !== 'completed') {
@@ -507,6 +528,38 @@ class FeedbackQueueManager {
   /**
    * Blob -> { data: ArrayBuffer, type } for IndexedDB (WebKit-safe)
    */
+  /**
+   * Finish a screenshot the comment card did not wait for. Uses the card's
+   * in-flight capture if this page still has it, otherwise re-renders from the
+   * persisted params. One attempt only: captureParams is cleared either way,
+   * and a failure submits the comment without a screenshot.
+   */
+  async _resolveDeferredCapture(item) {
+    const params = item.feedbackData.captureParams;
+    if (!params || item.feedbackData.screenshot) return;
+
+    const started = performance.now();
+    let dataURL = null;
+    try {
+      const inFlight = this._pendingCaptures.get(item.id);
+      if (inFlight) {
+        dataURL = await inFlight;
+      } else {
+        dataURL = await renderURLImage(params);
+        if (params.widgetOverlay) dataURL = await compositeWidgetOverlay(dataURL, params.widgetOverlay);
+      }
+    } catch (error) {
+      console.warn(`[FeedbackQueue] Deferred capture failed for item ${item.id}, submitting without screenshot:`, error);
+    } finally {
+      this._pendingCaptures.delete(item.id);
+    }
+
+    console.log(`[Tapko Timing] Deferred capture for ${item.id}: ${dataURL ? 'ok' : 'none'} in ${(performance.now() - started).toFixed(0)}ms`);
+    item.feedbackData.captureParams = null;
+    if (dataURL) item.feedbackData.screenshot = await this._toStored(dataURLToBlob(dataURL));
+    await this.updateItem(item.id, item);
+  }
+
   async _toStored(blob) {
     if (!blob) return blob;
     return { data: await blob.arrayBuffer(), type: blob.type };
