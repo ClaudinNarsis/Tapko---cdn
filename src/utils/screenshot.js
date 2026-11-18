@@ -837,20 +837,20 @@ const _ANIM_SKIP = new Set(['offset', 'computedOffset', 'easing', 'composite']);
 
 /**
  * Running/finished-with-fill CSS animations, transitions and WAAPI animations
- * on on-screen elements: stamp their CURRENT computed values (as
+ * on elements: stamp their CURRENT computed values (as
  * data-tapko-anim) so the clone shows what the user saw. The renderer loads
  * the clone as a fresh document, where every animation would restart at frame 0
  * (sweet-tape's splash, grail's faint timer); the clone then disables animation
  * entirely, so the stamped values are all that is left.
  */
-function _stampAnimatedStyles(vw, vh) {
+function _stampAnimatedStyles(maxAnimations = 600) {
   let anims = [];
   try { anims = document.getAnimations(); } catch { return; }
-  for (const a of anims) {
+  // Not limited to on-screen targets: an element animated OFF screen (a
+  // splash sliding away) must stay away in the clone, not replay on screen.
+  for (const a of anims.slice(0, maxAnimations)) {
     const eff = a.effect, el = eff && eff.target;
     if (!el || eff.pseudoElement || !el.getBoundingClientRect) continue;
-    const r = el.getBoundingClientRect();
-    if (!(r.bottom > 0 && r.top < vh && r.right > 0 && r.left < vw)) continue;
     const cs = getComputedStyle(el);
     const list = JSON.parse(el.getAttribute('data-tapko-anim') || '[]');
     for (const kf of eff.getKeyframes()) for (const key of Object.keys(kf)) {
@@ -862,11 +862,12 @@ function _stampAnimatedStyles(vw, vh) {
   }
 }
 
-/** Rendered box of every on-screen <img> (lost when the clone re-lays out without the page's JS/CSS state). */
-function _stampImageBoxes(vw, vh) {
+/** Rendered box of every <img> (lost when the clone re-lays out without the page's JS/CSS state). */
+function _stampImageBoxes() {
+  // All images, not just on-screen ones: jjettas.com's closed menu holds a
+  // next/image `fill` boot sized by container-query units, which lost its box
+  // in the clone and covered the whole frame.
   document.querySelectorAll('img').forEach(el => {
-    const r = el.getBoundingClientRect();
-    if (!(r.bottom > 0 && r.top < vh && r.right > 0 && r.left < vw)) return;
     const cs = getComputedStyle(el);
     if (cs.display === 'none' || !/px$/.test(cs.width) || !/px$/.test(cs.height)) return;
     el.setAttribute('data-tapko-imgbox', JSON.stringify([cs.width, cs.height, cs.objectFit, cs.objectPosition]));
@@ -973,8 +974,8 @@ function _snapshotDOMSync(glFrames) {
   // the user saw it (santalarch.com, jjettas.com pinned panes). Measure how far
   // each one is displaced from its unstuck position and bake that in.
   _stampStickyOffsets();
-  _stampAnimatedStyles(viewportWidth, viewportHeight);
-  _stampImageBoxes(viewportWidth, viewportHeight);
+  _stampAnimatedStyles();
+  _stampImageBoxes();
   // Images on screen: reduction level 2 drops only the other inlined images.
   document.querySelectorAll('img').forEach(el => {
     const r = el.getBoundingClientRect();

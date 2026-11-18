@@ -234,7 +234,7 @@ describe('heavy page payload reduction', () => {
     expect(clone.querySelector('img#gl').getAttribute('src')).toBe('data:image/jpeg;base64,SMALL');
   });
 
-  it('stamps an on-screen animation\'s current values on the clone (it replays from frame 0 in the renderer)', async () => {
+  it('stamps an animation\'s current values (even when it animated the element off screen) on the clone (it replays from frame 0 in the renderer)', async () => {
     const { _snapshotDOMSync } = await import('../src/utils/screenshot.js');
     document.body.innerHTML = '<div id="timer" style="opacity:1"></div><div id="off"></div>';
     const timer = document.getElementById('timer'), off = document.getElementById('off');
@@ -246,11 +246,11 @@ describe('heavy page payload reduction', () => {
     vi.unstubAllGlobals();
     expect(clone.querySelector('#timer').style.getPropertyValue('opacity')).toBe('0.12');
     expect(clone.querySelector('#timer').style.getPropertyValue('transform')).toBe('translateY(7px)');
-    expect(clone.querySelector('#off').getAttribute('style')).toBeNull();
+    expect(clone.querySelector('#off').style.getPropertyValue('opacity')).toBe('0.12');
     expect(document.querySelector('#timer').hasAttribute('data-tapko-anim')).toBe(false);
   });
 
-  it('bakes the rendered box of an on-screen <img> (layout box is lost in the clone)', async () => {
+  it('bakes the rendered box of every <img>, on screen or not (layout box is lost in the clone)', async () => {
     const { _snapshotDOMSync } = await import('../src/utils/screenshot.js');
     document.body.innerHTML = '<picture><img id="boot" src="a.jpg"></picture><img id="far" src="b.jpg">';
     vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function () { return this.id === 'far' ? rect(0, 5000, 10, 10) : rect(0, 100, 300, 200); });
@@ -261,7 +261,7 @@ describe('heavy page payload reduction', () => {
     expect(boot.style.getPropertyValue('width')).toBe('300px');
     expect(boot.style.getPropertyValue('height')).toBe('200px');
     expect(boot.style.getPropertyValue('object-fit')).toBe('cover');
-    expect(clone.querySelector('#far').style.getPropertyValue('width')).toBe('');
+    expect(clone.querySelector('#far').style.getPropertyValue('width')).toBe('300px');
   });
 
   it('keeps the first readable frame of each canvas; an always-blank canvas does not lose it', async () => {
