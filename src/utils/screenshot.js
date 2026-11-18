@@ -643,10 +643,53 @@ function _stripBelowViewport(rootEl, scrollY, viewportHeight, buffer = 2) {
  * Re-serialise the (mutated) clone and return the minified HTML string.
  * Extracted so the reduction loop can re-measure after each pass.
  */
+// No whitespace minification: whitespace between tags is layout. SplitText /
+// GSAP markup is `<div class="word">a</div> <div class="word">b</div>`, and
+// collapsing `>\s+<` to `><` glued every word together, so paragraphs
+// rendered one word per line and pushed flex-centred headings out of place
+// (bos.studiofreight.dev). Inline links/spans separated by a space broke the
+// same way.
+// The doctype is not part of documentElement, and without it the renderer
+// lays the snapshot out in quirks mode (body height, line boxes around
+// images, table font inheritance all differ).
 function _serialiseClone(clone) {
-  const serializer = new XMLSerializer();
-  let html = serializer.serializeToString(clone);
-  return html.replace(/>\s+</g, '><').trim();
+  const doctype = document.doctype ? `<!DOCTYPE ${document.doctype.name}>` : '';
+  return doctype + new XMLSerializer().serializeToString(clone);
+}
+
+// Elements whose start tag makes the HTML parser close an open <p>.
+const P_CLOSERS = 'address,article,aside,blockquote,details,dialog,div,dl,fieldset,figcaption,figure,footer,form,h1,h2,h3,h4,h5,h6,header,hgroup,hr,main,menu,nav,ol,p,pre,section,table,ul';
+const P_BOX_PROPS = ['display', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left',
+  'font-family', 'font-size', 'font-weight', 'font-style', 'line-height', 'letter-spacing',
+  'color', 'text-align', 'text-transform'];
+
+/**
+ * A DOM built by script can hold a block inside a <p> (GSAP SplitText wraps
+ * every word of a paragraph in <div class="word">), which no HTML parse can
+ * produce: the renderer's parser closes the <p> at the first <div>, so each
+ * word becomes its own block or flex item and the paragraph renders one word
+ * per line (bos.studiofreight.dev). Such a <p> becomes a <div> carrying the
+ * <p>'s live box and type styles, since `p { ... }` rules no longer match it.
+ * Must run before anything is removed from the clone so clone and live <p>
+ * lists pair up by index.
+ * ponytail: <p> only. Other parse-hostile nesting (a in a, div in tr) would
+ * need the renderer to load the snapshot as XHTML instead.
+ */
+function _fixParagraphNesting(clone) {
+  const liveParagraphs = document.querySelectorAll('p');
+  clone.querySelectorAll('p').forEach((p, i) => {
+    if (!p.querySelector(P_CLOSERS)) return;
+    const div = document.createElement('div');
+    for (const attr of p.attributes) div.setAttribute(attr.name, attr.value);
+    const live = liveParagraphs[i];
+    if (live) {
+      const cs = getComputedStyle(live);
+      const computed = P_BOX_PROPS.map(k => `${k}:${cs.getPropertyValue(k)}`).join(';');
+      div.setAttribute('style', `${computed};${p.getAttribute('style') || ''}`);
+    }
+    div.append(...p.childNodes);
+    p.replaceWith(div);
+  });
 }
 
 /**
@@ -689,17 +732,55 @@ function _reducePayload(clone, scrollY, viewportHeight, level) {
   return _serialiseClone(clone);
 }
 
-/**
- * Capture screenshot by serializing the DOM, inlining assets, and sending
- * the HTML to the configured server-side renderer.
- *
- * Returns { dataURL, metadata } matching the shape of captureViewportScreenshot.
- * @param {Object} options - Options forwarded from captureScreenshot
- * @param {Object} [options.widgetOverlay] - Pin and card overlay data
- */
-async function captureDOMScreenshot(options = {}) {
-  const timingStart = performance.now();
+const CANVAS_SNAPSHOT_MAX_BYTES = 500 * 1024;
 
+/**
+ * JPEG data URI of a live canvas, or null (tainted / still too big). A
+ * full-viewport canvas at DPR 2 (a WebGL scene behind the whole page) is
+ * usually over the cap at its backing-store size, which used to leave a
+ * blank <canvas> in the clone; retry it at CSS-pixel size, where the
+ * renderer's DPR upscale costs a little sharpness instead of the scene.
+ */
+function _canvasToDataURI(live) {
+  const full = live.toDataURL('image/jpeg', 0.7);
+  if (full.length <= CANVAS_SNAPSHOT_MAX_BYTES) return full;
+  const rect = live.getBoundingClientRect();
+  const scale = Math.min(1, rect.width / live.width || 1, rect.height / live.height || 1);
+  const small = document.createElement('canvas');
+  small.width = Math.max(1, Math.round(live.width * scale));
+  small.height = Math.max(1, Math.round(live.height * scale));
+  small.getContext('2d').drawImage(live, 0, 0, small.width, small.height);
+  const reduced = small.toDataURL('image/jpeg', 0.6);
+  small.width = small.height = 0;
+  return reduced.length <= CANVAS_SNAPSHOT_MAX_BYTES ? reduced : null;
+}
+
+/**
+ * Resolve on the next animation frame, or after `ms` if rAF is throttled
+ * (background tab, hidden iframe) so a capture never hangs on it.
+ */
+function _nextFrame(ms = 100) {
+  return new Promise(resolve => {
+    const timer = setTimeout(resolve, ms);
+    requestAnimationFrame(() => { clearTimeout(timer); resolve(); });
+  });
+}
+
+/**
+ * Take the live-DOM part of a DOM capture: everything that reads layout,
+ * scroll, canvas pixels or iframe documents. It runs synchronously inside one
+ * animation frame so the result is the page as it was at that moment, and so
+ * WebGL canvases without preserveDrawingBuffer are read in the same frame
+ * their render loop drew them (our rAF callback runs after the page's,
+ * which was registered a frame earlier). Everything after this works on the
+ * detached clone only.
+ */
+async function _snapshotDOM() {
+  await _nextFrame();
+  return _snapshotDOMSync();
+}
+
+function _snapshotDOMSync() {
   // 1. Capture scroll position before any DOM mutations
   const scrollX = window.scrollX || window.pageXOffset;
   const scrollY = window.scrollY || window.pageYOffset;
@@ -713,7 +794,8 @@ async function captureDOMScreenshot(options = {}) {
   //     so the renderer sees the same layout state the user sees.
   const liveRootStyle = getComputedStyle(document.documentElement);
   const frozenCustomProps = [];
-  for (const prop of liveRootStyle) {
+  for (let i = 0; i < liveRootStyle.length; i++) {
+    const prop = liveRootStyle[i];
     if (prop.startsWith('--')) {
       const val = liveRootStyle.getPropertyValue(prop).trim();
       if (val) frozenCustomProps.push(`${prop}:${val}`);
@@ -733,6 +815,58 @@ async function captureDOMScreenshot(options = {}) {
   document.querySelectorAll('[data-tapko-rect-top]').forEach(el =>
     el.removeAttribute('data-tapko-rect-top')
   );
+  _fixParagraphNesting(clone);
+
+  // 3b. (before anything is removed from the clone, so clone and live
+  //     canvases/iframes still pair up by index) Replace <canvas> with <img> snapshots — use JPEG and skip if > 500 KB.
+  //     Every attribute (class, id, style, width, height) is carried over:
+  //     the canvas's CSS box comes from them, and a bare <img> with only the
+  //     backing-store size laid out at e.g. 2880x352 instead of 1440x176 on
+  //     DPR 2 and lost its absolute positioning.
+  const canvasEls = [...clone.querySelectorAll('canvas')];
+  const liveCanvases = [...document.querySelectorAll('canvas')];
+  canvasEls.forEach((cloneCanvas, i) => {
+    const live = liveCanvases[i];
+    if (!live || !live.width || !live.height) return;
+    try {
+      const dataURI = _canvasToDataURI(live);
+      if (!dataURI) return;
+      const img = document.createElement('img');
+      for (const attr of cloneCanvas.attributes) img.setAttribute(attr.name, attr.value);
+      img.setAttribute('width', live.width);
+      img.setAttribute('height', live.height);
+      img.src = dataURI;
+      cloneCanvas.replaceWith(img);
+    } catch { /* tainted canvas — leave as-is */ }
+  });
+
+  // 4j. Inline same-origin <iframe> content. cloneNode(true) only copies the
+  // <iframe src="..."> tag itself — the live contentDocument (where the real
+  // rendered content lives for iframe-embedded apps/previews) is never part
+  // of the clone. Without this, the renderer paints an empty iframe shell —
+  // a blank rectangle where the embedded content should be. Cross-origin
+  // iframes can't be introspected (browser same-origin policy blocks
+  // contentDocument access), so those are left as-is; there's no way to
+  // capture their content from here.
+  const iframeEls = [...clone.querySelectorAll('iframe')];
+  const liveIframes = [...document.querySelectorAll('iframe')];
+  iframeEls.forEach((cloneIframe, i) => {
+    const live = liveIframes[i];
+    if (!live) return;
+    try {
+      const doc = live.contentDocument;
+      if (!doc || !doc.body) return; // cross-origin or not yet loaded
+      const inner = doc.documentElement.cloneNode(true);
+      inner.querySelectorAll('script, noscript').forEach(el => el.remove());
+      const wrapper = document.createElement('div');
+      wrapper.setAttribute('data-tapko-iframe-inline', 'true');
+      const rect = live.getBoundingClientRect();
+      wrapper.style.cssText = `width:${rect.width}px;height:${rect.height}px;overflow:hidden;`;
+      wrapper.appendChild(inner);
+      cloneIframe.replaceWith(wrapper);
+    } catch { /* cross-origin iframe — leave as-is */ }
+  });
+
 
   // 4a. Remove the Tapko widget itself
   clone.querySelector('#tapko-widget-shadow-host')?.remove();
@@ -779,6 +913,25 @@ async function captureDOMScreenshot(options = {}) {
     bodyClone.style.marginTop = `-${scrollY}px`;
     bodyClone.style.marginLeft = `-${scrollX}px`;
   }
+
+  return { clone, scrollX, scrollY, viewportWidth, viewportHeight, devicePixelRatio: window.devicePixelRatio || 1 };
+}
+
+/**
+ * Capture screenshot by serializing the DOM, inlining assets, and sending
+ * the HTML to the configured server-side renderer.
+ *
+ * Returns { dataURL, metadata } matching the shape of captureViewportScreenshot.
+ * @param {Object} options - Options forwarded from captureScreenshot
+ * @param {Object} [options.widgetOverlay] - Pin and card overlay data
+ * @param {Promise<Object>} [options.snapshot] - A _snapshotDOM() taken earlier
+ *   (at click time); without it the live DOM is snapshotted now.
+ */
+async function captureDOMScreenshot(options = {}) {
+  const timingStart = performance.now();
+  const { clone, scrollX, scrollY, viewportWidth, viewportHeight, devicePixelRatio } =
+    await (options.snapshot || _snapshotDOM());
+  const timingSnapshot = performance.now();
 
   // 4f. Inline <img> srcs as base64 (existing 512 KB per-asset cap applies)
   const imgEls = [...clone.querySelectorAll('img[src]')];
@@ -832,51 +985,8 @@ async function captureDOMScreenshot(options = {}) {
     el.setAttribute('style', inlined);
   }));
 
-  // 4i. Replace <canvas> with <img> snapshots — use JPEG and skip if > 500 KB
-  const canvasEls = [...clone.querySelectorAll('canvas')];
-  const liveCanvases = [...document.querySelectorAll('canvas')];
-  canvasEls.forEach((cloneCanvas, i) => {
-    const live = liveCanvases[i];
-    if (!live) return;
-    try {
-      const dataURI = live.toDataURL('image/jpeg', 0.7);
-      if (dataURI.length > 500 * 1024) return; // skip oversized canvas snapshots
-      const img = document.createElement('img');
-      img.src = dataURI;
-      img.width = live.width;
-      img.height = live.height;
-      cloneCanvas.replaceWith(img);
-    } catch { /* tainted canvas — leave as-is */ }
-  });
-
-  // 4j. Inline same-origin <iframe> content. cloneNode(true) only copies the
-  // <iframe src="..."> tag itself — the live contentDocument (where the real
-  // rendered content lives for iframe-embedded apps/previews) is never part
-  // of the clone. Without this, the renderer paints an empty iframe shell —
-  // a blank rectangle where the embedded content should be. Cross-origin
-  // iframes can't be introspected (browser same-origin policy blocks
-  // contentDocument access), so those are left as-is; there's no way to
-  // capture their content from here.
-  const iframeEls = [...clone.querySelectorAll('iframe')];
-  const liveIframes = [...document.querySelectorAll('iframe')];
-  iframeEls.forEach((cloneIframe, i) => {
-    const live = liveIframes[i];
-    if (!live) return;
-    try {
-      const doc = live.contentDocument;
-      if (!doc || !doc.body) return; // cross-origin or not yet loaded
-      const inner = doc.documentElement.cloneNode(true);
-      inner.querySelectorAll('script, noscript').forEach(el => el.remove());
-      const wrapper = document.createElement('div');
-      wrapper.setAttribute('data-tapko-iframe-inline', 'true');
-      const rect = live.getBoundingClientRect();
-      wrapper.style.cssText = `width:${rect.width}px;height:${rect.height}px;overflow:hidden;`;
-      wrapper.appendChild(inner);
-      cloneIframe.replaceWith(wrapper);
-    } catch { /* cross-origin iframe — leave as-is */ }
-  });
-
-  // 5. Serialize and minify
+  // 5. Serialize
+  const timingInlined = performance.now();
   let html = _serialiseClone(clone);
 
   // 6. Measure payload and apply cascading reduction if needed
@@ -907,7 +1017,7 @@ async function captureDOMScreenshot(options = {}) {
     format: 'webp',
     width: viewportWidth,
     height: viewportHeight,
-    devicePixelRatio: window.devicePixelRatio || 1
+    devicePixelRatio
   });
 
   let response;
@@ -940,6 +1050,7 @@ async function captureDOMScreenshot(options = {}) {
     throw new Error(`Renderer responded with ${response.status}`);
   }
 
+  const timingRendered = performance.now();
   const json = await response.json();
   let dataURL = `data:image/${json.format};base64,${json.image}`;
 
@@ -953,7 +1064,7 @@ async function captureDOMScreenshot(options = {}) {
         canvas.height = img.height;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0);
-        const scale = img.width / window.innerWidth;
+        const scale = img.width / viewportWidth;
         _drawWidgetOverlay(ctx, widgetOverlay, scale);
         resolve(canvas.toDataURL('image/jpeg', 0.85));
       };
@@ -963,7 +1074,11 @@ async function captureDOMScreenshot(options = {}) {
   }
 
   const timingEnd = performance.now();
-  console.log(`[Tapko] DOM screenshot captured in ${(timingEnd - timingStart).toFixed(0)}ms`);
+  // Stage split so a slow capture says where the time went (snapshot =
+  // waiting for a frame + cloning; inline = asset fetches; render = renderer).
+  console.log(`[Tapko] DOM screenshot captured in ${(timingEnd - timingStart).toFixed(0)}ms ` +
+    `(snapshot ${(timingSnapshot - timingStart).toFixed(0)}, inline ${(timingInlined - timingSnapshot).toFixed(0)}, ` +
+    `render ${(timingRendered - timingInlined).toFixed(0)})`);
 
   return {
     dataURL,
@@ -972,7 +1087,7 @@ async function captureDOMScreenshot(options = {}) {
       scrollY,
       viewportWidth,
       viewportHeight,
-      devicePixelRatio: window.devicePixelRatio || 1,
+      devicePixelRatio,
       timestamp: new Date().toISOString(),
       url: location.href,
       userAgent: navigator.userAgent,
@@ -999,9 +1114,14 @@ async function captureURLScreenshot(options = {}) {
   const viewportHeight = window.innerHeight;
   const { widgetOverlay } = options;
 
+  // The renderer gives up at its own 27 s deadline; waiting past ~20 s only
+  // delays the DOM fallback, whose snapshot was already taken at click time.
+  const controller = new AbortController();
+  const abortTimer = setTimeout(() => controller.abort(), URL_CAPTURE_TIMEOUT_MS);
   const response = await fetch(CONFIG.API.rendererUrl + '/render', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    signal: controller.signal,
     body: JSON.stringify({
       url: location.href,
       format: 'webp',
@@ -1013,9 +1133,13 @@ async function captureURLScreenshot(options = {}) {
     })
   });
 
-  if (!response.ok) throw new Error(`URL renderer responded with ${response.status}`);
-
-  const json = await response.json();
+  let json;
+  try {
+    if (!response.ok) throw new Error(`URL renderer responded with ${response.status}`);
+    json = await response.json();
+  } finally {
+    clearTimeout(abortTimer);
+  }
   let dataURL = `data:image/${json.format};base64,${json.image}`;
 
   if (widgetOverlay) {
@@ -1027,7 +1151,7 @@ async function captureURLScreenshot(options = {}) {
         canvas.height = img.height;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0);
-        const scale = img.width / window.innerWidth;
+        const scale = img.width / viewportWidth;
         _drawWidgetOverlay(ctx, widgetOverlay, scale);
         resolve(canvas.toDataURL('image/jpeg', 0.85));
       };
@@ -1053,6 +1177,40 @@ async function captureURLScreenshot(options = {}) {
       method: 'url-navigation'
     }
   };
+}
+
+const URL_CAPTURE_TIMEOUT_MS = 20000;
+
+// Pages (origin + path) where URL capture already failed in this page load.
+// A page the renderer can't load in time (bos.studiofreight.dev: a WebGL
+// scene behind a preloader that needs ~80 s of assets) fails the same way on
+// every comment, and each attempt cost ~27 s before the DOM fallback.
+const _urlCaptureFailed = new Set();
+const _pageKey = () => location.origin + location.pathname;
+
+/**
+ * True when a visible <canvas> covers at least a quarter of the viewport.
+ * The renderer re-runs the page from scratch in headless Chromium with no
+ * GPU, so a WebGL scene (or any JS-drawn canvas) comes back blank, at its
+ * first frame, or not at all, while the DOM snapshot carries the canvas's
+ * current pixels. URL capture of such a viewport "succeeds" with the wrong
+ * picture (bos.studiofreight.dev: a black frame at scroll 9000), so it is
+ * not attempted.
+ */
+function _viewportHasLiveCanvas(minFraction = 0.25) {
+  const vw = window.innerWidth, vh = window.innerHeight;
+  if (!vw || !vh) return false;
+  for (const c of document.querySelectorAll('canvas')) {
+    if (!c.width || !c.height) continue;
+    const r = c.getBoundingClientRect();
+    const w = Math.min(r.right, vw) - Math.max(r.left, 0);
+    const h = Math.min(r.bottom, vh) - Math.max(r.top, 0);
+    if (w <= 0 || h <= 0 || (w * h) / (vw * vh) < minFraction) continue;
+    const style = getComputedStyle(c);
+    if (style.visibility === 'hidden' || style.display === 'none' || style.opacity === '0') continue;
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -1098,6 +1256,11 @@ async function captureScreenshot(options = {}) {
   }
 
   if (CONFIG.API.rendererUrl) {
+    // Snapshot the live DOM now, before the URL attempt: the fallback must
+    // show what the user saw when they submitted, not the page 20+ s later
+    // (scrolled on, animations moved, preloader states changed).
+    const snapshot = _snapshotDOM();
+    snapshot.catch(() => {});
     let captureOverlay = null;
     if (options.shadowRoot) {
       captureOverlay = new ScreenshotPermissionOverlay(options.shadowRoot);
@@ -1107,23 +1270,30 @@ async function captureScreenshot(options = {}) {
       // 1. URL navigation — simplest path; Puppeteer opens the live page.
       //    Falls back to DOM serialization if the page isn't publicly reachable
       //    (localhost, staging behind auth, non-200 responses from the renderer).
-      //    Skipped entirely when renderMode === 'html' (see doc comment above).
-      if (options.renderMode !== 'html') {
+      //    Skipped when renderMode === 'html' (see doc comment above), when it
+      //    already failed for this page, or when a live canvas fills the view.
+      let skipReason = null;
+      if (options.renderMode === 'html') skipReason = 'renderMode is "html"';
+      else if (_urlCaptureFailed.has(_pageKey())) skipReason = 'URL capture already failed on this page';
+      else if (_viewportHasLiveCanvas()) skipReason = 'a live canvas fills the viewport';
+
+      if (!skipReason) {
         try {
           if (captureOverlay) captureOverlay.updateStatus('Capturing page…');
           console.log('[Tapko] Attempting URL-based screenshot');
           return await captureURLScreenshot(options);
         } catch (urlErr) {
+          _urlCaptureFailed.add(_pageKey());
           console.warn('[Tapko] URL capture failed:', urlErr.message, '— falling back to DOM serialization');
         }
       } else {
-        console.log('[Tapko] renderMode is "html" — skipping URL-based screenshot, using DOM serialization');
+        console.log(`[Tapko] Skipping URL-based screenshot (${skipReason}), using DOM serialization`);
       }
 
       // 2. DOM serialization fallback.
       try {
         if (captureOverlay) captureOverlay.updateStatus('Analysing page…');
-        return await captureDOMScreenshot(options);
+        return await captureDOMScreenshot({ ...options, snapshot });
       } catch (domErr) {
         if (domErr.code === 'DOM_PAYLOAD_TOO_LARGE') {
           console.warn('[Tapko] DOM screenshot skipped — payload too large. Feedback will be submitted without a screenshot.');
@@ -1160,5 +1330,10 @@ export {
   loadHtmlToImage as importHtmlToImage,
   _resolveCSSImports,
   _credentialsFor,
-  _fetchAsDataURI
+  _fetchAsDataURI,
+  _serialiseClone,
+  _snapshotDOMSync,
+  _fixParagraphNesting,
+  _viewportHasLiveCanvas,
+  _urlCaptureFailed
 };
