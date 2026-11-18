@@ -256,17 +256,18 @@ describe('heavy page payload reduction', () => {
     expect(clone.querySelector('#far').style.getPropertyValue('width')).toBe('');
   });
 
-  it('waits for a frame where a WebGL canvas reads back before snapshotting', async () => {
+  it('keeps the first readable frame of each canvas; an always-blank canvas does not lose it', async () => {
     const { _snapshotDOM } = await import('../src/utils/screenshot.js');
-    document.body.innerHTML = '<canvas id="gl" width="1440" height="900"></canvas>';
-    let frames = 0;
+    document.body.innerHTML = '<canvas id="gl" width="1440" height="900"></canvas><canvas id="blank" width="1440" height="900"></canvas>';
     vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue(rect(0, 0, window.innerWidth, window.innerHeight));
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => {
-      frames++; // blank for the first 3 probes, then the frame readable
-      return { drawImage() {}, getImageData: () => ({ data: new Uint8ClampedArray(16 * 9 * 4).fill(frames > 3 ? 255 : 0) }) };
+    let glProbes = 0; // #gl is drawn only in its 3rd probed frame; blank again at snapshot time (buffer cleared)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function () {
+      const drawn = this.id === 'gl' && ++glProbes === 3;
+      return { drawImage() {}, getImageData: () => ({ data: new Uint8ClampedArray(16 * 9 * 4).fill(drawn ? 255 : 0) }) };
     });
-    vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/jpeg;base64,GL');
-    const { clone } = await _snapshotDOM();
-    expect(clone.querySelector('img#gl')).not.toBeNull();
+    vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/jpeg;base64,GLFRAME');
+    const { clone } = await _snapshotDOM(200);
+    expect(clone.querySelector('img#gl').getAttribute('src')).toBe('data:image/jpeg;base64,GLFRAME');
+    expect(clone.querySelector('canvas#blank')).not.toBeNull();
   });
 });

@@ -883,37 +883,42 @@ function _stampStickyOffsets() {
  * which was registered a frame earlier). Everything after this works on the
  * detached clone only.
  */
-async function _snapshotDOM(maxWaitMs = 400) {
+async function _snapshotDOM(maxWaitMs = 300) {
   return new Promise(resolve => {
     const t0 = Date.now(); let done = false;
-    const finish = () => { if (done) return; done = true; clearTimeout(timer); resolve(_snapshotDOMSync()); };
+    const frames = new Map(); // live canvas -> JPEG data URI read in a frame where it was drawn
+    const finish = () => { if (done) return; done = true; clearTimeout(timer); resolve(_snapshotDOMSync(frames)); };
     // rAF throttled (background tab): snapshot anyway.
     const timer = setTimeout(finish, maxWaitMs + 300);
     // A WebGL canvas without preserveDrawingBuffer only reads back inside the
-    // frame its own render callback ran in (measured on grail-app.com: ~40% of
-    // frames, 0% outside rAF; sweet-tape.com: every frame). Poll frame by frame
-    // and snapshot in the first rAF where every big on-screen canvas reads
-    // non-transparent, so the read and the clone happen in that same callback.
+    // frame its own render callback ran in (grail-app.com: ~40% of frames, 0%
+    // outside rAF; sweet-tape.com: every frame). Poll frame by frame and keep
+    // the first non-transparent read of each big on-screen canvas. Canvases
+    // that never read (empty overlays) just run the wait out.
     const tick = () => {
       if (done) return;
-      if (!_viewportCanvasBlank() || Date.now() - t0 > maxWaitMs) return finish();
+      if (_collectCanvasFrames(frames) || Date.now() - t0 > maxWaitMs) return finish();
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
   });
 }
 
-/** True when an on-screen canvas covering >=10% of the viewport reads fully transparent. */
-function _viewportCanvasBlank(minFraction = 0.1) {
-  const vw = window.innerWidth, vh = window.innerHeight;
-  return [...document.querySelectorAll('canvas')].some(c => {
+/** Cache a readable frame of each on-screen canvas covering >=10% of the viewport. True when all are cached. */
+function _collectCanvasFrames(frames, minFraction = 0.1) {
+  const vw = window.innerWidth, vh = window.innerHeight; let all = true;
+  for (const c of document.querySelectorAll('canvas')) {
+    if (frames.has(c)) continue;
     const r = c.getBoundingClientRect();
     const w = Math.min(r.right, vw) - Math.max(r.left, 0), h = Math.min(r.bottom, vh) - Math.max(r.top, 0);
-    return w > 0 && h > 0 && c.width && c.height && (w * h) / (vw * vh) >= minFraction && _canvasReadsTransparent(c);
-  });
+    if (!(w > 0 && h > 0 && c.width && c.height && (w * h) / (vw * vh) >= minFraction)) continue;
+    if (_canvasReadsTransparent(c)) { all = false; continue; }
+    try { const uri = _canvasToDataURI(c); if (uri) frames.set(c, uri); } catch { /* tainted */ }
+  }
+  return all;
 }
 
-function _snapshotDOMSync() {
+function _snapshotDOMSync(glFrames) {
   // 1. Capture scroll position before any DOM mutations
   const scrollX = window.scrollX || window.pageXOffset;
   const scrollY = window.scrollY || window.pageYOffset;
@@ -997,8 +1002,7 @@ function _snapshotDOMSync() {
     const live = liveCanvases[i];
     if (!live || !live.width || !live.height) return;
     try {
-      if (_canvasReadsTransparent(live)) return;
-      const dataURI = _canvasToDataURI(live);
+      const dataURI = (glFrames && glFrames.get(live)) || (_canvasReadsTransparent(live) ? null : _canvasToDataURI(live));
       if (!dataURI) return;
       const img = document.createElement('img');
       for (const attr of cloneCanvas.attributes) img.setAttribute(attr.name, attr.value);
