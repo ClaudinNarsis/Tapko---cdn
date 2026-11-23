@@ -732,7 +732,14 @@ function _stripBelowViewport(rootEl, scrollY, viewportHeight, buffer = 2) {
 // images, table font inheritance all differ).
 function _serialiseClone(clone) {
   const doctype = document.doctype ? `<!DOCTYPE ${document.doctype.name}>` : '';
-  return doctype + new XMLSerializer().serializeToString(clone);
+  // XMLSerializer escapes text nodes, but <style> is raw text for the HTML
+  // parser the renderer uses: `.a > .b` would arrive as `.a &gt; .b`, silently
+  // killing every child-combinator rule (resn.co.nz: `.background > div` sizes
+  // the WebGL wrapper, which collapsed to 0x0 and clipped the canvas away).
+  return doctype + new XMLSerializer().serializeToString(clone).replace(
+    /(<style\b[^>]*>)([\s\S]*?)(<\/style>)/g,
+    (_, open, css, close) => open + css.replace(/&gt;/g, '>').replace(/&lt;/g, '<').replace(/&amp;/g, '&') + close
+  );
 }
 
 // Elements whose start tag makes the HTML parser close an open <p>.
