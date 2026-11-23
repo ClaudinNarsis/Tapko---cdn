@@ -4,7 +4,7 @@
 # Builds a dev-API widget, runs the DPR x local-settings x renderMode matrix and
 # the scenario set against <url> with every write stubbed, then writes a
 # truth-vs-capture sheet per run. Output: tests/stress/runs/<host>-<timestamp>/
-# Needs: system Google Chrome, python3 + Pillow, `npm install` done.
+# Needs: system Google Chrome, python3 + Pillow + numpy (`pip install pillow numpy`), `npm install` done.
 set -uo pipefail
 URL="${1:?usage: run.sh <url> [--quick]}"
 QUICK="${2:-}"
