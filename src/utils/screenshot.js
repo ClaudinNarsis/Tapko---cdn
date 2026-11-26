@@ -1449,6 +1449,18 @@ function _urlSkipReason() {
   return reason;
 }
 
+/** Why URL capture should not be tried for this page right now, or null. Shared with the card's pre-capture. */
+function urlCaptureSkipReason(renderMode) {
+  if (renderMode === 'html') return 'renderMode is "html"';
+  if (_urlCaptureFailed.has(_pageKey())) return 'URL capture already failed on this page';
+  return _urlSkipReason();
+}
+
+/** Record a non-abort URL capture failure so later comments on this page go straight to DOM capture. */
+function markUrlCaptureFailed(err) {
+  if (err?.name !== 'AbortError') _urlCaptureFailed.add(_pageKey());
+}
+
 /**
  * Capture screenshot by sending the live page URL to the server-side renderer.
  * Puppeteer navigates the real URL directly: no DOM serialization, no asset
@@ -1527,10 +1539,7 @@ async function captureScreenshot(options = {}) {
       //    (localhost, staging behind auth, non-200 responses from the renderer).
       //    Skipped when renderMode === 'html' (see doc comment above), when it
       //    already failed for this page, or when a live canvas fills the view.
-      let skipReason = null;
-      if (options.renderMode === 'html') skipReason = 'renderMode is "html"';
-      else if (_urlCaptureFailed.has(_pageKey())) skipReason = 'URL capture already failed on this page';
-      else skipReason = _urlSkipReason();
+      const skipReason = urlCaptureSkipReason(options.renderMode);
 
       if (!skipReason) {
         try {
@@ -1538,7 +1547,7 @@ async function captureScreenshot(options = {}) {
           console.log('[Tapko] Attempting URL-based screenshot');
           return await captureURLScreenshot(options);
         } catch (urlErr) {
-          if (urlErr.name !== 'AbortError') _urlCaptureFailed.add(_pageKey());
+          markUrlCaptureFailed(urlErr);
           if (urlErr.name === 'TimeoutError' || urlErr.name === 'AbortError') {
             // The renderer is slow or the caller cancelled; the DOM fallback hits the same renderer.
             console.warn('[Tapko] URL capture gave up:', urlErr.message, '- submitting without waiting further');
@@ -1583,6 +1592,9 @@ async function captureScreenshot(options = {}) {
 
 export {
   captureScreenshot,
+  captureDOMScreenshot,
+  urlCaptureSkipReason,
+  markUrlCaptureFailed,
   captureURLScreenshot,
   getRenderParams,
   renderParamsMatchPage,
