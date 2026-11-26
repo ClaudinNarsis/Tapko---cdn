@@ -22,7 +22,11 @@ import {
   getRenderParams,
   renderParamsMatchPage,
   renderURLImage,
-  compositeWidgetOverlay
+  compositeWidgetOverlay,
+  captureDOMScreenshot,
+  urlCaptureSkipReason,
+  markUrlCaptureFailed,
+  _snapshotDOM
 } from '../utils/screenshot.js';
 import { toAnchorCoords } from '../utils/anchorCoords.js';
 import {
@@ -1233,7 +1237,10 @@ class CommentCard {
       !this.screenshotProvider &&
       this.renderMode !== 'html' &&
       this.screenshotMode !== 'local' &&
-      !this.screenshot;
+      !this.screenshot &&
+      // Live canvas in view, or URL capture already failed here: the blocking
+      // path goes straight to DOM capture (resn.co.nz: WebGL hero -> 422).
+      !urlCaptureSkipReason(this.renderMode);
   }
 
   /**
@@ -1297,6 +1304,7 @@ class CommentCard {
     if (first !== LATE) {
       if (first.error) {
         console.warn('[Tapko] Pre-capture failed:', first.error.message);
+        markUrlCaptureFailed(first.error);
         this.renderMode = 'html'; // URL render is not working for this page: use the DOM fallback
         return { outcome: 'precapture-failed', deferred: null };
       }
@@ -1309,9 +1317,18 @@ class CommentCard {
       }
     }
 
-    // Not ready: let the queue worker finish it, close the card now.
+    // Not ready: let the queue worker finish it, close the card now. Snapshot
+    // the DOM now so a failed render (422 flat frame, 5xx) still falls back to
+    // what the user saw instead of submitting with no screenshot.
+    const snapshot = _snapshotDOM();
+    snapshot.catch(() => {});
     const capturePromise = pre.promise
-      .then(res => (res.image ? compositeWidgetOverlay(res.image, widgetOverlay) : null))
+      .then(res => {
+        if (res.image) return compositeWidgetOverlay(res.image, widgetOverlay);
+        console.warn('[Tapko] Deferred URL capture failed:', res.error?.message, '- falling back to DOM serialization');
+        markUrlCaptureFailed(res.error);
+        return captureDOMScreenshot({ snapshot, widgetOverlay }).then(r => r?.dataURL || null);
+      })
       .catch(() => null);
     return {
       outcome: 'deferred',

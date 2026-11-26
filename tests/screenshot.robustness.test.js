@@ -16,6 +16,15 @@ describe('DOM snapshot fidelity', () => {
     expect(html).toContain('Building</div> <div class="word">on</div>\n <div');
   });
 
+  it('does not entity-escape CSS inside <style> (child combinators must survive)', async () => {
+    const { _serialiseClone } = await import('../src/utils/screenshot.js');
+    document.head.innerHTML = '<style>.background > div{height:100%}a[href*="x&y"]{color:red}</style>';
+    const html = _serialiseClone(document.documentElement.cloneNode(true));
+    expect(html).toContain('.background > div{height:100%}a[href*="x&y"]');
+    expect(html).not.toContain('&gt;');
+    document.head.innerHTML = '';
+  });
+
   it('replaces canvases with images that keep class, id and style', async () => {
     const { _snapshotDOMSync } = await import('../src/utils/screenshot.js');
     document.body.innerHTML = '<div><canvas id="gl" class="scene" style="position:absolute;inset:0;width:100%" width="2880" height="1800"></canvas></div>';

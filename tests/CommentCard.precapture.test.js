@@ -7,6 +7,9 @@ const renderURLImage = vi.fn();
 const compositeWidgetOverlay = vi.fn(async d => `${d}#overlay`);
 const renderParamsMatchPage = vi.fn(() => true);
 const captureScreenshot = vi.fn().mockResolvedValue(null);
+const captureDOMScreenshot = vi.fn();
+const urlCaptureSkipReason = vi.fn(() => null);
+const markUrlCaptureFailed = vi.fn();
 vi.mock('../src/utils/screenshot.js', () => ({
   captureScreenshot: (...a) => captureScreenshot(...a),
   dataURLToBlob: () => new Blob([new Uint8Array([1])], { type: 'image/jpeg' }),
@@ -14,7 +17,11 @@ vi.mock('../src/utils/screenshot.js', () => ({
   getRenderParams: () => ({ url: 'https://x.test/', scrollX: 0, scrollY: 0, width: 1000, height: 600, devicePixelRatio: 2 }),
   renderParamsMatchPage: (...a) => renderParamsMatchPage(...a),
   renderURLImage: (...a) => renderURLImage(...a),
-  compositeWidgetOverlay: (...a) => compositeWidgetOverlay(...a)
+  compositeWidgetOverlay: (...a) => compositeWidgetOverlay(...a),
+  captureDOMScreenshot: (...a) => captureDOMScreenshot(...a),
+  urlCaptureSkipReason: (...a) => urlCaptureSkipReason(...a),
+  markUrlCaptureFailed: (...a) => markUrlCaptureFailed(...a),
+  _snapshotDOM: () => Promise.resolve({ clone: 'snap' })
 }));
 
 // CONFIG is frozen; a mutable stand-in lets tests toggle the renderer URL.
@@ -43,6 +50,9 @@ describe('CommentCard — non-blocking submit', () => {
     renderURLImage.mockReset();
     renderParamsMatchPage.mockReturnValue(true);
     captureScreenshot.mockClear();
+    captureDOMScreenshot.mockReset();
+    urlCaptureSkipReason.mockReturnValue(null);
+    markUrlCaptureFailed.mockClear();
     enqueue = vi.fn().mockResolvedValue('q1');
     window.Tapko = { queueManager: { initialized: true, enqueue, processQueue: vi.fn() } };
     vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -132,5 +142,36 @@ describe('CommentCard — non-blocking submit', () => {
     await vi.advanceTimersByTimeAsync(1000); // rAF + settle waits inside _captureScreenshot
     await submit;
     expect(captureScreenshot).toHaveBeenCalledTimes(1);
+  });
+
+  // #114 resn.co.nz: WebGL hero -> renderer 422 -> comment saved with no screenshot.
+  it('skips the URL pre-capture when URL capture would be skipped (live canvas)', async () => {
+    urlCaptureSkipReason.mockReturnValue('a live canvas fills the viewport');
+    const card = makeCard();
+    await vi.advanceTimersByTimeAsync(1100);
+    expect(renderURLImage).not.toHaveBeenCalled();
+    const submit = card._submitQueued('hello', card.card.querySelector('textarea'));
+    await vi.advanceTimersByTimeAsync(1000);
+    await submit;
+    expect(captureScreenshot).toHaveBeenCalledTimes(1);
+  });
+
+  it('a deferred render that fails (422) falls back to the DOM snapshot taken at submit', async () => {
+    let reject;
+    renderURLImage.mockReturnValue(new Promise((_, r) => { reject = r; }));
+    captureDOMScreenshot.mockResolvedValue({ dataURL: 'data:image/jpeg;base64,DOM' });
+    const card = makeCard();
+    await vi.advanceTimersByTimeAsync(1100);
+    const submit = card._submitQueued('hello', card.card.querySelector('textarea'));
+    await vi.advanceTimersByTimeAsync(1500);
+    await submit;
+    const [, opts] = enqueue.mock.calls[0];
+    const err = new Error('URL renderer responded with 422');
+    reject(err);
+    await expect(opts.capturePromise).resolves.toBe('data:image/jpeg;base64,DOM');
+    expect(markUrlCaptureFailed).toHaveBeenCalledWith(err);
+    const domOpts = captureDOMScreenshot.mock.calls[0][0];
+    expect(domOpts.widgetOverlay).toBeTruthy();
+    await expect(domOpts.snapshot).resolves.toEqual({ clone: 'snap' });
   });
 });
