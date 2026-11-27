@@ -2,6 +2,26 @@
 
 All notable changes to Tapko CDN Widget are documented here.
 
+## [4.7.2.0] - 2026-11-26
+
+### Changed
+- Sending a comment no longer waits for the screenshot. Capture starts while you type; if it isn't ready within 1.5 s the card closes and the screenshot finishes in the background, even across a page reload
+- Queued comments upload their screenshot, logs and network logs in parallel, and comments queued while others are sending go out right after instead of on the next 5 s poll
+
+### Fixed
+- Pages with WebGL or canvas heroes no longer submit with a black or missing screenshot. Transparent canvases keep their transparency, and a page whose server render comes back as one flat colour falls back to the in-page capture
+- Sticky headers stay where they were on screen in screenshots
+- CSS inside `<style>` tags is no longer escaped in screenshots, which had blacked out some heroes
+- Heavy pages capture within a time budget instead of stalling: asset inlining stops after 5 s and a renderer call gives up after 12 s
+
+## [4.7.1.0] - 2026-11-13
+
+### Fixed
+- Feedback text with `&`, `<` or quotes no longer shows up as `&amp;` and similar in the tapko.app dashboard and in ClickUp. The widget now stores the text exactly as typed and escapes it only when displaying it
+- The GitHub Pages deploy installs build tools correctly again
+- Comments sent from Safari and DuckDuckGo are no longer lost. Queued screenshots and logs are saved in a form WebKit can upload, and if an upload still fails, the comment is submitted anyway with whatever did upload
+- Screenshots of login-protected pages (session cookie or staging password) include the site's own images and styles, such as the logo, instead of showing them broken
+
 ## [4.7.0.0] - 2026-10-08
 
 ### Added
