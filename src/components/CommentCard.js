@@ -15,7 +15,19 @@ import { RecordingManager } from '../managers/RecordingManager.js';
 import { logManager } from '../managers/LogManager.js';
 import { networkLogManager } from '../managers/NetworkLogManager.js';
 import debugLogger from '../utils/DebugLogger.js';
-import { dataURLToBlob, captureScreenshot, generateThumbnail } from '../utils/screenshot.js';
+import {
+  dataURLToBlob,
+  captureScreenshot,
+  generateThumbnail,
+  getRenderParams,
+  renderParamsMatchPage,
+  renderURLImage,
+  compositeWidgetOverlay,
+  captureDOMScreenshot,
+  urlCaptureSkipReason,
+  markUrlCaptureFailed,
+  _snapshotDOM
+} from '../utils/screenshot.js';
 import { toAnchorCoords } from '../utils/anchorCoords.js';
 import {
   createElement,
@@ -35,6 +47,10 @@ import {
 
 const PRIORITY_CHIP_LABEL = { high: 'High priority', medium: 'Medium priority', low: 'Low priority' };
 const PRIORITY_SUGGEST_LABEL = { high: 'High', medium: 'Medium', low: 'Low' };
+
+// Screenshot timing: start rendering shortly after the card opens; at submit wait this long at most.
+const PRECAPTURE_DELAY_MS = 1000;
+const SUBMIT_CAPTURE_WAIT_MS = 1500;
 
 class CommentCard {
   // options.renderMode: 'url' (default) | 'html' — auth-redirect render-mode
@@ -117,6 +133,11 @@ class CommentCard {
     // Scroll handler
     this.scrollHandler = null;
 
+    // Screenshot pre-capture (URL render mode): started ~1s after open or on
+    // the first keystroke so submit rarely has to wait for the renderer.
+    this._precapture = null;      // { params, ctrl, promise }
+    this._precaptureTimer = null;
+
     // Store initial offset from element (click position relative to element)
     const targetRect = target.getBoundingClientRect();
     this.clickOffsetX = coordinates.x - targetRect.left;
@@ -135,6 +156,7 @@ class CommentCard {
     this._attachEventListeners();
     this._setupScrollListener();
     this._show();
+    this._precaptureTimer = setTimeout(() => this._startPrecapture(), PRECAPTURE_DELAY_MS);
   }
 
   /**
@@ -409,6 +431,7 @@ class CommentCard {
       // committed chip (detectPriorityCommand) — this listener never
       // mutates textarea.value itself.
       textarea.addEventListener('input', () => {
+        this._startPrecapture();
         this._updatePriorityChip(textarea.value);
         this._updatePriorityDropdown(textarea.value, textarea.selectionStart);
       });
@@ -613,6 +636,7 @@ class CommentCard {
         try {
           debugLogger.info('Calling captureViewportScreenshot');
           // Capture screenshot of current viewport
+          this._abortPrecapture(); // Draw takes its own capture
           const screenshotData = await captureScreenshot({ shadowRoot: this.shadowRoot, renderMode: this.renderMode, screenshotMode: this.screenshotMode });
           // Every capture path can fail (renderer down, payload too large, no
           // renderer on HiDPI) and return null — nothing to draw on.
@@ -1061,6 +1085,7 @@ class CommentCard {
       } else {
         // LEGACY SYNCHRONOUS FLOW - Fallback for unsupported browsers
         console.warn('[Tapko] Queue not available, using legacy synchronous submission');
+        this._abortPrecapture();
         await this._submitLegacy(text, textarea, timingStart);
       }
 
@@ -1076,10 +1101,19 @@ class CommentCard {
    */
   async _submitQueued(text, textarea) {
     console.log('[Tapko] Using queued submission flow...');
+    const submitStart = performance.now();
+
+    // Snapshot pin/card geometry and typed text BEFORE the loading state
+    // replaces the card contents (used to composite the overlay later).
+    const widgetOverlay = this._precaptureEligible() ? this._buildWidgetOverlay() : null;
 
     this._showLoading('Preparing...');
 
-    // 1. Auto-capture screenshot if not already present
+    // 1. Screenshot: use an existing one, otherwise wait at most
+    //    SUBMIT_CAPTURE_WAIT_MS for the pre-capture; if it is not ready the
+    //    queue worker finishes it in the background (deferred).
+    let deferred = null; // { captureParams, capturePromise }
+    let captureOutcome = 'existing';
     if (!this.screenshot) {
       if (this.screenshotProvider) {
         // Use external provider (integrated flow)
@@ -1089,11 +1123,18 @@ class CommentCard {
           this.thumbnail = data.thumbnail;
           this.screenshotMetadata = data.metadata;
         }
-      } else {
-        // Normal flow capture
+      } else if (widgetOverlay) {
+        const res = await this._awaitPrecapture(widgetOverlay);
+        captureOutcome = res.outcome;
+        deferred = res.deferred;
+      }
+      if (!this.screenshot && !deferred && !this.screenshotProvider) {
+        // DOM mode, pre-capture invalid/failed, or pin off-screen: blocking capture (time-budgeted).
+        captureOutcome = captureOutcome === 'existing' ? 'blocking' : `${captureOutcome}+blocking`;
         await this._captureScreenshot(textarea);
       }
     }
+    const captureMs = performance.now() - submitStart;
 
     // 2. Prepare screenshot blob (UNMERGED)
     let screenshotBlob = null;
@@ -1121,6 +1162,7 @@ class CommentCard {
       title: this._generateFeedbackTitle(text),
       description: text, // raw; every render path escapes (PinManager, QueueViewerModal, _showQueued)
       screenshot: screenshotBlob,              // Unmerged screenshot blob
+      ...(deferred ? { captureParams: deferred.captureParams } : {}),
       annotationData: this.annotationData,     // NEW: Annotation data
       logs: logsBlob,
       networkLogs: networkLogsBlob,
@@ -1149,8 +1191,12 @@ class CommentCard {
     };
 
     // 5. Add to queue (instant!)
-    const queueId = await window.Tapko.queueManager.enqueue(feedbackData);
+    const queueId = await window.Tapko.queueManager.enqueue(
+      feedbackData,
+      deferred ? { capturePromise: deferred.capturePromise } : undefined
+    );
     console.log('[Tapko Queue] Feedback queued successfully:', queueId);
+    console.log(`[Tapko Timing] Submit to queued: ${(performance.now() - submitStart).toFixed(0)}ms (screenshot wait ${captureMs.toFixed(0)}ms, ${captureOutcome})`);
 
     // 6. Show success state
     this._showQueued();
@@ -1166,7 +1212,7 @@ class CommentCard {
       queueId,
       hasText: !!text,
       hasEmoji: !!this.selectedEmoji,
-      hasScreenshot: !!this.screenshot,
+      hasScreenshot: !!this.screenshot || !!deferred,
       hasDrawing: !!this.drawingData,
       hasRecording: this.recordingManager.hasRecording(),
       targetTag: this.target.tagName,
@@ -1183,6 +1229,111 @@ class CommentCard {
     setTimeout(() => {
       window.Tapko.queueManager.processQueue();
     }, 100);
+  }
+
+  /** URL render mode with a renderer, nothing captured yet, no external provider. */
+  _precaptureEligible() {
+    return !!CONFIG.API.rendererUrl &&
+      !this.screenshotProvider &&
+      this.renderMode !== 'html' &&
+      this.screenshotMode !== 'local' &&
+      !this.screenshot &&
+      // Live canvas in view, or URL capture already failed here: the blocking
+      // path goes straight to DOM capture (resn.co.nz: WebGL hero -> 422).
+      !urlCaptureSkipReason(this.renderMode);
+  }
+
+  /**
+   * Start rendering the page in the background while the user types. The
+   * render is raw (no overlay), so it does not depend on the typed text; the
+   * overlay is composited at submit time.
+   */
+  _startPrecapture() {
+    clearTimeout(this._precaptureTimer);
+    this._precaptureTimer = null;
+    if (this._precapture || !this.card || !this._precaptureEligible()) return;
+
+    const params = getRenderParams();
+    const ctrl = new AbortController();
+    const startedAt = performance.now();
+    const promise = renderURLImage(params, ctrl.signal).then(
+      image => {
+        console.log(`[Tapko Timing] Pre-capture rendered in ${(performance.now() - startedAt).toFixed(0)}ms`);
+        return { image };
+      },
+      error => ({ error })
+    );
+    this._precapture = { params, ctrl, promise };
+  }
+
+  /** Cancel an unfinished pre-capture (card cancelled/closed, Draw opened, legacy submit). */
+  _abortPrecapture() {
+    clearTimeout(this._precaptureTimer);
+    this._precaptureTimer = null;
+    const pre = this._precapture;
+    this._precapture = null;
+    if (pre) pre.ctrl.abort(new DOMException('Comment card closed', 'AbortError'));
+  }
+
+  /**
+   * Resolve the screenshot for a queued submit without holding the card longer
+   * than SUBMIT_CAPTURE_WAIT_MS.
+   * @returns {{outcome: string, deferred: ?{captureParams: Object, capturePromise: Promise}}}
+   */
+  async _awaitPrecapture(widgetOverlay) {
+    // A pre-capture is only valid if the page still looks like it did when it
+    // started (scroll, viewport, URL) and the pin is still in view.
+    if (this._precapture && (!renderParamsMatchPage(this._precapture.params) || !this._isPinVisible())) {
+      this._abortPrecapture();
+    }
+    if (!this._precapture && !this._isPinVisible()) {
+      return { outcome: 'pin-offscreen', deferred: null }; // blocking path scrolls the pin into view
+    }
+    if (!this._precapture) this._startPrecapture();
+
+    // From here the pre-capture is handed off; submit owns it, cleanup must not abort it.
+    const pre = this._precapture;
+    this._precapture = null;
+
+    const LATE = Symbol('late');
+    const first = await Promise.race([
+      pre.promise,
+      new Promise(resolve => setTimeout(() => resolve(LATE), SUBMIT_CAPTURE_WAIT_MS))
+    ]);
+
+    if (first !== LATE) {
+      if (first.error) {
+        console.warn('[Tapko] Pre-capture failed:', first.error.message);
+        markUrlCaptureFailed(first.error);
+        this.renderMode = 'html'; // URL render is not working for this page: use the DOM fallback
+        return { outcome: 'precapture-failed', deferred: null };
+      }
+      try {
+        this.screenshot = await compositeWidgetOverlay(first.image, widgetOverlay);
+        return { outcome: 'precapture-ready', deferred: null };
+      } catch (e) {
+        console.warn('[Tapko] Pre-capture overlay failed:', e.message);
+        return { outcome: 'overlay-failed', deferred: null };
+      }
+    }
+
+    // Not ready: let the queue worker finish it, close the card now. Snapshot
+    // the DOM now so a failed render (422 flat frame, 5xx) still falls back to
+    // what the user saw instead of submitting with no screenshot.
+    const snapshot = _snapshotDOM();
+    snapshot.catch(() => {});
+    const capturePromise = pre.promise
+      .then(res => {
+        if (res.image) return compositeWidgetOverlay(res.image, widgetOverlay);
+        console.warn('[Tapko] Deferred URL capture failed:', res.error?.message, '- falling back to DOM serialization');
+        markUrlCaptureFailed(res.error);
+        return captureDOMScreenshot({ snapshot, widgetOverlay }).then(r => r?.dataURL || null);
+      })
+      .catch(() => null);
+    return {
+      outcome: 'deferred',
+      deferred: { captureParams: { ...pre.params, widgetOverlay }, capturePromise }
+    };
   }
 
   /**
@@ -1691,6 +1842,7 @@ class CommentCard {
    * Cleanup resources
    */
   _cleanup() {
+    this._abortPrecapture();
     if (this.timerInterval) {
       clearInterval(this.timerInterval);
     }

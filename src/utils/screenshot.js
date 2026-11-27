@@ -466,12 +466,73 @@ function _credentialsFor(url) {
   }
 }
 
+// Time budgets so a heavy page can never hold the user hostage during capture.
+const RENDER_TIMEOUT_MS = 12000;   // renderer POST (URL and html modes)
+const INLINE_BUDGET_MS = 5000;     // total DOM asset-inlining time
+const INLINE_CONCURRENCY = 8;      // parallel asset fetches while inlining
+
+let _inlineSignal = null;          // set only while a DOM capture is inlining
+let _inlineActive = 0;
+const _inlineWaiters = [];
+
+function _startInlineBudget() {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => {
+    console.warn(`[Tapko] DOM inlining budget (${INLINE_BUDGET_MS}ms) hit, continuing with partial inlining`);
+    ctrl.abort();
+  }, INLINE_BUDGET_MS);
+  _inlineSignal = ctrl.signal;
+  return () => { clearTimeout(timer); _inlineSignal = null; };
+}
+
+/** fetch() for snapshot assets: concurrency-capped, aborted when the inline budget expires. */
+async function _assetFetch(url) {
+  if (_inlineActive >= INLINE_CONCURRENCY) await new Promise(r => _inlineWaiters.push(r));
+  _inlineActive++;
+  try {
+    const opts = { mode: 'cors', credentials: _credentialsFor(url) };
+    if (_inlineSignal) opts.signal = _inlineSignal;
+    return await fetch(url, opts);
+  } finally {
+    _inlineActive--;
+    _inlineWaiters.shift()?.();
+  }
+}
+
+/**
+ * POST a render request with a hard timeout. Rejects with name 'TimeoutError'
+ * on timeout, or the caller signal's reason (AbortError) when cancelled.
+ */
+async function _postRender(body, signal) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(
+    () => ctrl.abort(new DOMException(`Renderer timed out after ${RENDER_TIMEOUT_MS}ms`, 'TimeoutError')),
+    RENDER_TIMEOUT_MS
+  );
+  const onAbort = () => ctrl.abort(signal.reason);
+  if (signal) {
+    if (signal.aborted) onAbort();
+    else signal.addEventListener('abort', onAbort, { once: true });
+  }
+  try {
+    return await fetch(CONFIG.API.rendererUrl + '/render', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: ctrl.signal
+    });
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', onAbort);
+  }
+}
+
 /**
  * Fetch a URL and return a base64 data-URI, or null on failure / size limit.
  */
 async function _fetchAsDataURI(url, maxBytes = 512 * 1024) {
   try {
-    const res = await fetch(url, { mode: 'cors', credentials: _credentialsFor(url) });
+    const res = await _assetFetch(url);
     if (!res.ok) return null;
     const blob = await res.blob();
     if (blob.size > maxBytes) return null;
@@ -508,7 +569,7 @@ async function _resolveCSSImports(css, baseUrl, depth = 0) {
       const href = m[1] || m[2];
       try {
         const absolute = new URL(href, baseUrl).href;
-        const res = await fetch(absolute, { mode: 'cors', credentials: _credentialsFor(absolute) });
+        const res = await _assetFetch(absolute);
         if (!res.ok) return { original, replacement: original };
         const importedCss = await _resolveCSSImports(await res.text(), absolute, depth + 1);
         return { original, replacement: importedCss };
@@ -575,11 +636,24 @@ const PAYLOAD_LIMIT_BYTES = 5.5 * 1024 * 1024;
 // DOM reduction helpers — all operate on the *cloned* node, never the live page
 // ---------------------------------------------------------------------------
 
-/** Strip all data-* attributes (zero visual impact, highest byte-reduction ROI). */
+/**
+ * Strip data-* attributes that no stylesheet selects on. Not all of them:
+ * Vue scoped styles are `.door[data-v-f0db7165]{height:var(--height)}`, and
+ * Radix/Tailwind state styles are `[data-state=open]`; with the attributes
+ * gone those rules stop matching and sections collapse (santalarch.com: page
+ * 15 000 px shorter, so every pinned section landed elsewhere).
+ * data-tapko-* are our own snapshot stamps that later levels read.
+ */
 function _stripDataAttributes(rootEl) {
+  // A stylesheet left as <link> (too big to inline) can select on any of them.
+  if (rootEl.querySelector('link[rel="stylesheet"]')) return;
+  const used = new Set();
+  rootEl.querySelectorAll('style').forEach(st => {
+    for (const m of (st.textContent || '').matchAll(/\[\s*(data-[\w-]+)/g)) used.add(m[1]);
+  });
   rootEl.querySelectorAll('*').forEach(el => {
     [...el.attributes]
-      .filter(a => a.name.startsWith('data-'))
+      .filter(a => a.name.startsWith('data-') && !a.name.startsWith('data-tapko-') && !used.has(a.name))
       .forEach(a => el.removeAttribute(a.name));
   });
 }
@@ -590,10 +664,14 @@ function _stripDataAttributes(rootEl) {
  * getComputedStyle() returns empty values on detached nodes.
  */
 function _stripHiddenElements(rootEl) {
-  rootEl.querySelectorAll('[aria-hidden="true"], [hidden]').forEach(el => el.remove());
+  // Not [aria-hidden]: that is an accessibility hint, not visibility. Sites mark
+  // their decorative hero canvases/backgrounds with it (jjettas.com's WebGL
+  // hero, grail-app.com's backdrop), and removing them blanked the capture.
+  rootEl.querySelectorAll('[hidden]').forEach(el => el.remove());
   rootEl.querySelectorAll('[style]').forEach(el => {
     const s = el.getAttribute('style') || '';
-    if (/display\s*:\s*none/i.test(s) || /visibility\s*:\s*hidden/i.test(s)) {
+    // (?<![\w-]): `backface-visibility: hidden` is not `visibility: hidden` (jjettas.com's hero wrapper).
+    if (/(?<![\w-])display\s*:\s*none/i.test(s) || /(?<![\w-])visibility\s*:\s*hidden/i.test(s)) {
       el.remove();
     }
   });
@@ -654,7 +732,14 @@ function _stripBelowViewport(rootEl, scrollY, viewportHeight, buffer = 2) {
 // images, table font inheritance all differ).
 function _serialiseClone(clone) {
   const doctype = document.doctype ? `<!DOCTYPE ${document.doctype.name}>` : '';
-  return doctype + new XMLSerializer().serializeToString(clone);
+  // XMLSerializer escapes text nodes, but <style> is raw text for the HTML
+  // parser the renderer uses: `.a > .b` would arrive as `.a &gt; .b`, silently
+  // killing every child-combinator rule (resn.co.nz: `.background > div` sizes
+  // the WebGL wrapper, which collapsed to 0x0 and clipped the canvas away).
+  return doctype + new XMLSerializer().serializeToString(clone).replace(
+    /(<style\b[^>]*>)([\s\S]*?)(<\/style>)/g,
+    (_, open, css, close) => open + css.replace(/&gt;/g, '>').replace(/&lt;/g, '<').replace(/&amp;/g, '&') + close
+  );
 }
 
 // Elements whose start tag makes the HTML parser close an open <p>.
@@ -699,12 +784,17 @@ function _fixParagraphNesting(clone) {
  * Level 1 — zero visual impact:
  *   data-* attributes, aria-hidden/hidden/inline-display:none elements,
  *   elements > 3 viewport heights below the fold
- * Level 2 — minor impact (fonts / large framework CSS):
- *   Tighten below-viewport buffer to 2×, strip <style> blocks > 100 KB
- * Level 3 — moderate impact (unstyled render):
- *   Tighten below-viewport buffer to 1×, remove all <style> blocks
- * Level 4 — significant impact (no inlined images):
- *   Remove all inlined <img src="data:…"> to drop base64 image weight
+ * Level 2 — no visible change in the viewport:
+ *   inlined images that are not on screen (their layout box stays, the
+ *   renderer clip never shows them), below-viewport buffer 2×
+ * Level 3 — minor impact:
+ *   every inlined image except canvas snapshots, <style> blocks > 100 KB,
+ *   below-viewport buffer 1×
+ * Level 4 — significant impact (unstyled render):
+ *   all <style> blocks, below-viewport buffer 0
+ * Images go before stylesheets: dropping the site's CSS was the first thing
+ * that happened to every page over the limit (sweet-tape.com: 16 MB of
+ * inlined images, rendered as unstyled HTML).
  *
  * @param {Element} clone         - The mutable document clone
  * @param {number}  scrollY       - Vertical scroll position at capture time
@@ -720,19 +810,39 @@ function _reducePayload(clone, scrollY, viewportHeight, level) {
   }
   if (level >= 2) {
     _stripBelowViewport(clone, scrollY, viewportHeight, 1);
-    _stripLargeStyleBlocks(clone, 100 * 1024);
+    clone.querySelectorAll('img[src^="data:"]:not([data-tapko-inview])').forEach(img => img.removeAttribute('src'));
   }
   if (level >= 3) {
-    _stripBelowViewport(clone, scrollY, viewportHeight, 0);
-    clone.querySelectorAll('style').forEach(el => el.remove());
+    clone.querySelectorAll('img[src^="data:"]:not([data-tapko-canvas])').forEach(img => img.removeAttribute('src'));
+    _stripLargeStyleBlocks(clone, 100 * 1024);
   }
   if (level >= 4) {
-    clone.querySelectorAll('img[src^="data:"]').forEach(img => img.removeAttribute('src'));
+    _stripBelowViewport(clone, scrollY, viewportHeight, 0);
+    clone.querySelectorAll('style').forEach(el => el.remove());
   }
   return _serialiseClone(clone);
 }
 
 const CANVAS_SNAPSHOT_MAX_BYTES = 500 * 1024;
+
+/**
+ * True when every pixel of the canvas reads back fully transparent. A WebGL
+ * canvas without preserveDrawingBuffer reads like that once its frame has
+ * been presented, and JPEG-encoding it gives an opaque black box that hides
+ * the page behind it (sweet-tape.com's hero). Skipped snapshots leave the
+ * transparent <canvas>, which is closer to what the user saw than black.
+ */
+function _canvasReadsTransparent(live) {
+  try {
+    const probe = document.createElement('canvas');
+    probe.width = 16; probe.height = 9;
+    const ctx = probe.getContext('2d');
+    ctx.drawImage(live, 0, 0, 16, 9);
+    const d = ctx.getImageData(0, 0, 16, 9).data;
+    for (let i = 3; i < d.length; i += 4) if (d[i] !== 0) return false;
+    return true;
+  } catch { return false; }
+}
 
 /**
  * JPEG data URI of a live canvas, or null (tainted / still too big). A
@@ -742,17 +852,42 @@ const CANVAS_SNAPSHOT_MAX_BYTES = 500 * 1024;
  * renderer's DPR upscale costs a little sharpness instead of the scene.
  */
 function _canvasToDataURI(live) {
-  const full = live.toDataURL('image/jpeg', 0.7);
+  // A canvas with transparent areas (sweet-tape's hero: just the tape on a
+  // transparent buffer, the green page is DOM behind it) must keep its alpha:
+  // JPEG turns transparent into an opaque black box over the page. WebP keeps
+  // alpha at JPEG-like size (browsers that cannot encode it return PNG, which
+  // then steps down below).
+  const type = _canvasHasAlpha(live) ? 'image/webp' : 'image/jpeg';
+  const full = live.toDataURL(type, 0.7);
   if (full.length <= CANVAS_SNAPSHOT_MAX_BYTES) return full;
   const rect = live.getBoundingClientRect();
-  const scale = Math.min(1, rect.width / live.width || 1, rect.height / live.height || 1);
-  const small = document.createElement('canvas');
-  small.width = Math.max(1, Math.round(live.width * scale));
-  small.height = Math.max(1, Math.round(live.height * scale));
-  small.getContext('2d').drawImage(live, 0, 0, small.width, small.height);
-  const reduced = small.toDataURL('image/jpeg', 0.6);
-  small.width = small.height = 0;
-  return reduced.length <= CANVAS_SNAPSHOT_MAX_BYTES ? reduced : null;
+  const css = Math.min(1, rect.width / live.width || 1, rect.height / live.height || 1);
+  // Grainy video-frame canvases (zrk.technology) stay over the cap at CSS
+  // size and quality 0.6, and used to be dropped to a blank <canvas>; keep
+  // stepping down, a soft scene beats an empty one.
+  for (const [k, q] of [[1, 0.6], [0.75, 0.5], [0.5, 0.5], [0.35, 0.4]]) {
+    const small = document.createElement('canvas');
+    small.width = Math.max(1, Math.round(live.width * css * k));
+    small.height = Math.max(1, Math.round(live.height * css * k));
+    small.getContext('2d').drawImage(live, 0, 0, small.width, small.height);
+    const reduced = small.toDataURL(type, q);
+    small.width = small.height = 0;
+    if (reduced.length <= CANVAS_SNAPSHOT_MAX_BYTES) return reduced;
+  }
+  return null;
+}
+
+/** True when any sampled pixel of the canvas is not fully opaque. */
+function _canvasHasAlpha(live) {
+  try {
+    const probe = document.createElement('canvas');
+    probe.width = 64; probe.height = 36;
+    const ctx = probe.getContext('2d');
+    ctx.drawImage(live, 0, 0, 64, 36);
+    const d = ctx.getImageData(0, 0, 64, 36).data;
+    for (let i = 3; i < d.length; i += 4) if (d[i] < 255) return true;
+  } catch { /* tainted: toDataURL will throw too */ }
+  return false;
 }
 
 /**
@@ -767,6 +902,27 @@ function _nextFrame(ms = 100) {
 }
 
 /**
+ * Stamp every currently-stuck position:sticky element with its displacement
+ * (dx,dy) from its unstuck position. Measured by briefly making the element
+ * position:relative;top:0;left:0 and restoring its inline style, all inside
+ * the synchronous snapshot.
+ */
+function _stampStickyOffsets() {
+  document.querySelectorAll('body *').forEach(el => {
+    if (getComputedStyle(el).position !== 'sticky') return;
+    const now = el.getBoundingClientRect();
+    const saved = el.getAttribute('style');
+    el.style.setProperty('position', 'relative', 'important');
+    el.style.setProperty('top', '0px', 'important');
+    el.style.setProperty('left', '0px', 'important');
+    const home = el.getBoundingClientRect();
+    if (saved === null) el.removeAttribute('style'); else el.setAttribute('style', saved);
+    const dx = Math.round(now.left - home.left), dy = Math.round(now.top - home.top);
+    if (dx || dy) el.setAttribute('data-tapko-sticky', `${dx},${dy}`);
+  });
+}
+
+/**
  * Take the live-DOM part of a DOM capture: everything that reads layout,
  * scroll, canvas pixels or iframe documents. It runs synchronously inside one
  * animation frame so the result is the page as it was at that moment, and so
@@ -775,12 +931,42 @@ function _nextFrame(ms = 100) {
  * which was registered a frame earlier). Everything after this works on the
  * detached clone only.
  */
-async function _snapshotDOM() {
-  await _nextFrame();
-  return _snapshotDOMSync();
+async function _snapshotDOM(maxWaitMs = 300) {
+  return new Promise(resolve => {
+    const t0 = Date.now(); let done = false;
+    const frames = new Map(); // live canvas -> JPEG data URI read in a frame where it was drawn
+    const finish = () => { if (done) return; done = true; clearTimeout(timer); resolve(_snapshotDOMSync(frames)); };
+    // rAF throttled (background tab): snapshot anyway.
+    const timer = setTimeout(finish, maxWaitMs + 300);
+    // A WebGL canvas without preserveDrawingBuffer only reads back inside the
+    // frame its own render callback ran in (grail-app.com: ~40% of frames, 0%
+    // outside rAF; sweet-tape.com: every frame). Poll frame by frame and keep
+    // the first non-transparent read of each big on-screen canvas. Canvases
+    // that never read (empty overlays) just run the wait out.
+    const tick = () => {
+      if (done) return;
+      if (_collectCanvasFrames(frames) || Date.now() - t0 > maxWaitMs) return finish();
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
 }
 
-function _snapshotDOMSync() {
+/** Cache a readable frame of each on-screen canvas covering >=10% of the viewport. True when all are cached. */
+function _collectCanvasFrames(frames, minFraction = 0.1) {
+  const vw = window.innerWidth, vh = window.innerHeight; let all = true;
+  for (const c of document.querySelectorAll('canvas')) {
+    if (frames.has(c)) continue;
+    const r = c.getBoundingClientRect();
+    const w = Math.min(r.right, vw) - Math.max(r.left, 0), h = Math.min(r.bottom, vh) - Math.max(r.top, 0);
+    if (!(w > 0 && h > 0 && c.width && c.height && (w * h) / (vw * vh) >= minFraction)) continue;
+    if (_canvasReadsTransparent(c)) { all = false; continue; }
+    try { const uri = _canvasToDataURI(c); if (uri) frames.set(c, uri); } catch { /* tainted */ }
+  }
+  return all;
+}
+
+function _snapshotDOMSync(glFrames) {
   // 1. Capture scroll position before any DOM mutations
   const scrollX = window.scrollX || window.pageXOffset;
   const scrollY = window.scrollY || window.pageYOffset;
@@ -809,12 +995,32 @@ function _snapshotDOMSync() {
     const rect = el.getBoundingClientRect();
     el.setAttribute('data-tapko-rect-top', (rect.top + scrollY).toFixed(0));
   });
+  // position:sticky offsets. The renderer lays the snapshot out with nothing
+  // scrolling (the body is shifted by margin-top instead), so a stuck element
+  // would jump back to its natural spot, often a whole section away from where
+  // the user saw it (santalarch.com, jjettas.com pinned panes). Measure how far
+  // each one is displaced from its unstuck position and bake that in.
+  _stampStickyOffsets();
+  // Images on screen: reduction level 2 drops only the other inlined images.
+  document.querySelectorAll('img').forEach(el => {
+    const r = el.getBoundingClientRect();
+    if (r.bottom > 0 && r.top < viewportHeight && r.right > 0 && r.left < viewportWidth) el.setAttribute('data-tapko-inview', '1');
+  });
 
   // 3. Deep clone the full document, then immediately clean up the live DOM
   const clone = document.documentElement.cloneNode(true);
-  document.querySelectorAll('[data-tapko-rect-top]').forEach(el =>
-    el.removeAttribute('data-tapko-rect-top')
-  );
+  document.querySelectorAll('[data-tapko-rect-top],[data-tapko-inview],[data-tapko-sticky]').forEach(el => {
+    el.removeAttribute('data-tapko-rect-top');
+    el.removeAttribute('data-tapko-inview');
+    el.removeAttribute('data-tapko-sticky');
+  });
+  clone.querySelectorAll('[data-tapko-sticky]').forEach(el => {
+    const [dx, dy] = el.getAttribute('data-tapko-sticky').split(',');
+    el.style.setProperty('position', 'relative', 'important');
+    el.style.setProperty('top', `${dy}px`, 'important');
+    el.style.setProperty('left', `${dx}px`, 'important');
+    el.removeAttribute('data-tapko-sticky');
+  });
   _fixParagraphNesting(clone);
 
   // 3b. (before anything is removed from the clone, so clone and live
@@ -829,12 +1035,15 @@ function _snapshotDOMSync() {
     const live = liveCanvases[i];
     if (!live || !live.width || !live.height) return;
     try {
-      const dataURI = _canvasToDataURI(live);
+      const dataURI = (glFrames && glFrames.get(live)) || (_canvasReadsTransparent(live) ? null : _canvasToDataURI(live));
       if (!dataURI) return;
       const img = document.createElement('img');
       for (const attr of cloneCanvas.attributes) img.setAttribute(attr.name, attr.value);
       img.setAttribute('width', live.width);
       img.setAttribute('height', live.height);
+      img.setAttribute('data-tapko-canvas', '1'); // survives reduction level 3
+      const r = live.getBoundingClientRect();
+      if (r.bottom > 0 && r.top < viewportHeight && r.right > 0 && r.left < viewportWidth) img.setAttribute('data-tapko-inview', '1');
       img.src = dataURI;
       cloneCanvas.replaceWith(img);
     } catch { /* tainted canvas — leave as-is */ }
@@ -918,6 +1127,27 @@ function _snapshotDOMSync() {
 }
 
 /**
+ * The same big data URI repeated across <style> rules (jjettas.com: one
+ * 434 KB texture used by four rules, 4.9 MB in total) becomes one custom
+ * property on :root that every rule references with var().
+ */
+function _dedupeStyleDataURIs(clone, minBytes = 20 * 1024) {
+  const re = /url\(\s*(["']?)(data:[^"')]+)\1\s*\)/g;
+  const styles = [...clone.querySelectorAll('style')];
+  const counts = new Map();
+  styles.forEach(st => { for (const m of st.textContent.matchAll(re)) if (m[2].length >= minBytes) counts.set(m[2], (counts.get(m[2]) || 0) + 1); });
+  const dups = [...counts].filter(([, n]) => n > 1).map(([uri]) => uri);
+  if (!dups.length) return;
+  const names = new Map(dups.map((uri, i) => [uri, `--tapko-d${i}`]));
+  styles.forEach(st => {
+    st.textContent = st.textContent.replace(re, (all, q, uri) => (names.has(uri) ? `var(${names.get(uri)})` : all));
+  });
+  const holder = document.createElement('style');
+  holder.textContent = `:root{${dups.map(uri => `${names.get(uri)}:url("${uri}")`).join(';')}}`;
+  clone.querySelector('head')?.prepend(holder);
+}
+
+/**
  * Capture screenshot by serializing the DOM, inlining assets, and sending
  * the HTML to the configured server-side renderer.
  *
@@ -932,6 +1162,8 @@ async function captureDOMScreenshot(options = {}) {
   const { clone, scrollX, scrollY, viewportWidth, viewportHeight, devicePixelRatio } =
     await (options.snapshot || _snapshotDOM());
   const timingSnapshot = performance.now();
+
+  const endInlineBudget = _startInlineBudget();
 
   // 4f. Inline <img> srcs as base64 (existing 512 KB per-asset cap applies)
   const imgEls = [...clone.querySelectorAll('img[src]')];
@@ -951,7 +1183,7 @@ async function captureDOMScreenshot(options = {}) {
     if (!href) return;
     try {
       const absolute = new URL(href, location.href).href;
-      const res = await fetch(absolute, { mode: 'cors', credentials: _credentialsFor(absolute) });
+      const res = await _assetFetch(absolute);
       if (!res.ok) return;
       let css = await res.text();
       if (_measureBytes(css) > 200 * 1024) return; // leave <link> tag, skip inlining
@@ -985,7 +1217,10 @@ async function captureDOMScreenshot(options = {}) {
     el.setAttribute('style', inlined);
   }));
 
+  endInlineBudget();
+
   // 5. Serialize
+  _dedupeStyleDataURIs(clone);
   const timingInlined = performance.now();
   let html = _serialiseClone(clone);
 
@@ -1026,11 +1261,7 @@ async function captureDOMScreenshot(options = {}) {
     const requestBody = buildRequestBody(html);
     console.log(`[Tapko] DOM renderer POST attempt ${attempt + 1} (${(payloadBytes / 1024 / 1024).toFixed(2)} MB)`);
 
-    response = await fetch(CONFIG.API.rendererUrl + '/render', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody)
-    });
+    response = await _postRender(requestBody, options.signal);
 
     if (response.ok) break;
 
@@ -1096,90 +1327,79 @@ async function captureDOMScreenshot(options = {}) {
   };
 }
 
-/**
- * Capture screenshot by sending the live page URL to the server-side renderer.
- * Puppeteer navigates the real URL directly — no DOM serialization, no asset
- * inlining, no payload limits. Works for any publicly accessible page and
- * produces the most faithful render because JS runs and CSS/fonts load natively.
- *
- * @param {Object} options
- * @param {Object} [options.widgetOverlay] - Pin and card overlay data
- */
-async function captureURLScreenshot(options = {}) {
-  const timingStart = performance.now();
-
-  const scrollX = window.scrollX || window.pageXOffset;
-  const scrollY = window.scrollY || window.pageYOffset;
-  const viewportWidth = window.innerWidth;
-  const viewportHeight = window.innerHeight;
-  const { widgetOverlay } = options;
-
-  // The renderer gives up at its own 27 s deadline; waiting past ~20 s only
-  // delays the DOM fallback, whose snapshot was already taken at click time.
-  const controller = new AbortController();
-  const abortTimer = setTimeout(() => controller.abort(), URL_CAPTURE_TIMEOUT_MS);
-  const response = await fetch(CONFIG.API.rendererUrl + '/render', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    signal: controller.signal,
-    body: JSON.stringify({
-      url: location.href,
-      format: 'webp',
-      width: viewportWidth,
-      height: viewportHeight,
-      devicePixelRatio: window.devicePixelRatio || 1,
-      scrollX,
-      scrollY,
-    })
-  });
-
-  let json;
-  try {
-    if (!response.ok) throw new Error(`URL renderer responded with ${response.status}`);
-    json = await response.json();
-  } finally {
-    clearTimeout(abortTimer);
-  }
-  let dataURL = `data:image/${json.format};base64,${json.image}`;
-
-  if (widgetOverlay) {
-    dataURL = await new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0);
-        const scale = img.width / viewportWidth;
-        _drawWidgetOverlay(ctx, widgetOverlay, scale);
-        resolve(canvas.toDataURL('image/jpeg', 0.85));
-      };
-      img.onerror = () => reject(new Error('Failed to load renderer image for overlay'));
-      img.src = dataURL;
-    });
-  }
-
-  const timingEnd = performance.now();
-  console.log(`[Tapko] URL screenshot captured in ${(timingEnd - timingStart).toFixed(0)}ms`);
-
+/** Page state a URL render is a function of. Serializable, so the queue can persist it. */
+function getRenderParams() {
   return {
-    dataURL,
-    metadata: {
-      scrollX,
-      scrollY,
-      viewportWidth,
-      viewportHeight,
-      devicePixelRatio: window.devicePixelRatio || 1,
-      timestamp: new Date().toISOString(),
-      url: location.href,
-      userAgent: navigator.userAgent,
-      method: 'url-navigation'
-    }
+    url: location.href,
+    scrollX: window.scrollX || window.pageXOffset,
+    scrollY: window.scrollY || window.pageYOffset,
+    width: window.innerWidth,
+    height: window.innerHeight,
+    devicePixelRatio: window.devicePixelRatio || 1
   };
 }
 
-const URL_CAPTURE_TIMEOUT_MS = 20000;
+/** True while the page still matches the state `params` were captured at. */
+function renderParamsMatchPage(params) {
+  const now = getRenderParams();
+  return ['url', 'scrollX', 'scrollY', 'width', 'height', 'devicePixelRatio'].every(k => now[k] === params[k]);
+}
+
+/**
+ * Ask the renderer for a raw (no overlay) image of the live URL. Always asks
+ * for DPR 1: a DPR 2 screen would otherwise render 4x the pixels, which was the
+ * cause of 15-30s captures, and the screenshot only needs to be legible.
+ * @returns {Promise<string>} data URL
+ */
+async function renderURLImage(params, signal) {
+  const response = await _postRender({
+    url: params.url,
+    format: 'webp',
+    width: params.width,
+    height: params.height,
+    devicePixelRatio: Math.min(params.devicePixelRatio || 1, 1),
+    scrollX: params.scrollX,
+    scrollY: params.scrollY,
+  }, signal);
+
+  if (!response.ok) throw new Error(`URL renderer responded with ${response.status}`);
+
+  const json = await response.json();
+  return `data:image/${json.format};base64,${json.image}`;
+}
+
+/** Paint the pin/card overlay onto a rendered image. Returns a JPEG data URL. */
+function compositeWidgetOverlay(dataURL, widgetOverlay) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      const scale = img.width / window.innerWidth;
+      _drawWidgetOverlay(ctx, widgetOverlay, scale);
+      resolve(canvas.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = () => reject(new Error('Failed to load renderer image for overlay'));
+    img.src = dataURL;
+  });
+}
+
+function _urlMetadata(params) {
+  return {
+    scrollX: params.scrollX,
+    scrollY: params.scrollY,
+    viewportWidth: params.width,
+    viewportHeight: params.height,
+    devicePixelRatio: params.devicePixelRatio,
+    timestamp: new Date().toISOString(),
+    url: params.url,
+    userAgent: navigator.userAgent,
+    method: 'url-navigation'
+  };
+}
 
 // Pages (origin + path) where URL capture already failed in this page load.
 // A page the renderer can't load in time (bos.studiofreight.dev: a WebGL
@@ -1211,6 +1431,53 @@ function _viewportHasLiveCanvas(minFraction = 0.25) {
     return true;
   }
   return false;
+}
+
+// Pin-spacer / Lenis / Locomotive markers were tried as skip signals and dropped:
+// extrafazant.nl has both and its URL capture is fine (4/5), so markers alone regress
+// good pages. Scroll-animated pages that blank out are caught by the renderer's
+// uniform-frame 422 (-> DOM fallback, sticky via _urlCaptureFailed).
+// Sticky per page session: once a page showed a live canvas, the rest of the session
+// skips URL capture even when the current view looks static (sweet-tape: canvas hero only
+// at the top, blank/wrong frames further down).
+const _urlSkipPages = new Map();
+function _urlSkipReason() {
+  const key = _pageKey();
+  if (_urlSkipPages.has(key)) return _urlSkipPages.get(key);
+  const reason = _viewportHasLiveCanvas() ? 'a live canvas fills the viewport' : null;
+  if (reason) _urlSkipPages.set(key, reason);
+  return reason;
+}
+
+/** Why URL capture should not be tried for this page right now, or null. Shared with the card's pre-capture. */
+function urlCaptureSkipReason(renderMode) {
+  if (renderMode === 'html') return 'renderMode is "html"';
+  if (_urlCaptureFailed.has(_pageKey())) return 'URL capture already failed on this page';
+  return _urlSkipReason();
+}
+
+/** Record a non-abort URL capture failure so later comments on this page go straight to DOM capture. */
+function markUrlCaptureFailed(err) {
+  if (err?.name !== 'AbortError') _urlCaptureFailed.add(_pageKey());
+}
+
+/**
+ * Capture screenshot by sending the live page URL to the server-side renderer.
+ * Puppeteer navigates the real URL directly: no DOM serialization, no asset
+ * inlining, no payload limits.
+ *
+ * @param {Object} options
+ * @param {Object} [options.widgetOverlay] - Pin and card overlay data
+ * @param {Object} [options.renderParams] - Reuse params from getRenderParams()
+ * @param {AbortSignal} [options.signal]
+ */
+async function captureURLScreenshot(options = {}) {
+  const timingStart = performance.now();
+  const params = options.renderParams || getRenderParams();
+  let dataURL = await renderURLImage(params, options.signal);
+  if (options.widgetOverlay) dataURL = await compositeWidgetOverlay(dataURL, options.widgetOverlay);
+  console.log(`[Tapko] URL screenshot captured in ${(performance.now() - timingStart).toFixed(0)}ms`);
+  return { dataURL, metadata: _urlMetadata(params) };
 }
 
 /**
@@ -1272,10 +1539,7 @@ async function captureScreenshot(options = {}) {
       //    (localhost, staging behind auth, non-200 responses from the renderer).
       //    Skipped when renderMode === 'html' (see doc comment above), when it
       //    already failed for this page, or when a live canvas fills the view.
-      let skipReason = null;
-      if (options.renderMode === 'html') skipReason = 'renderMode is "html"';
-      else if (_urlCaptureFailed.has(_pageKey())) skipReason = 'URL capture already failed on this page';
-      else if (_viewportHasLiveCanvas()) skipReason = 'a live canvas fills the viewport';
+      const skipReason = urlCaptureSkipReason(options.renderMode);
 
       if (!skipReason) {
         try {
@@ -1283,7 +1547,12 @@ async function captureScreenshot(options = {}) {
           console.log('[Tapko] Attempting URL-based screenshot');
           return await captureURLScreenshot(options);
         } catch (urlErr) {
-          _urlCaptureFailed.add(_pageKey());
+          markUrlCaptureFailed(urlErr);
+          if (urlErr.name === 'TimeoutError' || urlErr.name === 'AbortError') {
+            // The renderer is slow or the caller cancelled; the DOM fallback hits the same renderer.
+            console.warn('[Tapko] URL capture gave up:', urlErr.message, '- submitting without waiting further');
+            return null;
+          }
           console.warn('[Tapko] URL capture failed:', urlErr.message, '— falling back to DOM serialization');
         }
       } else {
@@ -1323,7 +1592,14 @@ async function captureScreenshot(options = {}) {
 
 export {
   captureScreenshot,
+  captureDOMScreenshot,
+  urlCaptureSkipReason,
+  markUrlCaptureFailed,
   captureURLScreenshot,
+  getRenderParams,
+  renderParamsMatchPage,
+  renderURLImage,
+  compositeWidgetOverlay,
   captureViewportScreenshot,
   generateThumbnail,
   dataURLToBlob,
@@ -1332,8 +1608,14 @@ export {
   _credentialsFor,
   _fetchAsDataURI,
   _serialiseClone,
+  _snapshotDOM,
   _snapshotDOMSync,
   _fixParagraphNesting,
+  _reducePayload,
+  _canvasReadsTransparent,
+  _dedupeStyleDataURIs,
   _viewportHasLiveCanvas,
+  _urlSkipReason,
+  _urlSkipPages,
   _urlCaptureFailed
 };

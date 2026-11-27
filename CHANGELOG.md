@@ -2,6 +2,18 @@
 
 All notable changes to Tapko CDN Widget are documented here.
 
+## [4.7.2.0] - 2026-11-26
+
+### Changed
+- Sending a comment no longer waits for the screenshot. Capture starts while you type; if it isn't ready within 1.5 s the card closes and the screenshot finishes in the background, even across a page reload
+- Queued comments upload their screenshot, logs and network logs in parallel, and comments queued while others are sending go out right after instead of on the next 5 s poll
+
+### Fixed
+- Pages with WebGL or canvas heroes no longer submit with a black or missing screenshot. Transparent canvases keep their transparency, and a page whose server render comes back as one flat colour falls back to the in-page capture
+- Sticky headers stay where they were on screen in screenshots
+- CSS inside `<style>` tags is no longer escaped in screenshots, which had blacked out some heroes
+- Heavy pages capture within a time budget instead of stalling: asset inlining stops after 5 s and a renderer call gives up after 12 s
+
 ## [4.7.1.0] - 2026-11-13
 
 ### Fixed
