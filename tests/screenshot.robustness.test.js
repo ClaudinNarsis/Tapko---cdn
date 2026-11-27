@@ -258,6 +258,28 @@ describe('heavy page payload reduction', () => {
     expect(clone.querySelector('canvas#blank')).not.toBeNull();
   });
 
+  it('nudges an idle on-demand renderer with one scroll event, and only when a canvas reads blank', async () => {
+    const { _snapshotDOM } = await import('../src/utils/screenshot.js');
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue(rect(0, 0, window.innerWidth, window.innerHeight));
+    vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/jpeg;base64,GLFRAME');
+    let redrawn = false; // the page draws its scene only after a scroll event (r3f frameloop="demand")
+    const onScroll = () => { redrawn = true; };
+    window.addEventListener('scroll', onScroll);
+    const scrolls = vi.fn(); window.addEventListener('scroll', scrolls);
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => ({
+      drawImage() {}, getImageData: () => ({ data: new Uint8ClampedArray(16 * 9 * 4).fill(redrawn ? 255 : 0) })
+    }));
+    document.body.innerHTML = '<canvas id="gl" width="1440" height="900"></canvas>';
+    const { clone } = await _snapshotDOM(200);
+    expect(scrolls).toHaveBeenCalledTimes(1);
+    expect(clone.querySelector('img#gl').getAttribute('src')).toBe('data:image/jpeg;base64,GLFRAME');
+
+    scrolls.mockClear(); // already readable on the first frame: no event
+    await _snapshotDOM(200);
+    expect(scrolls).not.toHaveBeenCalled();
+    window.removeEventListener('scroll', onScroll); window.removeEventListener('scroll', scrolls);
+  });
+
   it('encodes a canvas that has transparent areas as WebP, not JPEG (JPEG makes them an opaque black box)', async () => {
     const { _snapshotDOMSync } = await import('../src/utils/screenshot.js');
     document.body.innerHTML = '<canvas id="gl" width="1440" height="900"></canvas>';

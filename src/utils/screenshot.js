@@ -943,9 +943,16 @@ async function _snapshotDOM(maxWaitMs = 300) {
     // outside rAF; sweet-tape.com: every frame). Poll frame by frame and keep
     // the first non-transparent read of each big on-screen canvas. Canvases
     // that never read (empty overlays) just run the wait out.
+    // On-demand renderers (react-three-fiber frameloop="demand", r3f-scroll-rig
+    // on 14islands.com) draw nothing while the page is idle, so the buffer
+    // reads empty on every frame. They redraw on a window scroll event: send
+    // one (scrollY is unchanged, so scroll handlers are no-ops) before our
+    // next rAF, so the page's redraw is queued ahead of our read.
+    let nudged = false;
     const tick = () => {
       if (done) return;
       if (_collectCanvasFrames(frames) || Date.now() - t0 > maxWaitMs) return finish();
+      if (!nudged) { nudged = true; window.dispatchEvent(new Event('scroll')); }
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
